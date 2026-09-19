@@ -1,0 +1,3 @@
+@import "@repo/ui/styles.css";
+@import "@repo/editor/styles.css";
+@source "./**/*.{ts,tsx}";

@@ -4,17 +4,26 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "node ../../scripts/run-app.mjs dev --port 3000",
     "build": "next build",
-    "start": "next start",
+    "start": "next start --port 3000",
     "lint": "eslint --max-warnings 0",
-    "check-types": "next typegen && tsc --noEmit"
+    "check-types": "next typegen && tsc --noEmit",
+    "build:supabase": "node ../../scripts/run-app.mjs build",
+    "start:supabase": "node ../../scripts/run-app.mjs start --port 3000"
   },
   "dependencies": {
     "@repo/ui": "workspace:*",
     "next": "16.3.4",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "@repo/constants": "workspace:*",
+    "@repo/database": "workspace:*",
+    "@repo/api-client": "workspace:*",
+    "@repo/observability": "workspace:*",
+    "@sentry/nextjs": "10.75.0",
+    "@repo/analytics": "workspace:*",
+    "@repo/mock-api": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
@@ -23,6 +32,9 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "eslint": "10.9.1",
-    "typescript": "7.0.2"
+    "typescript": "6.0.3",
+    "tailwindcss": "4.3.3",
+    "@tailwindcss/postcss": "4.3.3",
+    "postcss": "8.5.28"
   }
 }

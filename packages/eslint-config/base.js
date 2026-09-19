@@ -1,40 +1,18 @@
-import babelParser from "@babel/eslint-parser";
 import js from "@eslint/js";
-import eslintConfigPrettier from "eslint-config-prettier";
-import turboPlugin from "eslint-plugin-turbo";
-import onlyWarn from "eslint-plugin-only-warn";
-
-/**
- * A shared ESLint configuration for the repository.
- *
- * @type {import("eslint").Linter.Config[]}
- * */
+import tseslint from "typescript-eslint";
+import prettier from "eslint-config-prettier";
+import globals from "globals";
 export const config = [
+  {
+    ignores: [
+      "**/.next/**",
+      "**/dist/**",
+      "**/node_modules/**",
+      "**/next-env.d.ts",
+    ],
+  },
   js.configs.recommended,
-  eslintConfigPrettier,
-  {
-    languageOptions: {
-      parser: babelParser,
-      parserOptions: {
-        requireConfigFile: false,
-        babelOptions: {
-          presets: ["@babel/preset-typescript"],
-        },
-      },
-    },
-    plugins: {
-      turbo: turboPlugin,
-    },
-    rules: {
-      "turbo/no-undeclared-env-vars": "warn",
-    },
-  },
-  {
-    plugins: {
-      onlyWarn,
-    },
-  },
-  {
-    ignores: ["dist/**"],
-  },
+  ...tseslint.configs.recommended,
+  prettier,
+  { languageOptions: { globals: { ...globals.node, ...globals.browser } } },
 ];

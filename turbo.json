@@ -1,6 +1,13 @@
 {
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
+  "globalEnv": ["NODE_ENV", "NEXT_PUBLIC_*", "TRAVEL_API_MODE"],
+  "globalPassThroughEnv": [
+    "CI",
+    "SENTRY_AUTH_TOKEN",
+    "SENTRY_ORG",
+    "SENTRY_PROJECT"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
@@ -15,7 +22,23 @@
     },
     "dev": {
       "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["NEXT_PUBLIC_*"]
+    },
+    "build:supabase": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**", "!.next/dev/**"]
+    },
+    "start:supabase": {
+      "cache": false,
       "persistent": true
     }
-  }
+  },
+  "globalDependencies": [
+    "supabase/database.types.ts",
+    "supabase/functions/travel-api/core.ts",
+    "scripts/**",
+    ".env.supabase.local"
+  ]
 }

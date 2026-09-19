@@ -1,0 +1,14 @@
+node_modules
+.next
+.turbo
+pnpm-lock.yaml
+supabase
+docs
+pdf
+DESIGN.md
+coverage
+playwright-report
+test-results
+
+apps/docs
+.pnpm-store

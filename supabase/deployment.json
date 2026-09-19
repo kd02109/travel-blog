@@ -1,0 +1,34 @@
+{
+  "project_id": "kqbqoopqomrwozpqgono",
+  "project_url": "https://kqbqoopqomrwozpqgono.supabase.co",
+  "site_id": "e6bac53e-3c68-49dd-9784-f3c413603ef2",
+  "site_slug": "parents-travel",
+  "edge_function": "travel-api",
+  "migrations": [
+    {
+      "version": "20260919045332",
+      "name": "travel_blog_lean_schema"
+    },
+    {
+      "version": "20260919045612",
+      "name": "travel_blog_api"
+    },
+    {
+      "version": "20260919045752",
+      "name": "travel_blog_gateway_auth"
+    },
+    {
+      "version": "20260919050109",
+      "name": "travel_blog_worker"
+    },
+    {
+      "version": "20260919050250",
+      "name": "travel_blog_hardening"
+    },
+    {
+      "version": "20260919050407",
+      "name": "travel_blog_initial_owner"
+    }
+  ],
+  "edge_function_version": 2
+}

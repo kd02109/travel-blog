@@ -36,3 +36,22 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+
+# Docs
+docs/
+pdf/
+# Local services and test artifacts
+supabase/.temp/
+supabase/.branches/
+__pycache__/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.env.*
+!.env.example
+
+.pnpm-store/
+
+# Committable connection-profile template
+!.env.supabase.example

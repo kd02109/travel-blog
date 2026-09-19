@@ -1,0 +1,792 @@
+import { CATEGORIES } from "@repo/constants";
+// These helpers are pure: use the same boundary validation and HTML renderer as Edge.
+import {
+  ApiError,
+  cleanInput,
+  validateAction,
+  renderBlocks,
+  text,
+} from "../../../supabase/functions/travel-api/core";
+import {
+  createFixtures,
+  mockId,
+  MOCK_NOW,
+  MOCK_SITE,
+  MOCK_SITE_ID,
+  MOCK_TOKENS,
+} from "./fixtures";
+import type {
+  Asset,
+  Comment,
+  Member,
+  MockOptions,
+  MockResult,
+  Post,
+  Role,
+  Scenario,
+  Settings,
+} from "./types";
+const roles = Object.keys(MOCK_TOKENS) as Role[];
+const object = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new ApiError(400, "invalid_input");
+  return value as Record<string, unknown>;
+};
+const requireVersion = (actual: number, expected: unknown) => {
+  if (actual !== expected) throw new ApiError(409, "version_conflict");
+};
+const readText = (value: unknown, min: number, max: number) =>
+  text(value, min, max).trim();
+const paginate = <T>(items: T[], input: Record<string, unknown>) => {
+  const limit = input.limit === undefined ? 12 : Number(input.limit);
+  const offset = input.offset === undefined ? 0 : Number(input.offset);
+  if (!Number.isInteger(limit) || !Number.isInteger(offset))
+    throw new ApiError(400, "invalid_input");
+  return items.slice(
+    Math.min(100000, Math.max(0, offset)),
+    Math.min(100000, Math.max(0, offset)) + Math.max(1, Math.min(50, limit)),
+  );
+};
+export function createMockEngine(options: MockOptions = {}) {
+  let scenario: Scenario = options.scenario ?? "default";
+  let state = createFixtures(scenario === "empty");
+  let sequence = 100;
+  const now = options.now ?? (() => MOCK_NOW);
+  const visitors = new Set<string>();
+  const failures = new Map<string, { status: number; code: string }>();
+  const id = () => mockId(9, ++sequence);
+  function publicPost(postId: unknown) {
+    return state.posts.find((p) => p.id === postId && p.status === "published");
+  }
+  function publication(postId: unknown) {
+    return publicPost(postId)
+      ? state.publications.find((p) => p.post_id === postId)
+      : undefined;
+  }
+  function counts(postId: string) {
+    const post = state.posts.find((p) => p.id === postId)!;
+    return {
+      like_count:
+        post.kind === "pdf" ? null : (state.likes[postId] ?? []).length,
+      comment_count:
+        post.kind === "pdf"
+          ? null
+          : state.comments.filter(
+              (c) => c.post_id === postId && c.status === "visible",
+            ).length,
+    };
+  }
+  function member(headers: Record<string, string>) {
+    const token = headers.authorization?.replace(/^Bearer /i, "");
+    if (!token) return undefined;
+    const index = roles.findIndex((role) => MOCK_TOKENS[role] === token);
+    const person = state.members.find(
+      (m) => m.user_id === mockId(3, index + 1),
+    );
+    if (!person) throw new ApiError(401, "unauthorized");
+    return person;
+  }
+  function staff(
+    person: Member | undefined,
+    allowed: Role[] = ["editor", "admin", "owner"],
+  ) {
+    if (!person) throw new ApiError(401, "unauthorized");
+    if (!person.active || !allowed.includes(person.role))
+      throw new ApiError(403, "forbidden");
+    return person;
+  }
+  function checkSite(value: unknown, required = false) {
+    if (
+      (required && value === undefined) ||
+      (value !== undefined && value !== MOCK_SITE_ID)
+    )
+      throw new ApiError(403, "forbidden");
+  }
+  function reactionActor(
+    person: Member | undefined,
+    headers: Record<string, string>,
+  ) {
+    if (person) return person.user_id;
+    const visitor = headers["x-visitor-token"];
+    if (!visitor || !visitors.has(visitor))
+      throw new ApiError(401, "visitor_required");
+    return visitor;
+  }
+  function publicComment(c: Comment) {
+    return {
+      id: c.id,
+      parent_id: c.parent_id,
+      body: c.status === "deleted" ? "" : c.body,
+      status: c.status,
+      version: c.version,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      display_name:
+        c.status === "deleted"
+          ? "삭제된 사용자"
+          : (state.members.find((m) => m.user_id === c.author_id)
+              ?.display_name ??
+            c.guest_name ??
+            "독자"),
+      is_staff: state.members.some(
+        (m) => m.user_id === c.author_id && m.active && m.role !== "reader",
+      ),
+    };
+  }
+  function audit(person: Member, action: string, resource: string) {
+    state.audit.unshift({
+      id: id(),
+      site_id: MOCK_SITE_ID,
+      actor_id: person.user_id,
+      action,
+      resource_id: resource,
+      created_at: now(),
+    });
+  }
+  function readyAsset(assetId: unknown, kind: Asset["kind"]) {
+    return state.assets.find(
+      (a) => a.id === assetId && a.kind === kind && a.state === "ready",
+    );
+  }
+  function validateSettings(input: unknown): Settings {
+    const value = object(input);
+    if (
+      Object.keys(value).some(
+        (k) =>
+          ![
+            "template_id",
+            "title",
+            "description",
+            "hero_asset_id",
+            "featured_post_id",
+          ].includes(k),
+      )
+    )
+      throw new ApiError(422, "invalid_settings");
+    if (!["A", "B", "C", "D"].includes(String(value.template_id)))
+      throw new ApiError(422, "invalid_settings");
+    if (value.title !== undefined) readText(value.title, 1, 150);
+    if (
+      value.description !== undefined &&
+      (typeof value.description !== "string" || value.description.length > 500)
+    )
+      throw new ApiError(422, "invalid_text");
+    if (value.hero_asset_id && !readyAsset(value.hero_asset_id, "image"))
+      throw new ApiError(422, "invalid_asset");
+    if (value.featured_post_id && !publication(value.featured_post_id))
+      throw new ApiError(422, "invalid_featured_post");
+    return structuredClone(value) as Settings;
+  }
+  function validatePublication(post: Post) {
+    const d = post.draft_content;
+    const m = d.metadata ?? {};
+    if (
+      post.status === "trashed" ||
+      typeof d.title !== "string" ||
+      !d.title.trim() ||
+      d.title.trim().length > 150 ||
+      !/^[a-z0-9][a-z0-9-]{0,119}$/.test(d.slug ?? "")
+    )
+      throw new ApiError(422, "invalid_title_or_slug");
+    if (!CATEGORIES.some((c) => c.code === d.category_code))
+      throw new ApiError(422, "invalid_category");
+    if (
+      d.tags &&
+      (!Array.isArray(d.tags) ||
+        d.tags.length > 20 ||
+        d.tags.some(
+          (t) => typeof t !== "string" || !t.trim() || t.trim().length > 30,
+        ))
+    )
+      throw new ApiError(422, "invalid_tags");
+    if (
+      state.publications.some((p) => p.post_id !== post.id && p.slug === d.slug)
+    )
+      throw new ApiError(409, "slug_conflict");
+    if (post.kind === "pdf") {
+      if (d.category_code !== "itinerary-pdf")
+        throw new ApiError(422, "invalid_category");
+      const asset = readyAsset(d.pdf_asset_id, "pdf");
+      if (
+        !asset ||
+        !readyAsset(asset.preview_asset_id, "image") ||
+        Number(asset.metadata.page_count) < 1 ||
+        Number(asset.metadata.page_count) > 200
+      )
+        throw new ApiError(422, "pdf_not_ready");
+      return { html: null };
+    }
+    if (d.category_code === "itinerary-pdf" || !d.blocks?.length || !m.region)
+      throw new ApiError(422, "incomplete_article");
+    if (!readyAsset(d.cover_asset_id, "image"))
+      throw new ApiError(422, "cover_not_ready");
+    const validDate = (v: unknown) =>
+      typeof v === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(v) &&
+      !Number.isNaN(Date.parse(v)) &&
+      new Date(v).toISOString().slice(0, 10) === v;
+    if (["day-walk", "food-cafe"].includes(d.category_code!)) {
+      if (!validDate(m.visited_on)) throw new ApiError(422, "missing_date");
+    } else {
+      const start =
+        d.category_code === "overnight-trip" ? m.start_date : m.check_in;
+      const end =
+        d.category_code === "overnight-trip" ? m.end_date : m.check_out;
+      if (!validDate(start) || !validDate(end) || String(end) <= String(start))
+        throw new ApiError(422, "invalid_dates");
+    }
+    if (
+      ["food-cafe", "stay-review"].includes(d.category_code!) &&
+      !m.place_name
+    )
+      throw new ApiError(422, "missing_place");
+    if (
+      d.category_code === "food-cafe" &&
+      !["cafe", "restaurant"].includes(String(m.venue_type))
+    )
+      throw new ApiError(422, "invalid_venue");
+    const rendered = renderBlocks(d.blocks);
+    if (rendered.assetIds.some((assetId) => !readyAsset(assetId, "image")))
+      throw new ApiError(422, "invalid_asset");
+    return rendered;
+  }
+  function dispatch(
+    action: string,
+    input: Record<string, unknown>,
+    headers: Record<string, string>,
+  ): unknown {
+    const person = member(headers);
+    if (action === "site.get") {
+      if (
+        (input.site_id && input.site_id !== MOCK_SITE_ID) ||
+        (!input.site_id && input.slug && input.slug !== MOCK_SITE.slug)
+      )
+        throw new ApiError(404, "not_found");
+      return {
+        ...MOCK_SITE,
+        settings: state.publishedSettings,
+        version: state.settingsVersion,
+      };
+    }
+    if (action === "posts.list") {
+      if (input.site_id !== MOCK_SITE_ID) return [];
+      const list = state.publications
+        .filter(
+          (p) =>
+            publicPost(p.post_id) &&
+            (!input.category || p.category_code === input.category) &&
+            (!input.tag || p.tags.includes(String(input.tag))),
+        )
+        .sort(
+          (a, b) =>
+            b.published_at.localeCompare(a.published_at) ||
+            a.post_id.localeCompare(b.post_id),
+        );
+      return paginate(list, input).map((p) => {
+        const { site_id, body_html, comments_enabled, ...card } = p;
+        void site_id;
+        void body_html;
+        void comments_enabled;
+        return { ...card, ...counts(p.post_id) };
+      });
+    }
+    if (action === "post.get") {
+      const p = state.publications.find(
+        (p) =>
+          p.site_id === input.site_id &&
+          (input.id ? p.post_id === input.id : p.slug === input.slug) &&
+          publicPost(p.post_id),
+      );
+      if (!p) throw new ApiError(404, "not_found");
+      return { ...p, ...counts(p.post_id) };
+    }
+    if (action === "comments.list") {
+      if (!publication(input.id)) throw new ApiError(404, "not_found");
+      return paginate(
+        state.comments
+          .filter(
+            (c) =>
+              c.post_id === input.id &&
+              (c.status === "visible" ||
+                (c.status === "deleted" &&
+                  state.comments.some(
+                    (r) => r.parent_id === c.id && r.status === "visible",
+                  ))),
+          )
+          .sort(
+            (a, b) =>
+              a.created_at.localeCompare(b.created_at) ||
+              a.id.localeCompare(b.id),
+          ),
+        input,
+      ).map(publicComment);
+    }
+    if (action === "visitor.create") {
+      const token = `mock-visitor-${id()}`;
+      visitors.add(token);
+      return {
+        visitor_token: token,
+        expires_at: Math.floor(Date.parse(now()) / 1000) + 2592000,
+      };
+    }
+    if (action === "me" || action === "profile.save") {
+      if (!person) throw new ApiError(401, "unauthorized");
+      if (action === "profile.save") {
+        person.display_name = readText(input.display_name, 2, 30);
+        return { saved: true };
+      }
+      return {
+        user_id: person.user_id,
+        profile: { user_id: person.user_id, display_name: person.display_name },
+        memberships:
+          person.active && person.role !== "reader"
+            ? [
+                {
+                  site_id: MOCK_SITE_ID,
+                  role: person.role,
+                  name: MOCK_SITE.name,
+                },
+              ]
+            : [],
+      };
+    }
+    if (action === "like.set") {
+      const p = publication(input.id);
+      if (!p || p.category_code === "itinerary-pdf")
+        throw new ApiError(403, "reactions_unavailable");
+      const actor = reactionActor(person, headers);
+      if (typeof input.liked !== "boolean")
+        throw new ApiError(422, "invalid_input");
+      const likes = new Set(state.likes[p.post_id] ?? []);
+      if (input.liked) likes.add(actor);
+      else likes.delete(actor);
+      state.likes[p.post_id] = [...likes];
+      return { liked: input.liked, count: likes.size };
+    }
+    if (action === "comment.create") {
+      const p = publication(input.id);
+      if (!p || !p.comments_enabled || p.category_code === "itinerary-pdf")
+        throw new ApiError(403, "comments_unavailable");
+      const actor = reactionActor(person, headers);
+      const body = readText(input.body, 1, 1000);
+      if (typeof input.request_key !== "string")
+        throw new ApiError(422, "request_key_required");
+      const guest = person ? null : readText(input.guest_name, 2, 30);
+      const password = person ? undefined : text(input.password, 8, 128);
+      if (
+        input.parent_id &&
+        !state.comments.some(
+          (c) =>
+            c.id === input.parent_id &&
+            c.post_id === p.post_id &&
+            c.parent_id === null &&
+            c.status === "visible",
+        )
+      )
+        throw new ApiError(422, "invalid_reply");
+      const fingerprint = JSON.stringify([
+        body,
+        input.parent_id ?? null,
+        guest,
+      ]);
+      const existing = state.comments.find(
+        (c) =>
+          c.post_id === p.post_id &&
+          c.actor === actor &&
+          c.request_key === input.request_key,
+      );
+      if (existing) {
+        if (existing.fingerprint !== fingerprint)
+          throw new ApiError(409, "idempotency_conflict");
+        return { id: existing.id, version: existing.version, duplicate: true };
+      }
+      const comment: Comment = {
+        id: id(),
+        post_id: p.post_id,
+        parent_id: (input.parent_id as string) ?? null,
+        body,
+        status: "visible",
+        version: 1,
+        created_at: now(),
+        updated_at: now(),
+        author_id: person?.user_id ?? null,
+        author_kind: person ? "member" : "guest",
+        guest_name: guest,
+        password,
+        actor,
+        request_key: input.request_key,
+        fingerprint,
+      };
+      state.comments.push(comment);
+      return { id: comment.id, version: 1, duplicate: false };
+    }
+    if (
+      action === "comment.edit" ||
+      action === "comment.delete" ||
+      action === "comment.report"
+    ) {
+      const c = state.comments.find((c) => c.id === input.id);
+      if (!c || c.status === "deleted" || !publication(c.post_id))
+        throw new ApiError(404, "not_found");
+      if (action === "comment.report") {
+        if (c.status !== "visible") throw new ApiError(404, "not_found");
+        if (!person) throw new ApiError(401, "unauthorized");
+        if (
+          !["spam", "abuse", "personal_information", "other"].includes(
+            String(input.reason),
+          )
+        )
+          throw new ApiError(422, "invalid_reason");
+        if (
+          !state.reports.some(
+            (r) => r.comment_id === c.id && r.reporter_id === person.user_id,
+          )
+        )
+          state.reports.push({
+            id: id(),
+            comment_id: c.id,
+            reporter_id: person.user_id,
+            reason: String(input.reason),
+            status: "open",
+            created_at: now(),
+          });
+        return { reported: true };
+      }
+      reactionActor(person, headers);
+      if (
+        c.author_kind === "member"
+          ? c.author_id !== person?.user_id
+          : c.password !== input.password
+      )
+        throw new ApiError(403, "forbidden");
+      requireVersion(c.version, input.version);
+      c.body = action === "comment.delete" ? "" : readText(input.body, 1, 1000);
+      if (action === "comment.delete") c.status = "deleted";
+      c.version++;
+      c.updated_at = now();
+      return { id: c.id, version: c.version };
+    }
+    if (action === "asset.access") {
+      const asset = state.assets.find((a) => a.id === input.id);
+      if (!asset) throw new ApiError(404, "not_found");
+      checkSite(input.site_id);
+      const linked =
+        state.publications.some(
+          (p) =>
+            publicPost(p.post_id) &&
+            (p.cover_asset_id === asset.id ||
+              p.pdf_asset_id === asset.id ||
+              state.assets.some(
+                (pdf) =>
+                  pdf.id === p.pdf_asset_id &&
+                  pdf.preview_asset_id === asset.id,
+              )),
+        ) || state.publishedSettings.hero_asset_id === asset.id;
+      if (asset.state !== "ready" || !linked) staff(person);
+      return {
+        id: asset.id,
+        url: asset.url,
+        expires_in: 300,
+        metadata: asset.metadata,
+        preview_asset_id: asset.preview_asset_id,
+      };
+    }
+    // Binary uploads and workers are deliberately not fake-success endpoints.
+    if (action === "asset.create" || action === "asset.complete") {
+      staff(person);
+      throw new ApiError(501, "mock_upload_not_implemented");
+    }
+    if (action.startsWith("admin.")) {
+      const actor = staff(person);
+      const scopedPost = [
+        "admin.post.get",
+        "admin.post.save",
+        "admin.post.publish",
+        "admin.post.status",
+        "admin.revisions",
+        "admin.revision.restore",
+      ].includes(action);
+      checkSite(input.site_id, !scopedPost);
+      if (action === "admin.posts")
+        return paginate(
+          [...state.posts].sort(
+            (a, b) =>
+              b.updated_at.localeCompare(a.updated_at) ||
+              a.id.localeCompare(b.id),
+          ),
+          input,
+        ).map((p) => ({
+          id: p.id,
+          kind: p.kind,
+          status: p.status,
+          title: p.draft_content.title ?? null,
+          lock_version: p.lock_version,
+          updated_at: p.updated_at,
+          first_published_at: p.first_published_at,
+        }));
+      if (action === "admin.post.create") {
+        if (!["article", "pdf"].includes(String(input.kind)))
+          throw new ApiError(422, "invalid_kind");
+        const content =
+          input.content === undefined ? {} : object(input.content);
+        const p: Post = {
+          id: id(),
+          site_id: MOCK_SITE_ID,
+          author_id: actor.user_id,
+          kind: input.kind as Post["kind"],
+          status: "draft",
+          draft_content: structuredClone(content),
+          schema_version: 1,
+          lock_version: 0,
+          updated_at: now(),
+          first_published_at: null,
+          deleted_at: null,
+        };
+        state.posts.push(p);
+        return p;
+      }
+      if (scopedPost) {
+        const p = state.posts.find((p) => p.id === input.id);
+        if (!p) throw new ApiError(404, "not_found");
+        if (action === "admin.post.get") return p;
+        if (action === "admin.revisions")
+          return paginate(
+            state.revisions
+              .filter((r) => r.post_id === p.id)
+              .slice()
+              .reverse(),
+            input,
+          ).map(({ id, created_at, created_by, schema_version }) => ({
+            id,
+            created_at,
+            created_by,
+            schema_version,
+          }));
+        requireVersion(p.lock_version, input.version);
+        if (action === "admin.post.save") {
+          p.draft_content = structuredClone(object(input.content));
+          p.lock_version++;
+          p.updated_at = now();
+          if (input.checkpoint === true)
+            state.revisions.push({
+              id: id(),
+              post_id: p.id,
+              snapshot: structuredClone(p.draft_content),
+              created_at: now(),
+              created_by: actor.user_id,
+              schema_version: 1,
+            });
+          return p;
+        }
+        if (action === "admin.revision.restore") {
+          const r = state.revisions.find(
+            (r) => r.id === input.revision_id && r.post_id === p.id,
+          );
+          if (!r) throw new ApiError(404, "not_found");
+          p.draft_content = structuredClone(r.snapshot);
+          p.lock_version++;
+          p.updated_at = now();
+          return p;
+        }
+        if (action === "admin.post.status") {
+          if (input.status !== "private" && input.status !== "trashed")
+            throw new ApiError(422, "invalid_status");
+          p.status = input.status;
+          p.lock_version++;
+          p.updated_at = now();
+          p.deleted_at = input.status === "trashed" ? now() : null;
+          audit(actor, action, p.id);
+          return { version: p.lock_version, status: p.status };
+        }
+        if (action === "admin.post.publish") {
+          const rendered = validatePublication(p);
+          const d = p.draft_content;
+          const revision = id();
+          state.revisions.push({
+            id: revision,
+            post_id: p.id,
+            snapshot: structuredClone(d),
+            created_at: now(),
+            created_by: actor.user_id,
+            schema_version: 1,
+          });
+          p.first_published_at ??= now();
+          p.status = "published";
+          p.deleted_at = null;
+          p.lock_version++;
+          p.updated_at = now();
+          const published = {
+            post_id: p.id,
+            site_id: p.site_id,
+            title: d.title!,
+            slug: d.slug!,
+            category_code: d.category_code!,
+            tags: [...new Set(d.tags ?? [])],
+            metadata: structuredClone(d.metadata ?? {}),
+            body_html: rendered.html,
+            cover_asset_id: p.kind === "article" ? d.cover_asset_id! : null,
+            pdf_asset_id: p.kind === "pdf" ? d.pdf_asset_id! : null,
+            comments_enabled:
+              p.kind === "article" && d.comments_enabled !== false,
+            published_at: p.first_published_at,
+            updated_at: now(),
+          };
+          state.publications = state.publications.filter(
+            (u) => u.post_id !== p.id,
+          );
+          state.publications.push(published);
+          audit(actor, action, p.id);
+          return {
+            post_id: p.id,
+            revision_id: revision,
+            version: p.lock_version,
+          };
+        }
+      }
+      if (action.startsWith("admin.settings.")) {
+        if (action === "admin.settings.get")
+          return {
+            draft: state.draftSettings,
+            published: state.publishedSettings,
+            version: state.settingsVersion,
+          };
+        requireVersion(state.settingsVersion, input.version);
+        const settings = validateSettings(
+          action === "admin.settings.save"
+            ? input.settings
+            : state.draftSettings,
+        );
+        state.draftSettings = settings;
+        if (action === "admin.settings.apply")
+          state.publishedSettings = structuredClone(settings);
+        state.settingsVersion++;
+        audit(actor, action, MOCK_SITE_ID);
+        return { version: state.settingsVersion };
+      }
+      if (action === "admin.comments")
+        return paginate(state.comments.slice().reverse(), input).map((c) => ({
+          id: c.id,
+          post_id: c.post_id,
+          parent_id: c.parent_id,
+          body: c.body,
+          status: c.status,
+          version: c.version,
+          created_at: c.created_at,
+          author_kind: c.author_kind,
+          display_name: publicComment(c).display_name,
+        }));
+      if (action === "admin.comment.moderate") {
+        const c = state.comments.find((c) => c.id === input.id);
+        if (!c) throw new ApiError(404, "not_found");
+        requireVersion(c.version, input.version);
+        if (
+          c.status === "deleted" ||
+          !["visible", "hidden", "deleted"].includes(String(input.status))
+        )
+          throw new ApiError(422, "invalid_status");
+        c.status = input.status as Comment["status"];
+        if (c.status === "deleted") c.body = "";
+        c.version++;
+        c.updated_at = now();
+        audit(actor, action, c.id);
+        return { version: c.version };
+      }
+      if (action === "admin.reports") return paginate(state.reports, input);
+      if (action === "admin.report.resolve") {
+        const report = state.reports.find((r) => r.id === input.id);
+        if (!report) throw new ApiError(404, "not_found");
+        if (!["resolved", "dismissed"].includes(String(input.status)))
+          throw new ApiError(422, "invalid_status");
+        report.status = String(input.status);
+        return { saved: true };
+      }
+      if (action === "admin.audit") {
+        staff(actor, ["admin", "owner"]);
+        return paginate(state.audit, input);
+      }
+      if (action === "admin.members") {
+        staff(actor, ["owner"]);
+        return state.members
+          .filter((m) => m.role !== "reader")
+          .map(({ display_name, ...membership }) => {
+            void display_name;
+            return membership;
+          });
+      }
+      if (action === "admin.member.set") {
+        staff(actor, ["owner"]);
+        const target = state.members.find((m) => m.user_id === input.user_id);
+        if (!target) throw new ApiError(404, "not_found");
+        if (
+          !["editor", "admin", "owner"].includes(String(input.role)) ||
+          (input.active !== undefined && typeof input.active !== "boolean")
+        )
+          throw new ApiError(422, "invalid_role");
+        if (
+          target.active &&
+          target.role === "owner" &&
+          (input.role !== "owner" || input.active === false) &&
+          state.members.filter((m) => m.active && m.role === "owner").length ===
+            1
+        )
+          throw new ApiError(409, "last_owner");
+        target.role = input.role as Role;
+        target.active = input.active !== false;
+        audit(actor, action, target.user_id);
+        return { saved: true };
+      }
+    }
+    throw new ApiError(400, "unknown_action");
+  }
+  return {
+    reset(next: Scenario = "default") {
+      scenario = next;
+      state = createFixtures(next === "empty");
+      visitors.clear();
+      failures.clear();
+      sequence = 100;
+    },
+    failNext(action: string, status = 500, code = "mock_failure") {
+      failures.set(action, { status, code });
+    },
+    snapshot: () => structuredClone(state),
+    handle(body: unknown, rawHeaders: Record<string, string> = {}): MockResult {
+      const requestId = id();
+      try {
+        const envelope = object(body);
+        const action = validateAction(envelope.action);
+        const input = cleanInput(envelope.input ?? {});
+        const failure = failures.get(action);
+        if (failure) {
+          failures.delete(action);
+          throw new ApiError(failure.status, failure.code);
+        }
+        if (scenario === "error") throw new ApiError(500, "mock_unavailable");
+        if (scenario === "rate-limited")
+          throw new ApiError(429, "rate_limited", 60);
+        const headers = Object.fromEntries(
+          Object.entries(rawHeaders).map(([key, value]) => [
+            key.toLowerCase(),
+            value,
+          ]),
+        );
+        return {
+          status: 200,
+          body: structuredClone(dispatch(action, input, headers)),
+        };
+      } catch (error) {
+        if (error instanceof ApiError)
+          return {
+            status: error.status,
+            body: { error: error.message, request_id: requestId },
+            headers: error.retryAfter
+              ? { "Retry-After": String(error.retryAfter) }
+              : undefined,
+          };
+        // Unexpected programming errors must fail tests rather than masquerade as successful mocks.
+        throw error;
+      }
+    },
+  };
+}
+export type MockEngine = ReturnType<typeof createMockEngine>;

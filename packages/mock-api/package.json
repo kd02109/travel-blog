@@ -1,0 +1,35 @@
+{
+  "name": "@repo/mock-api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./server": "./src/server.ts",
+    "./react": "./src/provider.tsx",
+    "./fixtures": "./src/fixtures.ts",
+    "./engine": "./src/engine.ts",
+    "./playground": "./src/playground.tsx",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/constants": "workspace:*",
+    "@repo/api-client": "workspace:*",
+    "@repo/ui": "workspace:*",
+    "miragejs": "0.1.48",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "typescript": "6.0.3",
+    "eslint": "10.9.1"
+  }
+}

@@ -1,0 +1,4 @@
+project_id = "travel-blog"
+
+[functions.travel-api]
+verify_jwt = false

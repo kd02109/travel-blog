@@ -3,18 +3,42 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "pnpm dev:mock",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "format": "prettier --write .",
+    "check-types": "turbo run check-types",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check": "pnpm lint && pnpm check-types && pnpm test && pnpm test:config && pnpm format:check",
+    "db:start": "supabase start",
+    "db:stop": "supabase stop",
+    "db:test": "supabase test db",
+    "db:types": "supabase gen types typescript --local > supabase/database.types.ts",
+    "dev:mock": "node scripts/run-mode.mjs mock dev",
+    "test:e2e:mock": "playwright test --config playwright.mock.config.ts",
+    "dev:supabase": "node scripts/run-mode.mjs supabase dev",
+    "build:supabase": "node scripts/run-mode.mjs supabase build",
+    "start:supabase": "node scripts/run-mode.mjs supabase start",
+    "test:mock": "pnpm test && pnpm test:e2e:mock",
+    "test:supabase": "node scripts/test-supabase.mjs",
+    "test:config": "node --test scripts/environment.test.mjs"
   },
   "devDependencies": {
     "prettier": "3.9.6",
-    "turbo": "^2.10.13",
-    "typescript": "7.0.2"
+    "turbo": "2.10.13",
+    "typescript": "6.0.3",
+    "vitest": "5.0.1",
+    "@vitest/coverage-v8": "5.0.1",
+    "@playwright/test": "1.63.0",
+    "supabase": "2.117.0",
+    "prettier-plugin-tailwindcss": "0.8.1",
+    "cross-env": "10.1.0"
   },
   "packageManager": "pnpm@11.25.0",
   "engines": {
     "node": ">=24"
-  }
+  },
+  "type": "module"
 }
