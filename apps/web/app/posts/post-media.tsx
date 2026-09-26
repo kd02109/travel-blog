@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import Image from "next/image";
+import { Button } from "@repo/ui/button";
 
 export function PrivateImage({
   assetId,
@@ -17,6 +18,7 @@ export function PrivateImage({
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -42,9 +44,9 @@ export function PrivateImage({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [api, assetId, siteId]);
+  }, [api, assetId, siteId, retry]);
   return error ? (
-    <p role="alert">{error}</p>
+    <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>사진 다시 불러오기</Button></div>
   ) : url ? (
     <Image
       src={url}
@@ -63,15 +65,16 @@ export function PdfCover({ assetId, siteId, title }: { assetId: string; siteId: 
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [previewAssetId, setPreviewAssetId] = useState("");
   const [failed, setFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
     void api.call("asset.access", { id: assetId, site_id: siteId }).then((asset) => {
       if (active) setPreviewAssetId(asset.preview_asset_id ?? "");
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [api, assetId, siteId]);
+  }, [api, assetId, siteId, retry]);
   if (previewAssetId) return <PrivateImage assetId={previewAssetId} siteId={siteId} title={`${title} 표지`} className="h-full w-full max-h-none rounded-none object-cover" />;
-  return <div className="flex aspect-[3/2] items-center justify-center bg-muted px-4 text-center text-sm text-muted-foreground" role={failed ? "alert" : "status"}>{failed ? "PDF 표지를 불러오지 못했습니다" : "PDF 표지를 여는 중…"}</div>;
+  return <div className="flex aspect-[3/2] flex-col items-center justify-center gap-2 bg-muted px-4 text-center text-sm text-muted-foreground" role={failed ? "alert" : "status"}>{failed ? <>PDF 표지를 불러오지 못했습니다<Button variant="outline" onClick={() => setRetry((current) => current + 1)}>다시 불러오기</Button></> : "PDF 표지를 여는 중…"}</div>;
 }
 
 export function PostAssetFigures({
@@ -101,11 +104,19 @@ export function PostAssetFigures({
       image.className =
         "mx-auto my-4 max-h-[70vh] max-w-full rounded object-contain";
       figure.prepend(image);
+      const retryButton = document.createElement("button");
+      retryButton.type = "button";
+      retryButton.className = "my-2 min-h-12 rounded border px-4 underline underline-offset-4";
+      retryButton.textContent = "사진 다시 불러오기";
+      retryButton.hidden = true;
+      figure.append(retryButton);
       const refresh = async () => {
         try {
           const asset = await api.call("asset.access", { id, site_id: siteId });
           if (disposed) return;
           image.src = asset.url;
+          image.alt = figure.querySelector("figcaption")?.textContent ?? "여행 사진";
+          retryButton.hidden = true;
           timers.push(
             setTimeout(
               () => void refresh(),
@@ -114,8 +125,10 @@ export function PostAssetFigures({
           );
         } catch {
           image.alt = "사진을 불러오지 못했습니다.";
+          retryButton.hidden = false;
         }
       };
+      retryButton.addEventListener("click", () => void refresh());
       void refresh();
     }
     return () => {
@@ -143,6 +156,7 @@ export function PrivatePdf({
     preview_asset_id: string | null;
   }>();
   const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -171,12 +185,12 @@ export function PrivatePdf({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [api, assetId, siteId]);
+  }, [api, assetId, siteId, retry]);
   return (
     <section className="my-6 space-y-2" aria-label="PDF 일정표">
       <h2>{title}</h2>
       {error ? (
-        <p role="alert">{error}</p>
+        <div role="alert" className="space-y-2"><p>{error}</p><Button variant="outline" onClick={() => setRetry((current) => current + 1)}>PDF 다시 불러오기</Button></div>
       ) : asset ? (
         <>
           <p>{String(asset.metadata.page_count ?? "")}쪽</p>
