@@ -8,14 +8,19 @@ import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { PostCard } from "../post-card";
 import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
+import { ErrorState, EmptyState } from "@repo/ui/feedback";
+import { LoadingState } from "@repo/ui/skeleton";
+import { Button } from "@repo/ui/button";
 export function PostDetail({
   slug,
   initialSite,
   initialPost,
+  initialError,
 }: {
   slug: string;
   initialSite?: ActionOutput<"site.get">;
   initialPost?: ActionOutput<"post.get">;
+  initialError?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const site = useTravelQuery(
@@ -89,17 +94,14 @@ export function PostDetail({
       setNotice("");
     }
   }
-  if (site.error || post.error)
-    return (
-      <main>
-        <p role="alert">{errorMessage(site.error ?? post.error)}</p>
-      </main>
-    );
+  if (initialError && !site.data && !post.data) return <main className="mx-auto w-full max-w-3xl px-5 py-12"><ErrorState title="여행 기록에 연결하지 못했어요" description={initialError} onRetry={() => { void site.refetch(); void post.refetch(); }} /></main>;
+  if (site.error || post.error) {
+    if (post.error instanceof TravelApiError && post.error.status === 404) return <main className="mx-auto w-full max-w-3xl px-5 py-12"><EmptyState title="이 여행 기록을 찾을 수 없어요" description="주소가 바뀌었거나 공개되지 않은 글입니다." action={<Button asChild variant="outline"><Link href="/posts">공개 글 목록으로</Link></Button>} /></main>;
+    return <main className="mx-auto w-full max-w-3xl px-5 py-12"><ErrorState description={errorMessage(site.error ?? post.error)} onRetry={() => { void site.refetch(); void post.refetch(); }} /></main>;
+  }
   if (!post.data)
     return (
-      <main>
-        <p role="status">기록을 불러오고 있어요…</p>
-      </main>
+      <main className="mx-auto w-full max-w-3xl px-5 py-12"><LoadingState label="여행 기록을 불러오고 있어요…" /></main>
       );
   const article = post.data.category_code !== "itinerary-pdf";
   const metadata = post.data.metadata as Record<string, unknown>;

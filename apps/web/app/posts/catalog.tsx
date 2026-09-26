@@ -20,12 +20,14 @@ export function Catalog({
   initialPage = 1,
   initialCategory,
   initialTag,
+  initialError,
 }: {
   initialSite?: ActionOutput<"site.get">;
   initialPosts?: ActionOutput<"posts.list">;
   initialPage?: number;
   initialCategory?: CategoryCode;
   initialTag?: string;
+  initialError?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [page, setPage] = useState(initialPage);
@@ -61,7 +63,7 @@ export function Catalog({
     "posts.list",
     {
       site_id: siteId,
-      limit: 12,
+      limit: 13,
       offset: pageOffset(page),
       category: category === "all" ? undefined : category,
       tag: tag || undefined,
@@ -69,7 +71,7 @@ export function Catalog({
     { siteId, actor: "public" },
     {
       enabled: Boolean(site.data),
-      initialData: page === initialPage ? initialPosts : undefined,
+      initialData: page === initialPage && category === (initialCategory ?? "all") && tag === (initialTag ?? "") ? initialPosts : undefined,
     },
   );
   function move(next: number) {
@@ -125,6 +127,7 @@ export function Catalog({
         </form>
       </header>
       <div className="mt-8 space-y-6">
+        {initialError && !site.data && <ErrorState title="공개 기록에 연결하지 못했어요" description={initialError} onRetry={() => { void site.refetch(); }} />}
         {(site.error || posts.error) && (
           <ErrorState
             description={errorMessage(site.error ?? posts.error)}
@@ -134,29 +137,27 @@ export function Catalog({
             }}
           />
         )}
-        {(site.isPending || posts.isPending) && (
+        {!site.error && !posts.error && (site.isPending || posts.isPending) && (
           <LoadingState label="여행 기록을 불러오고 있어요…" />
         )}
         {posts.data && posts.data.length > 0 && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.data.map((post) => <PostCard key={post.post_id} post={post} siteId={siteId} />)}
+            {posts.data.slice(0, 12).map((post) => <PostCard key={post.post_id} post={post} siteId={siteId} />)}
           </ul>
         )}
         {posts.data?.length === 0 && (
           <EmptyState
-            title="아직 여행 기록이 없어요"
-            description="새로운 여행 이야기가 올라오면 이곳에서 읽을 수 있어요."
+            title={category !== "all" || tag ? "조건에 맞는 글이 없어요" : "아직 여행 기록이 없어요"}
+            description={category !== "all" || tag ? "분류나 태그를 바꾸거나 필터를 지워 다시 찾아보세요." : "새로운 여행 이야기가 올라오면 이곳에서 읽을 수 있어요."}
             action={
-              <Button asChild variant="outline">
-                <Link href="/">홈으로 돌아가기</Link>
-              </Button>
+              category !== "all" || tag ? <Button variant="outline" onClick={() => { setTagInput(""); applyFilters("all", ""); }}>필터 지우기</Button> : <Button asChild variant="outline"><Link href="/">홈으로 돌아가기</Link></Button>
             }
           />
         )}
         {posts.data && posts.data.length > 0 && (
           <Pagination
             page={page}
-            hasNextPage={posts.data.length === 12}
+            hasNextPage={posts.data.length > 12}
             busy={posts.isFetching}
             onPageChange={move}
           />

@@ -21,23 +21,25 @@ export default async function Posts({
     !process.env.TRAVEL_SSR_API_URL
   )
     return <Catalog initialPage={page} initialCategory={category} initialTag={tag} />;
-  const api = createServerTravelApi();
-  const site = await api.getSite();
-  const posts = await api.listPosts({
-    site_id: site.id,
-    category,
-    tag,
-    limit: 12,
-    offset: (page - 1) * 12,
-  });
+  let initialSite;
+  let initialPosts;
+  let initialError: string | undefined;
+  try {
+    const api = createServerTravelApi();
+    initialSite = await api.getSite();
+    initialPosts = await api.listPosts({ site_id: initialSite.id, category, tag, limit: 13, offset: (page - 1) * 12 });
+  } catch {
+    initialError = "공개 여행 기록을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.";
+  }
   return (
     <Catalog
       key={`${page}-${category ?? "all"}-${tag ?? ""}`}
-      initialSite={site}
-      initialPosts={posts}
+      initialSite={initialSite}
+      initialPosts={initialPosts}
       initialPage={page}
       initialCategory={category}
       initialTag={tag}
+      initialError={initialError}
     />
   );
 }
