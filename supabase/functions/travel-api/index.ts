@@ -309,8 +309,22 @@ Deno.serve(async (req: Request) => {
       const result = await rpc(action, actor, input);
       return respond({ id: result.id, state: result.state });
     }
+    if (action === "asset.cancel") {
+      const asset = await rpc("asset.internal", actor, input);
+      if (asset.state === "uploading" || asset.state === "processing") {
+        const { error } = await client.rpc("travel_worker", {
+          p_action: "cancel",
+          p_input: { id: asset.id },
+        });
+        if (error) throw new ApiError(500, "asset_cancel_failed");
+      }
+      return respond({ saved: true });
+    }
     if (action === "asset.access") {
       const asset = await rpc(action, actor, input);
+      if (asset.cleanup_state !== "active") {
+        throw new ApiError(404, "asset_not_found");
+      }
       const { data, error } = await client.storage.from(asset.bucket)
         .createSignedUrl(asset.object_path, 300);
       if (error) throw new ApiError(502, "download_url_failed");

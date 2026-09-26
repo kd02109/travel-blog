@@ -106,7 +106,7 @@ await api.request("like.set", { id: MOCK_POST_IDS[0], liked: true });
 
 이는 UI 개발용 주요 계약 구현입니다. 모든 PostgreSQL constraint/RLS, 트랜잭션 격리, JWT·Argon2·서명·HttpOnly 쿠키·만료 처리, 자동 레이트리밋 시간창을 재현한 보안 에뮬레이터가 아닙니다. 실제 비밀번호·개인정보를 입력하지 마세요. 비회원 테스트 비밀번호는 탭 메모리에만 평문으로 비교합니다.
 
-`asset.create`, `asset.complete`는 권한 검사 후 **501 `mock_upload_not_implemented`**를 반환합니다. 실제 바이너리 업로드·이미지/PDF 변환 worker는 이 패키지에서 성공 처리하지 않습니다. 네이버/카카오 OAuth, Supabase REST/RPC/Storage SDK, SSR 데이터, 운영 통계·오류 수집은 모킹 범위 밖입니다.
+`asset.create`, `asset.complete`는 권한 검사 후 **501 `mock_upload_not_implemented`**를 반환합니다. 실제 바이너리 업로드·이미지/PDF 변환 worker는 이 패키지에서 성공 처리하지 않습니다. 관리자 업로드 화면은 이 제한을 안내하며, 파일 기능은 `pnpm dev:supabase`와 실제 Storage/worker 연결에서 사용합니다. 네이버/카카오 OAuth, Supabase REST/RPC/Storage SDK, SSR 데이터, 운영 통계·오류 수집은 모킹 범위 밖입니다.
 
 ## 오류·시나리오 제어
 

@@ -161,6 +161,7 @@ const samples = {
     path: "original",
   },
   "asset.complete": { id, state: "processing" },
+  "asset.cancel": { saved: true },
   "asset.access": {
     id,
     url: "https://example.com/signed",

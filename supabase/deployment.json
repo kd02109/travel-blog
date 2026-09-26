@@ -32,9 +32,26 @@
     {
       "version": "20260926114006",
       "name": "environment_owner_bootstrap"
+    },
+    {
+      "version": "20260926125949",
+      "name": "media_worker_typescript_and_cleanup"
+    },
+    {
+      "version": "20260926130458",
+      "name": "media_queue_monitoring"
+    },
+    {
+      "version": "20260926130921",
+      "name": "media_retry_attempt_reset"
+    },
+    {
+      "version": "20260926132928",
+      "name": "safe_media_cleanup_quarantine"
     }
   ],
   "edge_function_version": 2,
-  "edge_version": 3,
-  "edge_change": "Expose Retry-After and X-Request-Id response headers; deployed 2026-09-26"
+  "edge_version": 5,
+  "import_map_path": "import_map.json",
+  "edge_change": "Add cleanup_state checks to signed asset access; keep custom Auth validation"
 }

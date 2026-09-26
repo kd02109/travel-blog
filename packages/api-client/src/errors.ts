@@ -34,6 +34,8 @@ export function errorMessage(error: unknown): string {
     return "다른 변경과 충돌했습니다. 입력을 보관한 채 최신 내용을 확인해 주세요.";
   if (error.status === 429)
     return `${error.retryAfter ?? 60}초 후 다시 시도해 주세요.`;
+  if (error.code === "mock_upload_not_implemented")
+    return "Mock 환경은 파일 저장을 지원하지 않습니다. Supabase 실행 모드에서 다시 시도해 주세요.";
   return "요청을 처리하지 못했습니다. 입력은 유지됩니다.";
 }
 export function shouldRetryQuery(failureCount: number, error: unknown) {

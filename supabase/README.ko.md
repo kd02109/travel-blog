@@ -40,43 +40,44 @@ Edge Function은 회원 작업마다 Supabase Auth `getUser(access_token)`으로
 
 Storage 네 버킷은 **모두 private**으로 생성했다. 기존 명세의 `published-media` public 제안보다 엄격한 구현이며, 공개 승인 파일만 API가 5분 signed URL을 발급한다. 비공개 전환 이전에 발급한 URL은 만료까지 살아 있을 수 있다.
 
-## 파일 작업자 — 코드 검증 완료, 상시 실행은 미연결
+## 파일 작업자 — TypeScript 구현, 호스팅은 미연결
 
 `asset.complete`는 실제 업로드 파일의 크기·매직 바이트·checksum을 확인한 뒤 `processing`으로 전환한다. **작업자가 실행되기 전에는 ready가 되지 않으므로 해당 파일을 게시할 수 없다.** 완료 API가 파일 변환까지 끝났다고 표시하지 않는다.
 
-작업자는 다음 파일로 제공한다.
+작업자는 모노레포 패키지로 제공한다.
 
-- [Python 작업자](./scripts/media_worker.py)
-- [고정 의존성](./scripts/requirements.txt)
+- [TypeScript worker](../packages/media-worker/README.ko.md)
+- [worker 코드](../packages/media-worker/src/worker.ts)
 
-신뢰하는 서버/컨테이너에서 환경변수를 주입한 뒤 실행한다. 아래 명령은 실제 비밀값을 포함하지 않는다.
+Node.js 24 컨테이너 이미지로 빌드해 환경변수를 주입한다. 아래 명령은 실제 비밀값을 포함하지 않는다.
 
 ```sh
-python -m pip install -r supabase/scripts/requirements.txt
-python supabase/scripts/media_worker.py
+docker build -f packages/media-worker/Dockerfile -t travel-media-worker .
+docker run --restart unless-stopped --memory=512m --cpus=1 \
+  -e SUPABASE_URL -e SUPABASE_SERVICE_ROLE_KEY travel-media-worker
 ```
 
-필수 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. 비밀값은 호스팅의 비밀 저장소에서 주입한다. 한 번 실행할 때 작업 하나를 처리하므로 실행 환경의 스케줄러/작업 루프에 연결해야 한다. 이 작업에서 유료 실행 환경이나 자동화는 생성하지 않았다. 파일 변환은 메모리·CPU·실행시간이 제한된 컨테이너에서 수행한다.
+필수 환경변수: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. 비밀값은 호스팅의 비밀 저장소에서 주입한다. worker가 상시 polling하며, 컨테이너 호스트가 실행·재시작을 관리해야 한다. 이 작업에서 유료 실행 환경은 생성하지 않았다.
 
-이미지는 40MP 제한·회전 보정·EXIF 제거·최대 1600px JPEG로 변환한다. 초기 버전에는 480/960px 별도 파생물을 만들지 않는다. PDF는 암호화/손상/200쪽 초과를 거절하고 첫 장 PNG를 만든다. 새 처리 파일이 Storage에 존재하는 것을 확인한 뒤 ready로 반영하며, 실패 시 이전 공개 파일을 유지한다.
+이미지는 Sharp로 40MP 제한·회전 보정·EXIF 제거·최대 1600px JPEG로 변환한다. 초기 버전에는 480/960px 별도 파생물을 만들지 않는다. PDF.js는 암호화/손상/200쪽 초과 PDF를 거절하고 첫 장 PNG를 만든다. 새 처리 파일이 Storage에 존재하는 것을 확인한 뒤 ready로 반영한다.
 
-현재 API는 `no-store`라 cache 무효화 작업은 완료 처리만 한다. Next.js 페이지 캐시를 도입할 때 해당 작업자에 재검증 hook을 연결해야 한다. 파일의 영구 삭제·고아 파일 정리·rate-limit 만료 행 청소는 자동 실행하지 않으므로 운영 스케줄러 연결 시 추가한다.
+현재 API는 `no-store`라 cache 무효화 작업은 완료 처리만 한다. Next.js 페이지 캐시를 도입할 때 해당 작업자에 재검증 hook을 연결해야 한다. 안전 정리 migration은 원격에 적용했다. worker가 오래된 미참조 asset을 DB에서 7일 격리하고 Supabase Storage API로 객체를 지운 뒤 최종 참조 검사와 DB 행 제거를 수행한다. 신규 DB 참조 차단 트리거가 활성화됐으며, Storage 삭제는 격리 후 worker가 실행할 때만 시작한다. 아직 worker 상시 실행과 staging 정리 테스트는 설정하지 않았다. rate-limit 만료 행도 별도 정리 대상이다.
 
 ## 검증 결과
 
 - 원격 SQL 통합 테스트 3개 파일 통과: API 기본 흐름, 사이트/파일/PDF/댓글 제약, 최초 owner 이메일 인증.
 - Deno 보안·렌더러·Argon2 테스트 6개 통과.
 - 실제 배포 URL HTTP 테스트 3개 통과: 공개 조회, 비로그인/위조 JWT 거절, 서명 토큰 검증.
-- 이미지/PDF 변환 테스트 4개 통과: 크기 축소·EXIF 제거, 첫 장 생성·페이지 수, 암호화/손상 PDF 거절.
+- 새 TypeScript worker의 브라우저/격리 Storage 종단 테스트와 실제 컨테이너 실행은 아직 수행하지 않았다. 해당 확인은 컨테이너 호스팅 연결 후 staging에서 진행한다.
 - 모든 직접 관리 테이블 RLS 활성화, 원본 테이블의 브라우저 권한 차단 확인.
 - 보안 Advisor: 경고 0개. 성능 Advisor: 누락 FK 인덱스 수정 완료; 신규 DB의 미사용 인덱스 안내만 남음.
 - 테스트 Auth 사용자·글·댓글·파일 메타데이터는 SQL 트랜잭션 rollback으로 제거했다. HTTP 검사로 생긴 제한 카운터만 남는다.
 
-실제 소셜 로그인과 실제 파일 업로드→상시 작업자→게시까지 연결한 운영 종단 검증은 아직 수행하지 않았다. 현재 결과는 DB/API와 변환 코드 검증이다.
+실제 파일 업로드→TypeScript worker→게시까지 연결한 운영 종단 검증과 worker 컨테이너 상시는 아직 확인하지 않았다. 기존의 Python 변환 테스트는 새 worker 검증 근거로 사용하지 않는다.
 
 ## 변경 파일과 재현
 
-2026-09-26 갱신: 별도 로컬 Supabase에서 migration 7개 전체 재생을 완료했다. `rls_auto_enable()`은 존재하는 환경에서만 권한을 회수하도록 보완했다. `initial_owner.sql`은 개인 이메일 대신 격리 사이트·테스트 이메일을 사용하도록 교체했으며, 모든 테스트는 계속 격리 DB에서만 실행한다. 아래 로컬 reset 미검증 설명은 최초 구축 당시 기록이다.
+2026-09-26 갱신: 별도 로컬 Supabase에서 migration 7개 전체 재생을 완료했다. `rls_auto_enable()`은 존재하는 환경에서만 권한을 회수하도록 보완했다. `initial_owner.sql`은 개인 이메일 대신 격리 사이트·테스트 이메일을 사용하도록 교체했으며, 모든 테스트는 계속 격리 DB에서만 실행한다. 이후 migration은 새 인스턴스에 순서대로 적용한다. 아래 로컬 reset 미검증 설명은 최초 구축 당시 기록이다.
 
 `migrations/` 파일은 Supabase CLI로 생성한 뒤 원격 적용 결과의 버전으로 파일명을 맞췄다. `deployment.json`에 대응 버전을 기록했다. 최초 API 이후 수정은 후속 마이그레이션으로 적용했다.
 
@@ -86,7 +87,6 @@ python supabase/scripts/media_worker.py
 npx deno check --config supabase/functions/travel-api/deno.json supabase/functions/travel-api/index.ts
 npx deno test --config supabase/functions/travel-api/deno.json supabase/functions/travel-api/core_test.ts
 npx deno test --config supabase/functions/travel-api/deno.json --allow-net=kqbqoopqomrwozpqgono.supabase.co supabase/tests/http_test.ts
-python supabase/tests/media_worker_test.py
 ```
 
 SQL 테스트는 이 빈 개발 프로젝트용이다. `tests/initial_owner.sql`은 실제 owner 가입 후에는 실행하지 않으며, 모든 SQL 테스트의 BEGIN/ROLLBACK을 유지한다. 최초 테스트 fixture는 생성/삭제 이메일을 발송하지 않는다.

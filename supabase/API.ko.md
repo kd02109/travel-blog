@@ -27,6 +27,10 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 
 프로필 아바타 필드는 DB에 준비했지만 업로드/아바타 변경 action은 아직 제공하지 않는다. 기본 별명으로 시작할 수 있다.
 
+관리자 media flow는 `asset.create`로 20MB 이하 signed upload URL을 받고 Storage에 직접 업로드한 뒤 `asset.complete`를 호출한다. `processing`/`failed` 상태는 `asset.complete`를 다시 호출해 조회하며, `failed`는 다시 호출하면 처리 큐에 재등록된다. `asset.cancel`은 아직 업로드/처리 중인 원격 작업을 중단하고 asset을 `failed` 상태로 표시한다. 관리자/owner만 사용할 수 있다. `asset.access` URL은 300초 유효하며 private bucket에서만 발급된다.
+
+미디어 worker는 `service_role`로만 사용할 수 있는 `travel_worker` RPC를 통해 claim/complete/fail/cancel 처리한다. `travel_queue_health`는 큐 대기·실패·만료 lease와 가장 오래된 대기 시간을 반환하는 읽기 전용 모니터다. `travel_media_cleanup`은 오래된 미참조 자산을 격리하고 7일 보존 후 Storage API 삭제·DB 최종 참조 검사 및 제거를 수행한다. 원격 migration은 적용했으며, worker가 실행되어야 정리 주기가 시작된다.
+
 ```js
 const API = "https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api";
 async function api(action, input = {}, token) {
@@ -121,9 +125,10 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 | --- | --- | --- |
 | `asset.create` | `site_id`, `kind: image/pdf` | id, bucket, upload_url, token, path |
 | `asset.complete` | `id`, 선택 `site_id` | 업로드 검증 후 processing |
+| `asset.cancel` | `id`, 선택 `site_id` | 처리 중인 원격 job 취소, asset을 failed로 표시 |
 | `asset.access` | `id`, 선택 `site_id` | 현재 공개 승인 또는 관리자 권한 확인 후 5분 URL |
 
-asset.create/complete는 editor 이상이다. upload_url에는 파일을 **PUT**으로 올리고 해당 MIME의 Content-Type을 지정한다. Supabase SDK를 쓰면 Storage의 uploadToSignedUrl(bucket,path,token,file)를 사용할 수 있다. 파일을 전송한 뒤 asset.complete를 호출한다. 파일당 20MiB 제한, JPEG/PNG/WebP/PDF를 받는다. ready 처리는 신뢰된 Python worker만 할 수 있다. 클라이언트가 state=ready 또는 임의 preview를 제출해서 발행할 수 없다.
+asset.create/complete는 editor 이상이다. upload_url에는 파일을 **PUT**으로 올리고 해당 MIME의 Content-Type을 지정한다. Supabase SDK를 쓰면 Storage의 uploadToSignedUrl(bucket,path,token,file)를 사용할 수 있다. 파일을 전송한 뒤 asset.complete를 호출한다. 파일당 20MiB 제한, JPEG/PNG/WebP/PDF를 받는다. ready 처리는 신뢰된 TypeScript/Node.js worker만 할 수 있다. 클라이언트가 state=ready 또는 임의 preview를 제출해서 발행할 수 없다.
 
 DB 내부 `travel_worker`와 `travel_api`는 서비스 역할 전용이다. worker의 claim/complete/fail, rate.consume, asset.internal, comment.credential은 클라이언트 action 목록에 없으며, 키·비밀번호 해시는 응답하지 않는다.
 

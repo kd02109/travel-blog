@@ -4,6 +4,7 @@ import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelQuery, useTravelMutation } from "@repo/api-client/hooks";
 import { errorMessage, TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
+import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
 export function PostDetail({
   slug,
   initialSite,
@@ -81,8 +82,22 @@ export function PostDetail({
     <main className="mx-auto max-w-3xl space-y-4 p-8">
       <h1>{post.data.title}</h1>
       <p>{post.data.tags.join(" · ")}</p>
+      {post.data.cover_asset_id && (
+        <PrivateImage
+          assetId={post.data.cover_asset_id}
+          siteId={siteId}
+          title={`${post.data.title} 대표 사진`}
+        />
+      )}
+      {post.data.pdf_asset_id && (
+        <PrivatePdf
+          assetId={post.data.pdf_asset_id}
+          siteId={siteId}
+          title={post.data.title}
+        />
+      )}
       {post.data.body_html && (
-        <div dangerouslySetInnerHTML={{ __html: post.data.body_html }} />
+        <PostAssetFigures html={post.data.body_html} siteId={siteId} />
       )}
       {post.data.comments_enabled && (
         <section aria-label="댓글">

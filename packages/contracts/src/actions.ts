@@ -311,6 +311,7 @@ export const actionContracts = {
       state: z.enum(["uploading", "processing", "ready", "failed"]),
     }),
   ),
+  "asset.cancel": contract(z.strictObject(resource), saved),
   "asset.access": contract(
     z.strictObject(resource),
     z.object({
