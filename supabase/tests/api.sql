@@ -1,4 +1,6 @@
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 create temporary table test_ids as select gen_random_uuid() as owner_id,gen_random_uuid() as editor_id,gen_random_uuid() as outsider_id,gen_random_uuid() as site_id,gen_random_uuid() as other_site_id,gen_random_uuid() as asset_id,gen_random_uuid() as metadata_asset_id;
 grant select on test_ids to service_role;
 insert into auth.users(id,aud,role,email,created_at,updated_at) select owner_id,'authenticated','authenticated','owner-test@example.invalid',now(),now() from test_ids union all select editor_id,'authenticated','authenticated','editor-test@example.invalid',now(),now() from test_ids union all select outsider_id,'authenticated','authenticated','outsider-test@example.invalid',now(),now() from test_ids;
@@ -59,6 +61,7 @@ begin
  r:=public.travel_api('comment.create',null,jsonb_build_object('id',base_pid,'body','댓글','guest_name','방문자','password_hash',hash,'actor_hash',repeat('a',64),'request_hash','abc','request_key',req)); assert (r->>'duplicate')::boolean;
  r:=public.travel_api('comments.list',null,jsonb_build_object('id',base_pid)); assert jsonb_array_length(r)=1; assert not (r->0 ? 'request_hash');
  begin perform public.travel_api('comment.edit',t.outsider_id,jsonb_build_object('id',cid,'version',0,'body','bad')); raise exception 'comment hijack allowed'; exception when sqlstate 'PT403' then null; end;
+ begin perform public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','비밀번호 없는 수정','guest_verified',false)); raise exception 'guest password bypass allowed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','수정','guest_verified',true)); assert (r->>'version')::int=1;
  r:=public.travel_api('comment.report',t.outsider_id,jsonb_build_object('id',cid,'reason','spam'));
  r:=public.travel_api('admin.reports',t.owner_id,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=1;
@@ -93,4 +96,6 @@ do $$ begin
  begin perform 1 from app_private.posts; raise exception 'drafts exposed'; exception when insufficient_privilege then null; end;
 end $$;
 reset role;
+select pass('API integration assertions passed');
+select * from finish();
 rollback;

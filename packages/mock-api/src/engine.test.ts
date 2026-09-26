@@ -414,6 +414,42 @@ describe("reactions and authorization", () => {
       ).status,
     ).toBe(409);
   });
+  it("rejects a different member editing someone else's comment", () => {
+    const engine = createMockEngine();
+    const created = call(
+      engine,
+      "comment.create",
+      { id: first, body: "회원 댓글", request_key: mockId(6, 9) },
+      reader,
+    );
+    expect(created.status).toBe(200);
+    expect(
+      call(
+        engine,
+        "comment.edit",
+        {
+          id: (created.body as { id: string }).id,
+          version: 1,
+          body: "가로채기",
+        },
+        owner,
+      ).status,
+    ).toBe(403);
+  });
+  it("does not expose a post after an administrator makes it private", () => {
+    const engine = createMockEngine();
+    const draft = call(engine, "admin.post.get", { id: first }, owner)
+      .body as Post;
+    expect(
+      call(
+        engine,
+        "admin.post.status",
+        { id: first, version: draft.lock_version, status: "private" },
+        owner,
+      ).status,
+    ).toBe(200);
+    expect(call(engine, "post.get", { ...site, id: first }).status).toBe(404);
+  });
   it("moderates visibility and retains deleted parents with visible replies", () => {
     const engine = createMockEngine();
     const parent = mockId(5, 1);
