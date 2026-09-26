@@ -2,6 +2,10 @@
 
 부모님 여행 블로그의 pnpm + Turborepo 기반 모노레포입니다. Node 24, pnpm 11.25.0을 사용합니다.
 
+앞으로의 구현 순서와 공개 완료 기준은 [최종 배포까지의 작업 목록](ROADMAP.ko.md)을 참고하세요.
+
+owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생 결과는 [P0-1 인증 검증 기록](AUTH-VERIFICATION.ko.md)에 정리했습니다.
+
 ## 실행 모드
 
 | 명령                         | 동작                                                                      |

@@ -1,5 +1,10 @@
 -- Existing event-trigger helper must not be a client RPC.
-revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+-- Hosted projects may have this helper; fresh local stacks need not have it.
+do $$ begin
+ if to_regprocedure('public.rls_auto_enable()') is not null then
+  revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
+ end if;
+end $$;
 create index publications_site_post_idx on public.post_publications(site_id,post_id);
 -- Background worker RPC. This is never exposed as a client Edge action.
 create or replace function public.travel_worker(p_action text,p_input jsonb default '{}') returns jsonb

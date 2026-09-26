@@ -28,6 +28,10 @@
     {
       "version": "20260919050407",
       "name": "travel_blog_initial_owner"
+    },
+    {
+      "version": "20260926114006",
+      "name": "environment_owner_bootstrap"
     }
   ],
   "edge_function_version": 2

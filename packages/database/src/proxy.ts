@@ -20,5 +20,6 @@ export async function refreshSession(request: NextRequest) {
     },
   });
   await client.auth.getUser();
+  response.headers.set("Cache-Control", "private, no-store");
   return response;
 }

@@ -24,6 +24,8 @@
 
 ## 최초 owner
 
+2026-09-26 갱신: 지정된 이메일의 Auth 계정·이메일 인증·활성 owner membership을 실제 DB에서 확인했다. 아래는 최초 구축 당시 기록이다. 현재는 환경별 `app_private.owner_bootstrap_targets`에 명시한 이메일만 bootstrap 대상으로 사용하며 새 환경의 기본값은 비활성화다. 기존 owner는 유지했다. [현재 검증 결과와 환경 설정](../AUTH-VERIFICATION.ko.md)을 따른다.
+
 사용자가 지정한 `owner@example.invalid`을 **최초 owner의 유일한 부트스트랩 대상**으로 설정했다. 현재 실제 Auth 계정은 아직 없다. 해당 이메일로 이 프로젝트의 Supabase Auth에 가입하고 이메일 인증을 완료하면 `parents-travel` 사이트 owner가 자동 부여된다.
 
 Supabase 관리 콘솔에 로그인하는 계정과 앱의 Auth 사용자는 별개다. 인증되지 않은 가입, 다른 이메일, 임의 user_metadata로는 owner가 되지 않는다. 이미 owner 행이 있으면 부트스트랩으로 추가 owner를 만들지 않는다. 최초 owner 등록 후 추가 권한 부여는 `admin.member.set`을 사용한다. 가입/초대 이메일을 대신 보내거나 임의 비밀번호를 설정하지 않았다.
@@ -73,6 +75,8 @@ python supabase/scripts/media_worker.py
 실제 소셜 로그인과 실제 파일 업로드→상시 작업자→게시까지 연결한 운영 종단 검증은 아직 수행하지 않았다. 현재 결과는 DB/API와 변환 코드 검증이다.
 
 ## 변경 파일과 재현
+
+2026-09-26 갱신: 별도 로컬 Supabase에서 migration 7개 전체 재생을 완료했다. `rls_auto_enable()`은 존재하는 환경에서만 권한을 회수하도록 보완했다. `initial_owner.sql`은 개인 이메일 대신 격리 사이트·테스트 이메일을 사용하도록 교체했으며, 모든 테스트는 계속 격리 DB에서만 실행한다. 아래 로컬 reset 미검증 설명은 최초 구축 당시 기록이다.
 
 `migrations/` 파일은 Supabase CLI로 생성한 뒤 원격 적용 결과의 버전으로 파일명을 맞췄다. `deployment.json`에 대응 버전을 기록했다. 최초 API 이후 수정은 후속 마이그레이션으로 적용했다.
 

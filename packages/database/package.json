@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./auth-flow": "./src/auth-flow.ts",
     "./types": "./src/types.ts",
     "./browser": "./src/browser.ts",
     "./server": "./src/server.ts",

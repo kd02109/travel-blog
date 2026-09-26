@@ -19,6 +19,14 @@ export default function Home() {
         ))}
       </ul>
       <footer className="mt-16 border-t pt-6">
+        <a href="/login" className="underline">
+          로그인
+        </a>
+        <form action="/auth/signout" method="post" className="my-4">
+          <button type="submit" className="underline">
+            현재 계정 로그아웃
+          </button>
+        </form>
         <AnalyticsConsent />
       </footer>
     </main>

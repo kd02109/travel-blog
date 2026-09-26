@@ -1,0 +1,27 @@
+# Copy this to a new temporary workspace's supabase/config.toml.
+# Uses dedicated ports and project ID, never the linked cloud project.
+project_id = "travel-auth-replay"
+
+[api]
+port = 55431
+
+[db]
+port = 55432
+shadow_port = 55430
+major_version = 17
+
+[studio]
+port = 55433
+
+[local_smtp]
+port = 55434
+
+[analytics]
+enabled = false
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://localhost:3002/auth/callback"]
+
+[functions.travel-api]
+verify_jwt = false
