@@ -15,8 +15,19 @@ const editorialFont = Noto_Serif_KR({
   display: "swap",
 });
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
   title: "오늘도 함께 걷다",
   description: "세상을 여행하고 삶을 기록합니다.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    locale: "ko_KR",
+    siteName: "오늘도 함께 걷다",
+    title: "오늘도 함께 걷다",
+    description: "세상을 여행하고 삶을 기록합니다.",
+    url: "/",
+  },
+  twitter: { card: "summary_large_image" },
 };
 export default function RootLayout({
   children,
