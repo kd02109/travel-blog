@@ -44,6 +44,8 @@ export function Composer({ postId }: { postId?: string }) {
   const createPost = useTravelMutation(api, "admin.post.create", mutationScope);
   const savePost = useTravelMutation(api, "admin.post.save", mutationScope);
   const submitSave = savePost.submit;
+  const publishPost = useTravelMutation(api, "admin.post.publish", mutationScope);
+  const changePostStatus = useTravelMutation(api, "admin.post.status", mutationScope);
   const restoreRevision = useTravelMutation(api, "admin.revision.restore", mutationScope);
   const [insertImage, setInsertImage] = useState<(assetId: string, caption?: string) => void>();
   const [coverAssetId, setCoverAssetId] = useState("");
@@ -172,11 +174,14 @@ export function Composer({ postId }: { postId?: string }) {
     }
   }, [api, category, coverAssetId, document, metadata, pdfAssetId, post, slug, submitSave, tags, title]);
 
-  const publishChecks = post?.kind === "article" ? [
+  const publishChecks = post ? post.kind === "article" ? [
     { label: "제목과 주소 이름", valid: title.trim().length > 0 && slug.trim().length > 0 },
     { label: "분류별 여행 정보", valid: !validateDraftMetadata(category as Exclude<(typeof CATEGORIES)[number]["code"], "itinerary-pdf">, metadata) },
     { label: "본문 내용", valid: document.some(blockHasContent) },
     { label: "대표 사진", valid: !!coverAssetId },
+  ] : [
+    { label: "제목과 주소 이름", valid: title.trim().length > 0 && slug.trim().length > 0 },
+    { label: "일정 PDF 파일", valid: !!pdfAssetId },
   ] : [];
 
   async function restoreSnapshot(revisionId: string) {
@@ -189,6 +194,55 @@ export function Composer({ postId }: { postId?: string }) {
       setMessage("선택한 수정 이력을 복원했습니다.");
     } catch (error) {
       setSaveError(error instanceof TravelApiError && error.status === 409 ? "복원 중 글이 변경됐습니다. 최신본을 다시 불러와 주세요." : error instanceof TravelApiError ? errorMessage(error) : "수정 이력을 복원하지 못했습니다.");
+    } finally { setBusy(false); }
+  }
+
+  async function publish() {
+    if (!post) return;
+    const missing = publishChecks.filter((check) => !check.valid).map((check) => check.label);
+    if (post.kind === "article" && missing.length) {
+      setMessage(`발행 전에 확인해 주세요: ${missing.join(", ")}`);
+      setPreview(true);
+      return;
+    }
+    if (!window.confirm(`“${title || "제목 없는 글"}”을(를) 공개 발행할까요?`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      if (dirty) {
+        if (!await saveDraft()) throw new Error("초안을 저장하지 못해 발행을 중단했습니다. 입력은 그대로 보존했습니다.");
+        setBusy(true);
+      }
+      const latest = await api.call("admin.post.get", { id: post.id });
+      await publishPost.submit({ id: latest.id, site_id: latest.site_id, version: latest.lock_version });
+      applyDraft({ ...latest, status: "published", lock_version: latest.lock_version + 1 });
+      setDirty(false);
+      setMessage("글을 공개 발행했습니다.");
+    } catch (error) {
+      setMessage(error instanceof TravelApiError ? errorMessage(error) : error instanceof Error ? error.message : "발행하지 못했습니다.");
+      if (error instanceof TravelApiError && error.status === 409) void api.call("admin.post.get", { id: post.id }).then(setLatestDraft).catch(() => undefined);
+    } finally { setBusy(false); }
+  }
+
+  async function changeStatus(next: "private" | "trashed") {
+    if (!post) return;
+    const label = next === "private" ? "비공개로 전환" : "휴지통으로 이동";
+    if (!window.confirm(`“${title || "제목 없는 글"}”을(를) ${label}할까요?${next === "trashed" ? " 게시 중인 글은 공개 목록에서 즉시 숨겨집니다." : ""}`)) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      if (dirty) {
+        if (!await saveDraft()) throw new Error("먼저 초안을 저장해야 합니다. 입력은 그대로 보존했습니다.");
+        setBusy(true);
+      }
+      const latest = await api.call("admin.post.get", { id: post.id });
+      const result = await changePostStatus.submit({ id: latest.id, site_id: latest.site_id, version: latest.lock_version, status: next });
+      applyDraft({ ...latest, status: result.status, lock_version: result.version });
+      setDirty(false);
+      setMessage(next === "private" ? "글을 비공개로 전환했습니다." : "글을 휴지통으로 옮겼습니다.");
+    } catch (error) {
+      setMessage(error instanceof TravelApiError ? errorMessage(error) : error instanceof Error ? error.message : "상태를 변경하지 못했습니다. 다시 불러와 주세요.");
+      if (error instanceof TravelApiError && error.status === 409) void api.call("admin.post.get", { id: post.id }).then(setLatestDraft).catch(() => undefined);
     } finally { setBusy(false); }
   }
 
@@ -261,7 +315,7 @@ export function Composer({ postId }: { postId?: string }) {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12 md:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div><p className="text-muted-foreground">초안 편집</p><h1 className="font-editorial mt-2 text-3xl font-semibold">{post.kind === "pdf" ? "PDF 일정표" : "여행 기록"}</h1></div>
-        <div className="flex gap-2">{post.kind === "article" && <Button variant="outline" onClick={() => setPreview(!preview)}>{preview ? "이어서 쓰기" : "미리보기"}</Button>}<Button disabled={busy || !dirty} onClick={() => void saveDraft()}>{busy ? "저장 중…" : "초안 저장"}</Button></div>
+        <div className="flex flex-wrap gap-2">{post.kind === "article" && <Button variant="outline" onClick={() => setPreview(!preview)}>{preview ? "이어서 쓰기" : "미리보기"}</Button>}<Button variant="outline" disabled={busy} onClick={() => void changeStatus("trashed")}>휴지통</Button>{post.status === "published" && <Button variant="outline" disabled={busy} onClick={() => void changeStatus("private")}>비공개</Button>}{post.status !== "published" && post.status !== "trashed" && <Button disabled={busy} onClick={() => void publish()}>발행</Button>}<Button variant="outline" disabled={busy || !dirty} onClick={() => void saveDraft()}>{busy ? "저장 중…" : "초안 저장"}</Button></div>
       </header>
       <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{busy ? "저장 중…" : saveError ? `저장 실패: ${saveError}` : dirty ? "저장되지 않은 변경 사항 · 자동 저장 대기 중" : lastSavedAt ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}` : "저장된 변경 사항 없음"}</p>
       {latestDraft && <aside className="space-y-3 rounded-panel border border-amber-500 p-4" aria-label="버전 충돌 해결">

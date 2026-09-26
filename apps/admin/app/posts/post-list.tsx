@@ -48,12 +48,12 @@ export function PostList({ siteId }: { siteId: string }) {
   }, [search]);
 
   async function changeStatus(post: NonNullable<typeof posts.data>[number], next: "private" | "trashed") {
-    const action = next === "trashed" ? "휴지통으로 이동" : "비공개로 복구";
+    const action = next === "trashed" ? "휴지통으로 이동" : post.status === "trashed" ? "비공개 상태로 복구" : "비공개로 전환";
     if (!window.confirm(`“${post.title || "제목 없는 글"}”을(를) ${action}할까요?`)) return;
     setFeedback("");
     try {
       await statusMutation.submit({ id: post.id, site_id: siteId, version: post.lock_version, status: next });
-      setFeedback(next === "trashed" ? "글을 휴지통으로 옮겼습니다." : "글을 비공개 상태로 복구했습니다.");
+      setFeedback(next === "trashed" ? "글을 휴지통으로 옮겼습니다." : post.status === "trashed" ? "글을 비공개 상태로 복구했습니다." : "글을 비공개로 전환했습니다.");
     } catch (error) {
       setFeedback(error instanceof TravelApiError ? errorMessage(error) : "상태를 변경하지 못했습니다. 목록을 새로고침한 뒤 다시 시도해 주세요.");
     }
@@ -79,7 +79,7 @@ export function PostList({ siteId }: { siteId: string }) {
             <TableCell>{CATEGORIES.find((item) => item.code === post.category_code)?.label ?? "미분류"}</TableCell>
             <TableCell>{statusLabel[post.status] ?? post.status}</TableCell>
             <TableCell><time dateTime={post.updated_at}>{new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(new Date(post.updated_at))}</time></TableCell>
-            <TableCell><div className="flex flex-wrap gap-2">{post.status === "trashed" ? <Button variant="outline" disabled={statusMutation.isPending} onClick={() => void changeStatus(post, "private")}>복구</Button> : <Button variant="outline" disabled={statusMutation.isPending} onClick={() => void changeStatus(post, "trashed")}>휴지통</Button>}</div></TableCell>
+            <TableCell><div className="flex flex-wrap gap-2">{post.status === "trashed" ? <Button variant="outline" disabled={statusMutation.isPending} onClick={() => void changeStatus(post, "private")}>복구</Button> : <>{post.status === "published" && <Button variant="outline" disabled={statusMutation.isPending} onClick={() => void changeStatus(post, "private")}>비공개</Button>}<Button variant="outline" disabled={statusMutation.isPending} onClick={() => void changeStatus(post, "trashed")}>휴지통</Button></>}</div></TableCell>
           </TableRow>)}</TableBody>
         </Table>
       ) : <section className="rounded-panel border px-6 py-16 text-center"><h2 className="font-editorial text-xl font-semibold">조건에 맞는 글이 없습니다</h2><p className="text-muted-foreground mt-2">검색어나 분류·상태를 바꾸거나 새 기록을 시작해 보세요.</p><Button asChild className="mt-5"><Link href="/write">새 글 작성</Link></Button></section>}

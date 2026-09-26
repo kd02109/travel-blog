@@ -15,6 +15,8 @@ begin
  perform public.travel_api('profile.save',t.owner_id,'{"display_name":"테스트"}');
  begin perform public.travel_api('admin.post.create',t.outsider_id,jsonb_build_object('site_id',t.site_id,'kind','article')); raise exception 'cross-site authorization failed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('admin.post.create',t.editor_id,jsonb_build_object('site_id',t.site_id,'kind','article')); pid:=(r->>'id')::uuid;
+ begin perform public.travel_api('admin.post.publish',t.outsider_id,jsonb_build_object('id',pid,'version',0)); raise exception 'outsider publish allowed'; exception when sqlstate 'PT403' then null; end;
+ begin perform public.travel_api('admin.post.status',t.outsider_id,jsonb_build_object('id',pid,'version',0,'status','trashed')); raise exception 'outsider status change allowed'; exception when sqlstate 'PT403' then null; end;
  d:=jsonb_build_object('title','테스트 글','slug','test-post','category_code','day-walk','tags',jsonb_build_array('서울'),'blocks',jsonb_build_array(jsonb_build_object('type','paragraph','content','hello')),'metadata',jsonb_build_object('region','서울','visited_on','2026-09-18'),'cover_asset_id',t.asset_id);
  base_pid:=pid; base_d:=d;
  r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',0,'content',d,'checkpoint',true)); assert (r->>'lock_version')::int=1;
