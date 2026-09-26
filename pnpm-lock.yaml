@@ -402,6 +402,9 @@ importers:
       '@repo/constants':
         specifier: workspace:*
         version: link:../constants
+      '@repo/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@repo/ui':
         specifier: workspace:*
         version: link:../ui

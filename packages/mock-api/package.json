@@ -21,7 +21,8 @@
     "@repo/ui": "workspace:*",
     "miragejs": "0.1.48",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "@repo/contracts": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

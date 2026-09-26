@@ -33,7 +33,22 @@ export function MockApiProvider({
     void import("./server")
       .then(({ startMockServer }) => {
         if (cancelled) return;
-        running = startMockServer({ scenario, supabaseUrl });
+        const requested = new URLSearchParams(window.location.search).get(
+          "mockScenario",
+        );
+        const selected =
+          requested &&
+          [
+            "default",
+            "empty",
+            "error",
+            "rate-limited",
+            "slow",
+            "conflict",
+          ].includes(requested)
+            ? (requested as Scenario)
+            : scenario;
+        running = startMockServer({ scenario: selected, supabaseUrl });
         setRuntime(running);
       })
       .catch(() => {

@@ -51,3 +51,9 @@ pnpm test:contracts:supabase
 브라우저는 `@repo/api-client/browser`의 `mutate`를 사용한다. Supabase SDK는 Auth 용도로만 사용하고 테이블/RPC 호출은 하지 않는다. 세션 만료 60초 전부터 갱신하며 동시 갱신을 합친다. 방문자 토큰은 API가 준 만료 시각을 따르는 메모리 저장이며, 만료 30초 전 재발급한다. 새로고침하면 새로운 방문자 ID가 생길 수 있으므로 좋아요를 고유 인원으로 해석하지 않는다.
 
 401은 재로그인/방문자 재인증, 403은 권한 없음, 409는 입력을 유지한 충돌 안내, 429는 Retry-After 기반 대기와 추가 요청 차단으로 처리한다. 헤더를 읽을 수 없으면 60초 대기를 사용한다. 실패한 쓰기를 자동 재전송하지 않는다. 사용자 승인 후 원격 travel-api v3에 CORS 헤더 한 줄만 추가해 배포했으며 실제 응답의 Retry-After·X-Request-Id 노출을 확인했다.
+
+## Query·Mirage 검증
+
+Query 키에는 사이트·사용자 범위·action·정규화한 입력을 포함한다. 페이지 변경은 offset을 바꾸고 계정 변경 시 캐시를 비운다. 성공한 mutation은 해당 사이트의 공개/관리자 조회를 무효화한다. 프로필·홈 설정 변경은 전체 travel 조회를 무효화한다. 쓰기 재시도는 수동이며 동시에 제출한 요청은 하나로 합친다. 댓글 입력과 idempotency key는 실패 시 보존하고 성공 후 초기화한다.
+
+Mirage는 성공 응답을 동일 Zod 계약으로 검사한다. 누락됐던 profile.avatar_asset_id, membership 시각/granted_by, audit.changes와 파일 URL 형식을 보완했다. `?mockScenario=empty|error|rate-limited|slow|conflict`는 개발 mock 모드에서만 적용한다. slow는 브라우저에서 1.5초 지연을 준다. Next 페이지 이동은 native fetch를 유지해 RSC streaming을 훼손하지 않으며 API만 Mirage가 가로챈다. 업로드/worker는 계속 501로 명시하고 성공한 것처럼 처리하지 않는다.

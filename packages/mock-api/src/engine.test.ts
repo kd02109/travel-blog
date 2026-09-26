@@ -371,7 +371,7 @@ describe("settings, assets, and failures", () => {
     const engine = createMockEngine();
     const pdf = createFixtures().assets.find((a) => a.kind === "pdf")!;
     expect(call(engine, "asset.access", { id: pdf.id }).body).toMatchObject({
-      url: "/mock-assets/itinerary.pdf",
+      url: "http://localhost:3000/mock-assets/itinerary.pdf",
       expires_in: 300,
       preview_asset_id: expect.any(String),
     });
