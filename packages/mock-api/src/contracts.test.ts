@@ -71,3 +71,19 @@ it("uses real status/error envelopes for denied, delayed, failed and conflicted 
     ),
   ).toMatchObject({ status: 409, body: { error: "version_conflict" } });
 });
+it("filters admin posts by status, category and title/slug search before pagination", () => {
+  const engine = createMockEngine();
+  const all = engine.handle({ action: "admin.posts", input: site }, owner);
+  expect(all.body).toHaveLength(8);
+  const filtered = engine.handle(
+    {
+      action: "admin.posts",
+      input: { ...site, status: "published", category: "food-cafe", search: "강릉" },
+    },
+    owner,
+  );
+  expect(filtered.body).toHaveLength(1);
+  expect(filtered.body).toMatchObject([
+    { category_code: "food-cafe", status: "published", title: "강릉 골목에서 만난 커피" },
+  ]);
+});

@@ -54,7 +54,7 @@ const cards = await api("posts.list", { site_id: site.id, limit: 12 });
 
 | action | input | 반환 |
 | --- | --- | --- |
-| `admin.posts` | `site_id`, 선택 `limit`, `offset` | 작성 중/공개/비공개/휴지통 글 목록 |
+| `admin.posts` | `site_id`, 선택 `limit`, `offset`, `category`, `status`, `search` | 분류·상태·제목/주소 검색이 적용된 글 목록과 `category_code` |
 | `admin.post.create` | `site_id`, `kind: article 또는 pdf`, 선택 `content` | 새 글과 lock_version |
 | `admin.post.get` | `id`, 선택 `site_id` | 편집본 |
 | `admin.post.save` | `id`, `version`, `content`, 선택 `checkpoint` | 갱신된 편집본 |

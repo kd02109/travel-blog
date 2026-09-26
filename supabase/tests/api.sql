@@ -17,6 +17,9 @@ begin
  r:=public.travel_api('admin.post.create',t.editor_id,jsonb_build_object('site_id',t.site_id,'kind','article')); pid:=(r->>'id')::uuid;
  d:=jsonb_build_object('title','테스트 글','slug','test-post','category_code','day-walk','tags',jsonb_build_array('서울'),'blocks',jsonb_build_array(jsonb_build_object('type','paragraph','content','hello')),'metadata',jsonb_build_object('region','서울','visited_on','2026-09-18'),'cover_asset_id',t.asset_id);
  r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',0,'content',d,'checkpoint',true)); assert (r->>'lock_version')::int=1;
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'category','day-walk','status','draft','search','테스트')); assert jsonb_array_length(r)=1 and r->0->>'category_code'='day-walk';
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'category','food-cafe')); assert jsonb_array_length(r)=0;
+ begin perform public.travel_admin_posts(t.outsider_id,jsonb_build_object('site_id',t.site_id)); raise exception 'admin listing authorization failed'; exception when sqlstate 'PT403' then null; end;
  begin perform public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',0,'content',d)); raise exception 'lost update allowed'; exception when sqlstate 'PT409' then null; end;
  r:=public.travel_api('posts.list',null,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=0;
  r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',1,'rendered_html','<p>hello</p>','asset_ids','[]'::jsonb)); rid:=(r->>'revision_id')::uuid;
@@ -52,6 +55,7 @@ end $$;
 set local role anon;
 do $$ begin
  begin perform public.travel_api('site.get',null,'{}'); raise exception 'RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_admin_posts(gen_random_uuid(),'{}'); raise exception 'admin listing RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from public.comments; raise exception 'comments exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from app_private.posts; raise exception 'drafts exposed'; exception when insufficient_privilege then null; end;
 end $$;
