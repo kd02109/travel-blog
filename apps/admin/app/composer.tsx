@@ -28,6 +28,7 @@ export function Composer({ postId }: { postId?: string }) {
   const createPost = useTravelMutation(api, "admin.post.create", mutationScope);
   const savePost = useTravelMutation(api, "admin.post.save", mutationScope);
   const submitSave = savePost.submit;
+  const restoreRevision = useTravelMutation(api, "admin.revision.restore", mutationScope);
   const [insertImage, setInsertImage] = useState<(assetId: string, caption?: string) => void>();
   const [coverAssetId, setCoverAssetId] = useState("");
   const [pdfAssetId, setPdfAssetId] = useState("");
@@ -48,7 +49,24 @@ export function Composer({ postId }: { postId?: string }) {
   const [saveError, setSaveError] = useState("");
   const [autoSaveBlocked, setAutoSaveBlocked] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState("");
+  const [latestDraft, setLatestDraft] = useState<PostDraft>();
   const savingRef = useRef(false);
+  const revisions = useTravelQuery(api, "admin.revisions", { id: postId ?? "00000000-0000-4000-8000-000000000000", limit: 20, offset: 0 }, mutationScope, { enabled: !!postId });
+
+  function applyDraft(draft: PostDraft) {
+    const content = draft.draft_content;
+    setPost(draft);
+    setLastSavedAt(draft.updated_at);
+    setTitle(typeof content.title === "string" ? content.title : "");
+    setSlug(typeof content.slug === "string" ? content.slug : "");
+    setSlugEdited(typeof content.slug === "string" && content.slug.length > 0);
+    const found = CATEGORIES.find((item) => item.code === content.category_code);
+    if (found) setCategory(found.code);
+    setMetadata(content.metadata && typeof content.metadata === "object" && !Array.isArray(content.metadata) ? content.metadata as Record<string, unknown> : {});
+    if (Array.isArray(content.blocks)) setDocument(content.blocks as EditorDocument);
+    setCoverAssetId(typeof content.cover_asset_id === "string" ? content.cover_asset_id : "");
+    setPdfAssetId(typeof content.pdf_asset_id === "string" ? content.pdf_asset_id : "");
+  }
 
   function markDirty() {
     setDirty(true);
@@ -68,20 +86,7 @@ export function Composer({ postId }: { postId?: string }) {
     if (postId) {
       void api.call("admin.post.get", { id: postId }).then((draft) => {
         if (!active) return;
-        const content = draft.draft_content;
-        setPost(draft);
-        setLastSavedAt(draft.updated_at);
-        setTitle(typeof content.title === "string" ? content.title : "");
-        setSlug(typeof content.slug === "string" ? content.slug : "");
-        setSlugEdited(typeof content.slug === "string" && content.slug.length > 0);
-        const found = CATEGORIES.find((item) => item.code === content.category_code);
-        if (found) setCategory(found.code);
-        if (content.metadata && typeof content.metadata === "object" && !Array.isArray(content.metadata)) {
-          setMetadata(content.metadata as Record<string, unknown>);
-        }
-        if (Array.isArray(content.blocks)) setDocument(content.blocks as EditorDocument);
-        setCoverAssetId(typeof content.cover_asset_id === "string" ? content.cover_asset_id : "");
-        setPdfAssetId(typeof content.pdf_asset_id === "string" ? content.pdf_asset_id : "");
+        applyDraft(draft);
       }).catch((error: unknown) => setMessage(error instanceof TravelApiError ? errorMessage(error) : "글을 불러오지 못했습니다."));
     }
     return () => { active = false; };
@@ -135,12 +140,29 @@ export function Composer({ postId }: { postId?: string }) {
     } catch (error) {
       setSaveError(error instanceof TravelApiError ? errorMessage(error) : "저장하지 못했습니다. 입력 내용은 화면에 남아 있습니다.");
       setAutoSaveBlocked(true);
+      if (error instanceof TravelApiError && error.status === 409) {
+        setSaveError("다른 탭이나 기기에서 글이 변경됐습니다. 내 입력은 유지되어 있습니다.");
+        void api.call("admin.post.get", { id: post.id }).then(setLatestDraft).catch(() => setSaveError("최신본을 불러오지 못했습니다. 내 입력은 그대로 보존했습니다."));
+      }
       return false;
     } finally {
       savingRef.current = false;
       setBusy(false);
     }
-  }, [category, coverAssetId, document, metadata, pdfAssetId, post, slug, submitSave, title]);
+  }, [api, category, coverAssetId, document, metadata, pdfAssetId, post, slug, submitSave, title]);
+
+  async function restoreSnapshot(revisionId: string) {
+    if (!post || !window.confirm("이 수정 이력을 현재 초안으로 복원할까요? 현재 초안은 이력으로 남습니다.")) return;
+    setBusy(true);
+    try {
+      applyDraft(await restoreRevision.submit({ id: post.id, version: post.lock_version, revision_id: revisionId }));
+      setDirty(false);
+      setLatestDraft(undefined);
+      setMessage("선택한 수정 이력을 복원했습니다.");
+    } catch (error) {
+      setSaveError(error instanceof TravelApiError && error.status === 409 ? "복원 중 글이 변경됐습니다. 최신본을 다시 불러와 주세요." : error instanceof TravelApiError ? errorMessage(error) : "수정 이력을 복원하지 못했습니다.");
+    } finally { setBusy(false); }
+  }
 
   useEffect(() => {
     if (!dirty || busy || autoSaveBlocked || !post) return;
@@ -214,6 +236,12 @@ export function Composer({ postId }: { postId?: string }) {
         <div className="flex gap-2"><Button variant="outline" onClick={() => setPreview(!preview)}>{preview ? "이어서 쓰기" : "미리보기"}</Button><Button disabled={busy || !dirty} onClick={() => void saveDraft()}>{busy ? "저장 중…" : "초안 저장"}</Button></div>
       </header>
       <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{busy ? "저장 중…" : saveError ? `저장 실패: ${saveError}` : dirty ? "저장되지 않은 변경 사항 · 자동 저장 대기 중" : lastSavedAt ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}` : "저장된 변경 사항 없음"}</p>
+      {latestDraft && <aside className="space-y-3 rounded-panel border border-amber-500 p-4" aria-label="버전 충돌 해결">
+        <h2 className="font-semibold">최신 저장본과 충돌</h2>
+        <p>최신본 v{latestDraft.lock_version} · {new Date(latestDraft.updated_at).toLocaleString("ko-KR")} · 제목: {typeof latestDraft.draft_content.title === "string" ? latestDraft.draft_content.title || "(제목 없음)" : "(제목 없음)"}</p>
+        <p>현재 입력은 별도로 유지됩니다. 최신본으로 교체하거나, 최신 버전을 기준으로 현재 입력을 다시 저장할 수 있습니다.</p>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => { applyDraft(latestDraft); setDirty(false); setLatestDraft(undefined); setSaveError(""); }}>최신본으로 교체</Button><Button disabled={busy} onClick={() => { setPost(latestDraft); setLatestDraft(undefined); markDirty(); }}>최신 버전에 내 입력 저장</Button></div>
+      </aside>}
       <label className="block space-y-2">글 제목<Input disabled={busy} value={title} maxLength={150} onChange={(event) => { const value = event.currentTarget.value; setTitle(value); if (!slugEdited) { const suggestedSlug = value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120); setSlug(suggestedSlug || `travel-note-${postId.slice(0, 8)}`); } markDirty(); }} /></label>
       <label className="block space-y-2">주소 이름<Input disabled={busy} value={slug} maxLength={120} onChange={(event) => { setSlugEdited(true); setSlug(event.currentTarget.value); markDirty(); }} /></label>
       {post.kind === "article" && <label className="block space-y-2">분류<Select disabled={busy} value={category} onChange={(event) => { setCategory(event.currentTarget.value as typeof category); setMetadataError(""); markDirty(); }}>{CATEGORIES.filter((item) => item.code !== "itinerary-pdf").map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}</Select></label>}
@@ -229,6 +257,7 @@ export function Composer({ postId }: { postId?: string }) {
         {metadataError && <p role="alert">{metadataError === "invalid_date" ? "날짜를 다시 확인해 주세요." : metadataError === "invalid_dates" ? "종료일은 시작일 이후로 선택해 주세요." : "카페 또는 음식점 중 하나를 선택해 주세요."}</p>}
       </fieldset>}
       {message && <p role="status" aria-live="polite">{message}</p>}
+      <section className="space-y-3 rounded-panel border p-4" aria-label="수정 이력"><h2 className="font-semibold">수정 이력</h2>{revisions.data?.length ? <ul className="space-y-2">{revisions.data.map((revision) => <li className="flex flex-wrap items-center justify-between gap-2" key={revision.id}><span>{new Date(revision.created_at).toLocaleString("ko-KR")}</span><Button variant="outline" disabled={busy} onClick={() => void restoreSnapshot(revision.id)}>이 이력 복원</Button></li>)}</ul> : <p className="text-sm text-muted-foreground">저장된 체크포인트 이력이 없습니다. 발행본은 수정 이력으로 보존됩니다.</p>}</section>
       <section aria-label={preview ? "본문 미리보기" : "본문 편집기"} className="min-h-96 rounded-lg border bg-white py-8">
         <Editor key={`${post.id}-${preview ? "preview" : "edit"}`} initialContent={document} editable={!preview && !busy} onChange={(nextDocument) => { setDocument(nextDocument); markDirty(); }} onReady={onEditorReady} />
       </section>
