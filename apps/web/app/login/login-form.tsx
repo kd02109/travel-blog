@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { Button } from "@repo/ui/button";
-export function LoginForm() {
+import { safeReturnPath } from "@repo/database/auth-flow";
+export function LoginForm({ next }: { next?: string }) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   async function login() {
@@ -11,9 +12,12 @@ export function LoginForm() {
     setPending(true);
     try {
       const db = createBrowserDatabase();
+      const callback = new URL("/auth/callback", window.location.origin);
+      const returnPath = safeReturnPath(next);
+      if (returnPath !== "/") callback.searchParams.set("next", returnPath);
       const result = await db.auth.signInWithOAuth({
         provider: "kakao",
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: { redirectTo: callback.toString() },
       });
       if (result.error) throw result.error;
     } catch {

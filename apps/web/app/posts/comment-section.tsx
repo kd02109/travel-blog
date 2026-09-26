@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
@@ -29,6 +29,7 @@ export function CommentSection({
   const [editing, setEditing] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [reporting, setReporting] = useState<string | null>(null);
+  const composer = useRef<HTMLFormElement>(null);
   const [reportReason, setReportReason] = useState<
     "spam" | "abuse" | "personal_information" | "other"
   >("spam");
@@ -66,12 +67,53 @@ export function CommentSection({
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`travel-comment-draft:${postId}`);
+      if (!raw || !composer.current) return;
+      const draft = JSON.parse(raw) as { name?: unknown; body?: unknown };
+      const nameInput = composer.current.elements.namedItem("name");
+      const bodyInput = composer.current.elements.namedItem("body");
+      if (
+        nameInput instanceof HTMLInputElement &&
+        typeof draft.name === "string"
+      )
+        nameInput.value = draft.name;
+      if (
+        bodyInput instanceof HTMLTextAreaElement &&
+        typeof draft.body === "string"
+      )
+        bodyInput.value = draft.body;
+    } catch {
+      sessionStorage.removeItem(`travel-comment-draft:${postId}`);
+    }
+  }, [postId]);
+
+  function saveDraftBeforeLogin() {
+    if (!composer.current) return;
+    const data = new FormData(composer.current);
+    try {
+      sessionStorage.setItem(
+        `travel-comment-draft:${postId}`,
+        JSON.stringify({ name: data.get("name"), body: data.get("body") }),
+      );
+      setNotice(
+        "댓글을 이 탭에 보관했습니다. 카카오 로그인 후 돌아오면 비밀번호를 다시 입력해 주세요.",
+      );
+    } catch {
+      setNotice(
+        "브라우저에서 임시 보관할 수 없습니다. 댓글을 복사한 뒤 로그인해 주세요.",
+      );
+    }
+  }
+
   async function submit(
     event: React.FormEvent<HTMLFormElement>,
     parentId: string | null = null,
   ) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const target = event.currentTarget;
+    const form = new FormData(target);
     const text = String(form.get("body") ?? "").trim();
     const displayName = signedIn
       ? me.data?.profile?.display_name || String(form.get("name") ?? "").trim()
@@ -98,6 +140,8 @@ export function CommentSection({
       });
       setNotice("댓글을 등록했습니다.");
       setReplyTo(null);
+      target.reset();
+      sessionStorage.removeItem(`travel-comment-draft:${postId}`);
       await comments.refetch();
     } catch {
       setNotice("");
@@ -369,6 +413,7 @@ export function CommentSection({
       )}
       {commentsEnabled ? (
         <form
+          ref={composer}
           onSubmit={(event) => void submit(event)}
           className="rounded-panel border-border bg-surface space-y-3 border p-5"
         >
@@ -377,6 +422,19 @@ export function CommentSection({
             signedIn={signedIn}
             profileName={me.data?.profile?.display_name}
           />
+          <p className="text-muted-foreground text-sm">
+            카카오 로그인 전에 입력한 이름과 댓글은 이 탭에서 복원됩니다. 비회원
+            관리 비밀번호는 저장되지 않아 다시 입력해야 합니다.
+          </p>
+          {!signedIn && (
+            <Link
+              href={`/login?next=${encodeURIComponent(`/posts/${slug}#comments`)}`}
+              onClick={saveDraftBeforeLogin}
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+            >
+              카카오 로그인 후 댓글 남기기
+            </Link>
+          )}
           <Button
             type="submit"
             disabled={create.isPending || saveProfile.isPending}

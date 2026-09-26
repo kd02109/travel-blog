@@ -24,26 +24,55 @@ function redirect(request: Request, path: string) {
   });
 }
 
+/** Accept only same-site post return paths; OAuth parameters must not become open redirects. */
+export function safeReturnPath(value: string | null | undefined): string {
+  if (
+    !value ||
+    value.length > 2048 ||
+    !value.startsWith("/") ||
+    value.startsWith("//")
+  )
+    return "/";
+  try {
+    const url = new URL(value, "http://travel.local");
+    if (
+      url.origin !== "http://travel.local" ||
+      !/^\/posts\/[^/]+$/.test(url.pathname)
+    )
+      return "/";
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
+function loginErrorPath(error: string, next: string) {
+  const query = new URLSearchParams({ error });
+  if (next !== "/") query.set("next", next);
+  return `/login?${query.toString()}`;
+}
+
 // Never reflect provider error descriptions, tokens, or arbitrary next URLs.
 export async function handleCallback(
   request: Request,
   createClient: () => Promise<AuthClient>,
 ) {
   const params = new URL(request.url).searchParams;
+  const next = safeReturnPath(params.get("next"));
   const error = params.get("error");
   if (error)
     return redirect(
       request,
-      `/login?error=${error === "access_denied" ? "cancelled" : "oauth"}`,
+      loginErrorPath(error === "access_denied" ? "cancelled" : "oauth", next),
     );
   const code = params.get("code");
-  if (!code) return redirect(request, "/login?error=oauth");
+  if (!code) return redirect(request, loginErrorPath("oauth", next));
   try {
     const client = await createClient();
     const { error } = await client.auth.exchangeCodeForSession(code);
-    return redirect(request, error ? "/login?error=oauth" : "/");
+    return redirect(request, error ? loginErrorPath("oauth", next) : next);
   } catch {
-    return redirect(request, "/login?error=unavailable");
+    return redirect(request, loginErrorPath("unavailable", next));
   }
 }
 

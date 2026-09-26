@@ -4,7 +4,7 @@ import { LoginForm } from "./login-form";
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; status?: string }>;
+  searchParams: Promise<{ error?: string; status?: string; next?: string }>;
 }) {
   const params = await searchParams;
   const key = params.error ?? params.status;
@@ -21,7 +21,7 @@ export default async function Login({
           {message}
         </p>
       )}
-      <LoginForm />
+      <LoginForm next={params.next} />
       <form action="/auth/signout" method="post" className="mt-6">
         <button className="underline" type="submit">
           현재 계정 로그아웃
