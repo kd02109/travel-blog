@@ -16,9 +16,9 @@ export function HomeContent({ initialSite, initialPosts }: {
   initialPosts?: ActionOutput<"posts.list">;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
-  const site = useTravelQuery(api, "site.get", { slug: "parents-travel" }, { siteId: "lookup", actor: "public" }, { initialData: initialSite });
+  const site = useTravelQuery(api, "site.get", { slug: "parents-travel" }, { siteId: "lookup", actor: "public" }, { initialData: initialSite, staleTime: 0 });
   const siteId = site.data?.id ?? "00000000-0000-0000-0000-000000000000";
-  const posts = useTravelQuery(api, "posts.list", { site_id: siteId, limit: 6, offset: 0 }, { siteId, actor: "public" }, { enabled: !!site.data, initialData: initialPosts });
+  const posts = useTravelQuery(api, "posts.list", { site_id: siteId, limit: 6, offset: 0 }, { siteId, actor: "public" }, { enabled: !!site.data, initialData: initialPosts, staleTime: 0 });
   const settings = site.data?.settings as Record<string, unknown> | undefined;
   const template = ["A", "B", "C", "D"].includes(String(settings?.template_id)) ? String(settings?.template_id) : "D";
   const heroAssetId = typeof settings?.hero_asset_id === "string" ? settings.hero_asset_id : "";
