@@ -25,7 +25,7 @@ const draft = await api.call("admin.post.get", { id: postId });
 await api.savePost({ id: draft.id, version: draft.lock_version, content });
 ```
 
-`call(action, input)`는 모든 action의 타입을 추론하고 요청 전 입력·응답 수신 후 결과를 검사한다. 스키마 위반은 Zod 오류, 서버의 401/403/409/429 등은 `TravelApiError`로 전달한다. 쓰기 재시도는 수행하지 않는다. 기존 `request`는 Mirage 체험 화면의 이전 호출을 유지하기 위한 deprecated raw transport다. 새 기능은 `call` 또는 `getSite/listPosts/getPost/getMe/createVisitor/listComments/createPost/savePost/publishPost`를 사용한다. Mirage 전체 전환은 로드맵의 별도 계약 정렬 항목에서 처리한다.
+`call(action, input)`는 모든 action의 타입을 추론하고 요청 전 입력·응답 수신 후 결과를 검사한다. 스키마 위반은 Zod 오류, 서버의 401/403/409/429 등은 `TravelApiError`로 전달한다. 쓰기 재시도는 수행하지 않는다. 기존 `request`는 이전 호출 호환성을 위한 deprecated raw transport다. 새 기능은 `call` 또는 `getSite/listPosts/getPost/getMe/createVisitor/listComments/createPost/savePost/publishPost`를 사용한다. Mirage 체험 화면도 call을 사용하며 엔진이 모든 성공 응답의 계약을 검사한다.
 
 ## 검증과 한계
 
@@ -42,7 +42,7 @@ pnpm test:contracts:supabase
 - 현재 원격 공개 글 목록은 비어 있다. 데이터가 있는 글·댓글·파일과 쓰기 성공 응답은 배포 코드·스키마 및 합성 테스트로 검증했으며, 실제 쓰기 종단 테스트를 완료했다고 간주하지 않는다.
 - 원격 `index.ts`는 로컬과 일치한다. `core.ts`의 차이는 로컬의 `as const` 타입 표기뿐으로 런타임 로직은 같다.
 
-이 변경은 로드맵 2번의 첫 항목이다. 서버/브라우저 호출 분리, 토큰 수명·429 대기 정책, Query 키/무효화·입력 보존, Mirage 전체 응답 정렬과 SSR 통합 테스트는 후속 항목으로 남는다.
+로드맵 2번의 6개 항목을 구현했다. 실제 게시글 발행·파일 처리 전체 흐름은 후속 기능 및 통합 QA 범위다.
 
 ## 데이터 접근·토큰 정책
 
@@ -57,3 +57,11 @@ pnpm test:contracts:supabase
 Query 키에는 사이트·사용자 범위·action·정규화한 입력을 포함한다. 페이지 변경은 offset을 바꾸고 계정 변경 시 캐시를 비운다. 성공한 mutation은 해당 사이트의 공개/관리자 조회를 무효화한다. 프로필·홈 설정 변경은 전체 travel 조회를 무효화한다. 쓰기 재시도는 수동이며 동시에 제출한 요청은 하나로 합친다. 댓글 입력과 idempotency key는 실패 시 보존하고 성공 후 초기화한다.
 
 Mirage는 성공 응답을 동일 Zod 계약으로 검사한다. 누락됐던 profile.avatar_asset_id, membership 시각/granted_by, audit.changes와 파일 URL 형식을 보완했다. `?mockScenario=empty|error|rate-limited|slow|conflict`는 개발 mock 모드에서만 적용한다. slow는 브라우저에서 1.5초 지연을 준다. Next 페이지 이동은 native fetch를 유지해 RSC streaming을 훼손하지 않으며 API만 Mirage가 가로챈다. 업로드/worker는 계속 501로 명시하고 성공한 것처럼 처리하지 않는다.
+
+## SSR 테스트 분리
+
+`pnpm test:ssr`는 loopback 3049의 읽기 전용 합성 HTTP backend와 3040의 별도 Next 서버를 사용한다. JavaScript를 끄고 최초 HTML의 목록 12건, 두 번째 페이지 1건, 상세 본문, 빈 목록 및 없는 글의 HTTP 404를 확인한다. Mirage나 실제 Supabase 계정·데이터를 사용하지 않는다. 테스트 서버는 종료 시 정리하며 기존 3000/3002 개발 서버와 빌드 디렉터리를 분리한다.
+
+`pnpm test:contracts:supabase`는 별도로 실제 Supabase에 공개 조회와 인증 오류 요청을 보내며 서버 fetch reader도 포함한다. 둘을 구분하므로 합성 SSR 통과를 운영 데이터의 종단 테스트로 간주하지 않는다.
+
+검증 결과: 기본 82개, Mirage 브라우저 7개(정상·입력 보존·지연/중복 방지 포함), SSR 3개, 실제 Supabase HTTP 9개, 전체 타입·lint 통과. 업로드 mock은 501, 탭 새로고침 초기화, 실제 글 발행/worker 검증 대기는 유지한다.

@@ -26,7 +26,8 @@
     "test:auth:kakao": "node scripts/test-kakao.mjs",
     "test:auth:local": "node scripts/test-auth-local.mjs",
     "test:config": "node --test scripts/environment.test.mjs",
-    "test:contracts:supabase": "vitest run --config vitest.supabase.config.ts"
+    "test:contracts:supabase": "vitest run --config vitest.supabase.config.ts",
+    "test:ssr": "playwright test --config playwright.ssr.config.ts"
   },
   "devDependencies": {
     "prettier": "3.9.6",
