@@ -37,11 +37,13 @@ export function MediaUpload({
   onInsertImage,
   onSetCoverImage,
   onSelectPdf,
+  kindFilter,
 }: {
   siteId: string;
   onInsertImage?: (assetId: string, caption?: string) => void;
   onSetCoverImage?: (assetId: string) => void;
   onSelectPdf?: (assetId: string) => void;
+  kindFilter?: "image" | "pdf";
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [items, setItems] = useState<MediaItem[]>([]);
@@ -198,7 +200,7 @@ export function MediaUpload({
     >
       <h2 className="text-lg font-semibold">사진과 PDF</h2>
       <div className="flex flex-wrap gap-3">
-        <label className="cursor-pointer rounded border px-4 py-2">
+        {kindFilter !== "pdf" && <label className="cursor-pointer rounded border px-4 py-2">
           사진 올리기
           <input
             className="sr-only"
@@ -210,8 +212,8 @@ export function MediaUpload({
               event.currentTarget.value = "";
             }}
           />
-        </label>
-        <label className="cursor-pointer rounded border px-4 py-2">
+        </label>}
+        {kindFilter !== "image" && <label className="cursor-pointer rounded border px-4 py-2">
           PDF 올리기
           <input
             className="sr-only"
@@ -222,7 +224,7 @@ export function MediaUpload({
               event.currentTarget.value = "";
             }}
           />
-        </label>
+        </label>}
       </div>
       <ul className="space-y-4">
         {items.map((item) => (
