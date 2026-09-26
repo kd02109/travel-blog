@@ -6,7 +6,7 @@ import {
   type ActionOutput,
 } from "@repo/contracts";
 import { readActions, type ReadAction } from "./actions";
-import { TravelApiError } from "./index";
+import { TravelApiError, parseRetryAfter } from "./errors";
 /** Pure transport for Node tests; applications import the server-only entry. */
 export function createServerReader(options: {
   baseURL: string;
@@ -46,6 +46,9 @@ export function createServerReader(options: {
         response.status,
         error.success ? error.data.error : "http_error",
         error.success ? error.data.request_id : undefined,
+        response.status === 429
+          ? (parseRetryAfter(response.headers.get("retry-after")) ?? 60)
+          : undefined,
       );
     }
     return parseActionOutput(action, data);

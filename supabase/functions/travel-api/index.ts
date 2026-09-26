@@ -42,6 +42,7 @@ const cors = {
   "Access-Control-Allow-Headers":
     "authorization, apikey, content-type, x-client-info, x-visitor-token",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Expose-Headers": "Retry-After, X-Request-Id",
 };
 async function rpc(
   action: string,

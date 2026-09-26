@@ -112,3 +112,40 @@ it("passes visitor credentials separately from authenticated bearer tokens", asy
     "X-Visitor-Token": "mock-visitor",
   });
 });
+it("preserves Retry-After and blocks duplicate requests during the cooldown", async () => {
+  const api = createTravelApi({ baseURL: "https://example.com/api" });
+  post.mockRejectedValue({
+    isAxiosError: true,
+    response: {
+      status: 429,
+      headers: { "retry-after": "15" },
+      data: { error: "rate_limited" },
+    },
+  });
+  await expect(api.getSite()).rejects.toMatchObject({
+    status: 429,
+    retryAfter: 15,
+  });
+  await expect(api.getSite()).rejects.toMatchObject({ status: 429 });
+  expect(post).toHaveBeenCalledTimes(1);
+});
+it("invalidates a rejected visitor without replaying a write", async () => {
+  const clear = vi.fn();
+  const api = createTravelApi({
+    baseURL: "https://example.com/api",
+    getVisitorToken: async () => "visitor",
+    onInvalidVisitor: clear,
+  });
+  post.mockRejectedValue({
+    isAxiosError: true,
+    response: { status: 401, data: { error: "invalid_visitor" } },
+  });
+  await expect(
+    api.call("like.set", {
+      id: "10000000-0000-4000-8000-000000000001",
+      liked: true,
+    }),
+  ).rejects.toMatchObject({ status: 401 });
+  expect(clear).toHaveBeenCalledTimes(1);
+  expect(post).toHaveBeenCalledTimes(1);
+});
