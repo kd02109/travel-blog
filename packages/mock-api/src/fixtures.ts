@@ -178,6 +178,7 @@ export function createFixtures(empty = false): MockState {
     likes: {},
     revisions: [],
     reports: [],
+    accountDeletions: [],
     audit: [],
     draftSettings: structuredClone(settings),
     publishedSettings: structuredClone(settings),

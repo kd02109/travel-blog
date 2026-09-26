@@ -74,6 +74,7 @@ const samples = {
     memberships: [{ site_id: id, role: "owner", name: "여행" }],
   },
   "profile.save": { saved: true },
+  "account.delete.request": { requested: true, request_id: id },
   "comment.create": { id, version: 0, duplicate: false },
   "comment.edit": { id, version: 1 },
   "comment.delete": { id, version: 1 },
@@ -135,6 +136,22 @@ const samples = {
     },
   ],
   "admin.comment.moderate": { version: 1 },
+  "admin.account.deletions": [
+    {
+      id,
+      user_id: id,
+      email: "reader@example.invalid",
+      status: "pending",
+      requested_at: date,
+      anonymized_at: null,
+      completed_at: null,
+    },
+  ],
+  "admin.account.deletion.anonymize": {
+    status: "anonymized",
+    comments_anonymized: 2,
+  },
+  "admin.account.deletion.complete": { status: "completed" },
   "admin.reports": [
     {
       id,

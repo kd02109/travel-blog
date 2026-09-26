@@ -347,6 +347,26 @@ export function createMockEngine(options: MockOptions = {}) {
             : [],
       };
     }
+    if (action === "account.delete.request") {
+      if (!person) throw new ApiError(401, "login_required");
+      let request = state.accountDeletions.find(
+        (item) =>
+          item.user_id === person.user_id && item.status !== "completed",
+      );
+      if (!request) {
+        request = {
+          id: id(),
+          user_id: person.user_id,
+          email: "reader@example.invalid",
+          status: "pending",
+          requested_at: now(),
+          anonymized_at: null,
+          completed_at: null,
+        };
+        state.accountDeletions.unshift(request);
+      }
+      return { requested: true, request_id: request.id };
+    }
     if (action === "like.get" || action === "like.set") {
       const p = publication(input.id);
       if (!p || p.category_code === "itinerary-pdf")
@@ -707,6 +727,49 @@ export function createMockEngine(options: MockOptions = {}) {
             (member) => member.active && member.user_id === c.author_id,
           ),
         }));
+      if (action === "admin.account.deletions") {
+        if (!(["owner", "admin"] as Role[]).includes(actor.role))
+          throw new ApiError(403, "forbidden");
+        return paginate(
+          state.accountDeletions.filter((item) => item.status !== "completed"),
+          input,
+        );
+      }
+      if (action === "admin.account.deletion.anonymize") {
+        if (!(["owner", "admin"] as Role[]).includes(actor.role))
+          throw new ApiError(403, "forbidden");
+        const request = state.accountDeletions.find(
+          (item) => item.id === input.id && item.status === "pending",
+        );
+        if (!request?.user_id) throw new ApiError(404, "not_found");
+        const comments = state.comments.filter(
+          (item) => item.author_id === request.user_id,
+        );
+        for (const comment of comments) {
+          comment.author_id = null;
+          comment.author_kind = "anonymized";
+          comment.guest_name = null;
+          delete comment.password;
+          comment.version++;
+        }
+        request.status = "anonymized";
+        request.anonymized_at = now();
+        return { status: "anonymized", comments_anonymized: comments.length };
+      }
+      if (action === "admin.account.deletion.complete") {
+        if (!(["owner", "admin"] as Role[]).includes(actor.role))
+          throw new ApiError(403, "forbidden");
+        const request = state.accountDeletions.find(
+          (item) =>
+            item.id === input.id &&
+            item.status === "anonymized" &&
+            item.user_id === null,
+        );
+        if (!request) throw new ApiError(409, "account_deletion_not_ready");
+        request.status = "completed";
+        request.completed_at = now();
+        return { status: "completed" };
+      }
       if (action === "admin.comment.moderate") {
         const c = state.comments.find((c) => c.id === input.id);
         if (!c) throw new ApiError(404, "not_found");

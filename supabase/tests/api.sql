@@ -12,6 +12,11 @@ begin
  select * into t from test_ids;
  r:=public.travel_api('site.get',null,jsonb_build_object('site_id',t.site_id)); assert r->>'name'='Test';
  r:=public.travel_api('me',t.owner_id,'{}'); assert jsonb_array_length(r->'memberships')=1;
+ r:=public.travel_account_delete_request(t.outsider_id); assert (r->>'requested')::boolean;
+ d:=public.travel_account_delete_request(t.outsider_id); assert d->>'request_id'=r->>'request_id';
+ r:=public.travel_admin_account_deletions(t.owner_id,t.site_id); assert jsonb_array_length(r)=1;
+ r:=public.travel_admin_account_deletion_anonymize(t.owner_id,t.site_id,(d->>'request_id')::uuid); assert r->>'status'='anonymized';
+ begin perform public.travel_admin_account_deletion_complete(t.owner_id,t.site_id,(d->>'request_id')::uuid); raise exception 'auth deletion skipped'; exception when sqlstate 'PT409' then null; end;
  r:=public.travel_admin_comments(t.owner_id,t.site_id,50,0); assert jsonb_typeof(r)='array';
  perform public.travel_api('profile.save',t.owner_id,'{"display_name":"테스트"}');
  begin perform public.travel_api('admin.post.create',t.outsider_id,jsonb_build_object('site_id',t.site_id,'kind','article')); raise exception 'cross-site authorization failed'; exception when sqlstate 'PT403' then null; end;
@@ -82,6 +87,8 @@ do $$ begin
  begin perform public.travel_like_get(gen_random_uuid(),null,repeat('a',64)); raise exception 'like lookup RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_posts(gen_random_uuid(),'{}'); raise exception 'admin listing RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_comments(gen_random_uuid(),gen_random_uuid(),50,0); raise exception 'admin comments RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_account_delete_request(gen_random_uuid()); raise exception 'account request RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_admin_account_deletions(gen_random_uuid(),gen_random_uuid()); raise exception 'account queue RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from public.comments; raise exception 'comments exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from app_private.posts; raise exception 'drafts exposed'; exception when insufficient_privilege then null; end;
 end $$;

@@ -43,6 +43,7 @@ export const guestActions = new Set([
 export const memberActions = new Set([
   "me",
   "profile.save",
+  "account.delete.request",
   "comment.report",
   "admin.posts",
   "admin.post.get",
@@ -58,6 +59,9 @@ export const memberActions = new Set([
   "admin.settings.save",
   "admin.settings.apply",
   "admin.comments",
+  "admin.account.deletions",
+  "admin.account.deletion.anonymize",
+  "admin.account.deletion.complete",
   "admin.comment.moderate",
   "admin.reports",
   "admin.report.resolve",
