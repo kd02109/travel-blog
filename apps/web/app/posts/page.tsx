@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export default async function Posts({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; category?: string }>;
+  searchParams: Promise<{ page?: string; category?: string; tag?: string }>;
 }) {
   const params = await searchParams;
   const page = Math.min(
@@ -15,26 +15,29 @@ export default async function Posts({
   const category = CATEGORIES.some((item) => item.code === params.category)
     ? (params.category as CategoryCode)
     : undefined;
+  const tag = params.tag?.trim().slice(0, 30) || undefined;
   if (
     process.env.NEXT_PUBLIC_API_MOCKING === "enabled" &&
     !process.env.TRAVEL_SSR_API_URL
   )
-    return <Catalog initialPage={page} initialCategory={category} />;
+    return <Catalog initialPage={page} initialCategory={category} initialTag={tag} />;
   const api = createServerTravelApi();
   const site = await api.getSite();
   const posts = await api.listPosts({
     site_id: site.id,
     category,
+    tag,
     limit: 12,
     offset: (page - 1) * 12,
   });
   return (
     <Catalog
-      key={page}
+      key={`${page}-${category ?? "all"}-${tag ?? ""}`}
       initialSite={site}
       initialPosts={posts}
       initialPage={page}
       initialCategory={category}
+      initialTag={tag}
     />
   );
 }

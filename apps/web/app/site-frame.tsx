@@ -69,6 +69,7 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
             >
               우리의 기록
             </Link>
+            <Link href="/contents" className="rounded-control text-foreground hover:bg-muted inline-flex min-h-12 items-center px-3 text-base">목차</Link>
           </nav>
           <button
             type="button"
@@ -122,6 +123,7 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
                   우리의 기록
                 </Link>
               </li>
+              <li><Link href="/contents" onClick={() => setMenuOpen(false)} className="rounded-control hover:bg-muted flex min-h-12 items-center px-4">목차</Link></li>
             </ul>
           </nav>
         )}
@@ -151,6 +153,7 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
             >
               우리의 기록
             </Link>
+            <Link href="/contents" className="inline-flex min-h-12 items-center underline-offset-4 hover:underline">목차</Link>
           </div>
         </div>
       </footer>
