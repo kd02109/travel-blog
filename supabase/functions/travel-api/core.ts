@@ -37,6 +37,7 @@ export const guestActions = new Set([
   "comment.create",
   "comment.edit",
   "comment.delete",
+  "like.get",
   "like.set",
 ]);
 export const memberActions = new Set([

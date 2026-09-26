@@ -52,6 +52,24 @@ it("coalesces visitors, renews expired tokens and supports invalidation", async 
   await visitor.get();
   expect(issue).toHaveBeenCalledTimes(3);
 });
+it("restores the same visitor identity from tab storage after a page reload", async () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+  };
+  const issue = vi
+    .fn()
+    .mockResolvedValue({ visitor_token: "tab-token", expires_at: 300 });
+  const firstPage = createVisitorTokenProvider(issue, () => 0, storage);
+  expect(await firstPage.get()).toBe("tab-token");
+  const reloadedPage = createVisitorTokenProvider(issue, () => 0, storage);
+  expect(await reloadedPage.get()).toBe("tab-token");
+  expect(issue).toHaveBeenCalledTimes(1);
+  reloadedPage.clear();
+  expect(values.size).toBe(0);
+});
 it("parses rate limits and never auto retries auth, permissions, conflict or rate limits", () => {
   expect(parseRetryAfter("12")).toBe(12);
   expect(parseRetryAfter("Thu, 01 Jan 1970 00:01:00 GMT", 0)).toBe(60);

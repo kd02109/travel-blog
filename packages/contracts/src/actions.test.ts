@@ -66,6 +66,7 @@ const samples = {
       is_staff: false,
     },
   ],
+  "like.get": { liked: false, count: 0 },
   "visitor.create": { visitor_token: "signed-visitor", expires_at: 1790419200 },
   me: {
     user_id: id,
@@ -174,20 +175,30 @@ const samples = {
 
 describe("deployed action boundaries", () => {
   it("accepts bounded admin list filters and rejects unsupported statuses", () => {
-    expect(actionContracts["admin.posts"].input.parse({
-      site_id: id,
+    expect(
+      actionContracts["admin.posts"].input.parse({
+        site_id: id,
+        category: "food-cafe",
+        status: "published",
+        search: " 강릉 ",
+      }),
+    ).toMatchObject({
       category: "food-cafe",
       status: "published",
-      search: " 강릉 ",
-    })).toMatchObject({ category: "food-cafe", status: "published", search: "강릉" });
-    expect(actionContracts["admin.posts"].input.safeParse({
-      site_id: id,
-      status: "deleted",
-    }).success).toBe(false);
-    expect(actionContracts["admin.posts"].input.safeParse({
-      site_id: id,
-      search: "가".repeat(101),
-    }).success).toBe(false);
+      search: "강릉",
+    });
+    expect(
+      actionContracts["admin.posts"].input.safeParse({
+        site_id: id,
+        status: "deleted",
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["admin.posts"].input.safeParse({
+        site_id: id,
+        search: "가".repeat(101),
+      }).success,
+    ).toBe(false);
   });
   it("covers exactly the Edge allowlist, without internal-only actions", () => {
     const source = readFileSync(
