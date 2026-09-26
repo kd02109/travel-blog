@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./provider": "./src/provider.tsx",
     "./browser": "./src/browser.ts",
-    "./server": "./src/server.ts"
+    "./server": "./src/server.ts",
+    "./hooks": "./src/hooks.ts",
+    "./query": "./src/query.ts"
   },
   "scripts": {
     "lint": "eslint . --max-warnings 0",

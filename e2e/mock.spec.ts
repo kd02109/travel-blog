@@ -107,3 +107,30 @@ test("unhandled Supabase paths never fall through to the network", async ({
   expect(result).toBe("blocked");
   expect(escaped).toEqual([]);
 });
+test("typed query list/detail and successful comment mutation refresh", async ({
+  page,
+}) => {
+  await page.goto("/posts");
+  await expect(
+    page.getByRole("link", { name: "서울숲에서 천천히 걸었던 하루" }),
+  ).toBeVisible();
+  await page
+    .getByRole("link", { name: "서울숲에서 천천히 걸었던 하루" })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "서울숲에서 천천히 걸었던 하루" }),
+  ).toBeVisible();
+  await page.getByLabel("이름", { exact: true }).fill("테스트 독자");
+  await page.getByRole("textbox", { name: "댓글", exact: true }).fill("입력 보존 확인");
+  await page
+    .getByLabel("댓글 비밀번호", { exact: true })
+    .fill("test-only-password");
+  await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "댓글을 등록했습니다." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "입력 보존 확인" }),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "댓글", exact: true })).toHaveValue("");
+});

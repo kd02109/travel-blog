@@ -1,5 +1,6 @@
 import { withSentryConfig } from "@sentry/nextjs/config";
 const nextConfig = {
+  distDir: process.env.TRAVEL_NEXT_DIST_DIR || ".next",
   transpilePackages: [
     "@repo/ui",
     "@repo/editor",
