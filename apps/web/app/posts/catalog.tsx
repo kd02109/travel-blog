@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
@@ -9,25 +9,45 @@ import { pageOffset } from "@repo/api-client/query";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { Button } from "@repo/ui/button";
 import { Select } from "@repo/ui/select";
+import { Input } from "@repo/ui/input";
 import { Pagination } from "@repo/ui/pagination";
 import { EmptyState, ErrorState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
+import { PostCard } from "../post-card";
 export function Catalog({
   initialSite,
   initialPosts,
   initialPage = 1,
   initialCategory,
+  initialTag,
 }: {
   initialSite?: ActionOutput<"site.get">;
   initialPosts?: ActionOutput<"posts.list">;
   initialPage?: number;
   initialCategory?: CategoryCode;
+  initialTag?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [page, setPage] = useState(initialPage);
   const [category, setCategory] = useState<CategoryCode | "all">(
     initialCategory ?? "all",
   );
+  const [tag, setTag] = useState(initialTag ?? "");
+  const [tagInput, setTagInput] = useState(initialTag ?? "");
+  useEffect(() => {
+    const sync = () => {
+      const params = new URLSearchParams(window.location.search);
+      const nextPage = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
+      const nextCategory = params.get("category");
+      const nextTag = params.get("tag") ?? "";
+      setPage(nextPage);
+      setCategory(CATEGORIES.some((item) => item.code === nextCategory) ? nextCategory as CategoryCode : "all");
+      setTag(nextTag);
+      setTagInput(nextTag);
+    };
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
   const site = useTravelQuery(
     api,
     "site.get",
@@ -44,6 +64,7 @@ export function Catalog({
       limit: 12,
       offset: pageOffset(page),
       category: category === "all" ? undefined : category,
+      tag: tag || undefined,
     },
     { siteId, actor: "public" },
     {
@@ -56,11 +77,22 @@ export function Catalog({
     const query = new URLSearchParams();
     if (next > 1) query.set("page", String(next));
     if (category !== "all") query.set("category", category);
-    window.history.replaceState(
+    if (tag) query.set("tag", tag);
+    window.history.pushState(
       null,
       "",
       `/posts${query.size ? `?${query}` : ""}`,
     );
+    window.dispatchEvent(new Event("travel-category-change"));
+  }
+  function applyFilters(nextCategory = category, nextTag = tag) {
+    setCategory(nextCategory);
+    setTag(nextTag);
+    setPage(1);
+    const query = new URLSearchParams();
+    if (nextCategory !== "all") query.set("category", nextCategory);
+    if (nextTag) query.set("tag", nextTag);
+    window.history.pushState(null, "", `/posts${query.size ? `?${query}` : ""}`);
     window.dispatchEvent(new Event("travel-category-change"));
   }
   return (
@@ -76,16 +108,7 @@ export function Catalog({
             value={category}
             onChange={(event) => {
               const next = event.target.value as CategoryCode | "all";
-              setCategory(next);
-              setPage(1);
-              const query = new URLSearchParams();
-              if (next !== "all") query.set("category", next);
-              window.history.replaceState(
-                null,
-                "",
-                `/posts${query.size ? `?${query}` : ""}`,
-              );
-              window.dispatchEvent(new Event("travel-category-change"));
+              applyFilters(next, tag);
             }}
           >
             <option value="all">모든 여행</option>
@@ -96,6 +119,10 @@ export function Catalog({
             ))}
           </Select>
         </label>
+        <form className="grid w-full gap-2 sm:max-w-xs" onSubmit={(event) => { event.preventDefault(); applyFilters(category, tagInput.trim().slice(0, 30)); }}>
+          <label htmlFor="post-tag-filter">태그로 찾기</label>
+          <div className="flex gap-2"><Input id="post-tag-filter" value={tagInput} maxLength={30} onChange={(event) => setTagInput(event.currentTarget.value)} placeholder="예: 제주" />{tagInput && <Button type="button" variant="outline" aria-label="태그 검색 지우기" onClick={() => { setTagInput(""); applyFilters(category, ""); }}>지우기</Button>}<Button type="submit" variant="outline">적용</Button></div>
+        </form>
       </header>
       <div className="mt-8 space-y-6">
         {(site.error || posts.error) && (
@@ -112,25 +139,7 @@ export function Catalog({
         )}
         {posts.data && posts.data.length > 0 && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {posts.data.map((post) => (
-              <li key={post.post_id}>
-                <Link
-                  href={`/posts/${encodeURIComponent(post.slug)}`}
-                  className="rounded-panel border-border bg-surface hover:border-primary hover:bg-muted/40 flex min-h-36 flex-col justify-between border p-5 focus-visible:relative"
-                >
-                  <span className="text-muted-foreground text-sm">
-                    {CATEGORIES.find((item) => item.code === post.category_code)
-                      ?.label ?? "여행 기록"}
-                  </span>
-                  <span className="mt-6 font-serif text-xl">{post.title}</span>
-                  <span className="text-muted-foreground mt-3 text-sm">
-                    {new Intl.DateTimeFormat("ko-KR", {
-                      dateStyle: "long",
-                    }).format(new Date(post.published_at))}
-                  </span>
-                </Link>
-              </li>
-            ))}
+            {posts.data.map((post) => <PostCard key={post.post_id} post={post} siteId={siteId} />)}
           </ul>
         )}
         {posts.data?.length === 0 && (
