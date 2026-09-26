@@ -200,6 +200,9 @@ importers:
       '@repo/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@repo/database':
+        specifier: workspace:*
+        version: link:../database
       '@tanstack/react-query':
         specifier: 5.103.1
         version: 5.103.1(react@19.2.8)

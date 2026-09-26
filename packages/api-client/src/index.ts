@@ -8,28 +8,40 @@ import {
   type ActionOutput,
   type PostListInput,
 } from "@repo/contracts";
-export class TravelApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    public requestId?: string,
-  ) {
-    super(code);
-    this.name = "TravelApiError";
-  }
-}
+import { TravelApiError, parseRetryAfter } from "./errors";
+export {
+  TravelApiError,
+  errorMessage,
+  shouldRetryQuery,
+  parseRetryAfter,
+} from "./errors";
 export function createTravelApi(options: {
   baseURL: string;
   getAccessToken?: () => Promise<string | undefined>;
   getVisitorToken?: () => Promise<string | undefined>;
+  onInvalidVisitor?: () => void;
 }) {
   const client = axios.create({ baseURL: options.baseURL, timeout: 10000 });
+  let retryAt = 0;
   async function request(
     action: string,
     input: unknown = {},
   ): Promise<unknown> {
+    if (retryAt > Date.now())
+      throw new TravelApiError(
+        429,
+        "rate_limited",
+        undefined,
+        Math.ceil((retryAt - Date.now()) / 1000),
+      );
     const token = await options.getAccessToken?.();
-    const visitor = await options.getVisitorToken?.();
+    const visitor =
+      !token &&
+      ["comment.create", "comment.edit", "comment.delete", "like.set"].includes(
+        action,
+      )
+        ? await options.getVisitorToken?.()
+        : undefined;
     try {
       const { data } = await client.post(
         "",
@@ -45,10 +57,21 @@ export function createTravelApi(options: {
     } catch (error) {
       if (axios.isAxiosError(error)) {
         const parsed = apiErrorSchema.safeParse(error.response?.data);
+        const retryAfter =
+          error.response?.status === 429
+            ? (parseRetryAfter(error.response.headers?.["retry-after"]) ?? 60)
+            : undefined;
+        if (retryAfter !== undefined) retryAt = Date.now() + retryAfter * 1000;
+        if (
+          parsed.success &&
+          ["invalid_visitor", "visitor_required"].includes(parsed.data.error)
+        )
+          options.onInvalidVisitor?.();
         throw new TravelApiError(
           error.response?.status ?? 0,
           parsed.success ? parsed.data.error : "network_error",
           parsed.success ? parsed.data.request_id : undefined,
+          retryAfter,
         );
       }
       throw error;
