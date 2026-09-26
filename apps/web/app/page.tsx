@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CATEGORIES, SITE_NAME } from "@repo/constants";
 import { AnalyticsConsent } from "./analytics-consent";
 export default function Home() {
@@ -19,6 +20,9 @@ export default function Home() {
         ))}
       </ul>
       <footer className="mt-16 border-t pt-6">
+        <Link href="/posts" className="mr-4 underline">
+          여행 기록
+        </Link>
         <a href="/login" className="underline">
           로그인
         </a>

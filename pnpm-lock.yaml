@@ -209,6 +209,9 @@ importers:
       react:
         specifier: 19.2.8
         version: 19.2.8
+      server-only:
+        specifier: 0.0.1
+        version: 0.0.1
     devDependencies:
       '@repo/eslint-config':
         specifier: workspace:*
