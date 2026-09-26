@@ -82,6 +82,18 @@ const cards = await api("posts.list", { site_id: site.id, limit: 12 });
 }
 ```
 
+일반 글 `metadata`는 분류별로 다음 필드를 사용한다. 발행 시 지역과 분류별 필수값을 서버가 다시 검증하며, 초안 저장은 미완성 메타데이터를 허용한다.
+
+| 분류 | `metadata` 예시 | 발행 검증 |
+| --- | --- | --- |
+| `day-walk` | `{ "region": "서울", "visited_on": "2026-09-19" }` | 지역, 유효한 방문일 |
+| `overnight-trip` | `{ "region": "제주", "start_date": "2026-09-19", "end_date": "2026-09-21" }` | 지역, 종료일이 시작일보다 늦음 |
+| `food-cafe` | `{ "region": "강릉", "visited_on": "2026-09-19", "place_name": "바다 카페", "venue_type": "cafe" }` | 지역·방문일·장소명, `cafe` 또는 `restaurant` |
+| `stay-review` | `{ "region": "제주", "check_in": "2026-09-19", "check_out": "2026-09-21", "place_name": "바다 숙소" }` | 지역·숙박명, 체크아웃이 체크인보다 늦음 |
+| `itinerary-pdf` | 별도 메타데이터 없음 | PDF와 첫 장 표지 처리가 완료되어야 함 |
+
+날짜는 `YYYY-MM-DD` 달력 날짜다. 잘못된 날짜는 `422 invalid_date`, 방문일 누락은 `422 missing_date`, 잘못된 기간은 `422 invalid_dates`, 장소명 누락은 `422 missing_place`, 지원하지 않는 장소 구분은 `422 invalid_venue`로 반환한다.
+
 PDF content는 title, slug, category_code=itinerary-pdf, pdf_asset_id를 사용한다. 본문·별도 대표 사진·여행 기간은 요구하지 않는다. ready PDF와 첫 장 표지가 있어야 발행된다.
 
 서버 renderer가 지원하는 블록: paragraph, heading, bulletListItem, numberedListItem, quote, codeBlock, divider, image. 일반적인 BlockNote text/link inline을 지원한다. 지원하지 않는 커스텀 블록은 조용히 버리지 않고 422로 거절한다. image는 `props.asset_id`, `props.caption`을 사용하고 외부 URL을 직접 본문에 넣지 않는다. 공개 HTML의 `figure[data-asset-id]`를 프런트엔드에서 asset.access로 해석해 이미지로 표시해야 한다.

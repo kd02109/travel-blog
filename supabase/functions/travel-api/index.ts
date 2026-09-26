@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { argon2id, argon2Verify } from "npm:hash-wasm@4.12.0";
 import {
   ApiError,
+  databaseError,
   cleanInput,
   guestActions,
   memberActions,
@@ -60,21 +61,7 @@ async function rpc(
         },
   );
   if (error) {
-    const status = /^PT[0-9]{3}$/.test(error.code)
-      ? Number(error.code.slice(2))
-      : error.code === "23505"
-      ? 409
-      : /^(22|23)/.test(error.code)
-      ? 422
-      : 500;
-    throw new ApiError(
-      status,
-      status === 500
-        ? "internal_error"
-        : /^PT/.test(error.code)
-        ? error.message
-        : "invalid_or_conflicting_input",
-    );
+    throw databaseError(error);
   }
   return data;
 }

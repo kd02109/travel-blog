@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { createMockEngine } from "./engine";
+import { databaseError } from "../../../supabase/functions/travel-api/core";
 import { MOCK_SITE_ID, MOCK_POST_IDS, mockId } from "./fixtures";
 import {
   actionContracts,
@@ -86,4 +87,18 @@ it("filters admin posts by status, category and title/slug search before paginat
   expect(filtered.body).toMatchObject([
     { category_code: "food-cafe", status: "published", title: "강릉 골목에서 만난 커피" },
   ]);
+});
+it("maps invalid PostgreSQL date input to the same safe API validation code", () => {
+  expect(databaseError({ code: "22007", message: "sensitive database detail" })).toMatchObject({
+    status: 422,
+    message: "invalid_date",
+  });
+  expect(databaseError({ code: "PT422", message: "invalid_dates" })).toMatchObject({
+    status: 422,
+    message: "invalid_dates",
+  });
+  expect(databaseError({ code: "XX000", message: "sensitive database detail" })).toMatchObject({
+    status: 500,
+    message: "internal_error",
+  });
 });

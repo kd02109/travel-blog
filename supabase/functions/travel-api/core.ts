@@ -7,6 +7,24 @@ export class ApiError extends Error {
     super(message);
   }
 }
+export function databaseError(error: { code?: string; message?: string }) {
+  const code = error.code ?? "";
+  const status = /^PT[0-9]{3}$/.test(code)
+    ? Number(code.slice(2))
+    : code === "23505"
+      ? 409
+      : /^(22|23)/.test(code)
+        ? 422
+        : 500;
+  const message = status === 500
+    ? "internal_error"
+    : /^PT/.test(code)
+      ? error.message ?? "invalid_or_conflicting_input"
+      : code === "22007" || code === "22008"
+        ? "invalid_date"
+        : "invalid_or_conflicting_input";
+  return new ApiError(status, message);
+}
 export const publicActions = new Set([
   "site.get",
   "posts.list",
