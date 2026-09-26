@@ -282,6 +282,8 @@ export const actionContracts = {
         created_at: timestamp,
         author_kind: z.enum(["member", "guest", "anonymized"]),
         display_name: z.string(),
+        post_title: z.string(),
+        is_staff: z.boolean(),
       }),
     ),
   ),

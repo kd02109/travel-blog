@@ -699,6 +699,13 @@ export function createMockEngine(options: MockOptions = {}) {
           created_at: c.created_at,
           author_kind: c.author_kind,
           display_name: publicComment(c).display_name,
+          post_title:
+            state.publications.find((p) => p.post_id === c.post_id)?.title ??
+            state.posts.find((p) => p.id === c.post_id)?.draft_content.title ??
+            "제목 없는 글",
+          is_staff: state.members.some(
+            (member) => member.active && member.user_id === c.author_id,
+          ),
         }));
       if (action === "admin.comment.moderate") {
         const c = state.comments.find((c) => c.id === input.id);

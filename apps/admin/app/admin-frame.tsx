@@ -6,6 +6,7 @@ import { SITE_NAME } from "@repo/constants";
 
 const items = [
   { href: "/posts", label: "글 관리" },
+  { href: "/comments", label: "댓글 관리" },
   { href: "/write", label: "새 글 작성" },
   { href: "/home-design", label: "홈 디자인" },
   { href: "/playground", label: "에디터 체험", developmentOnly: true },
@@ -47,7 +48,9 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
                     ? pathname === href
                     : label === "에디터 체험"
                       ? pathname === href
-                      : pathname === "/" || pathname.startsWith("/posts");
+                      : label === "댓글 관리"
+                        ? pathname.startsWith("/comments")
+                        : pathname === "/" || pathname.startsWith("/posts");
               return (
                 <li key={label} className="shrink-0">
                   <Link

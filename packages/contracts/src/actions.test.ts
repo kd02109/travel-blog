@@ -130,6 +130,8 @@ const samples = {
       created_at: date,
       author_kind: "guest",
       display_name: "독자",
+      post_title: "여행 기록",
+      is_staff: false,
     },
   ],
   "admin.comment.moderate": { version: 1 },

@@ -51,9 +51,20 @@ async function rpc(
   input: Record<string, unknown>,
 ): Promise<any> {
   const { data, error } = await client.rpc(
-    action === "admin.posts" ? "travel_admin_posts" : "travel_api",
+    action === "admin.posts"
+      ? "travel_admin_posts"
+      : action === "admin.comments"
+      ? "travel_admin_comments"
+      : "travel_api",
     action === "admin.posts"
       ? { p_actor: actor, p_input: input }
+      : action === "admin.comments"
+      ? {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_limit: input.limit,
+        p_offset: input.offset,
+      }
       : {
     p_action: action,
     p_actor: actor,

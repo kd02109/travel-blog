@@ -12,6 +12,7 @@ begin
  select * into t from test_ids;
  r:=public.travel_api('site.get',null,jsonb_build_object('site_id',t.site_id)); assert r->>'name'='Test';
  r:=public.travel_api('me',t.owner_id,'{}'); assert jsonb_array_length(r->'memberships')=1;
+ r:=public.travel_admin_comments(t.owner_id,t.site_id,50,0); assert jsonb_typeof(r)='array';
  perform public.travel_api('profile.save',t.owner_id,'{"display_name":"테스트"}');
  begin perform public.travel_api('admin.post.create',t.outsider_id,jsonb_build_object('site_id',t.site_id,'kind','article')); raise exception 'cross-site authorization failed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('admin.post.create',t.editor_id,jsonb_build_object('site_id',t.site_id,'kind','article')); pid:=(r->>'id')::uuid;
@@ -80,6 +81,7 @@ do $$ begin
  begin perform public.travel_api('site.get',null,'{}'); raise exception 'RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_like_get(gen_random_uuid(),null,repeat('a',64)); raise exception 'like lookup RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_posts(gen_random_uuid(),'{}'); raise exception 'admin listing RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_admin_comments(gen_random_uuid(),gen_random_uuid(),50,0); raise exception 'admin comments RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from public.comments; raise exception 'comments exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from app_private.posts; raise exception 'drafts exposed'; exception when insufficient_privilege then null; end;
 end $$;
