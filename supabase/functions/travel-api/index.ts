@@ -49,11 +49,16 @@ async function rpc(
   actor: string | null,
   input: Record<string, unknown>,
 ): Promise<any> {
-  const { data, error } = await client.rpc("travel_api", {
+  const { data, error } = await client.rpc(
+    action === "admin.posts" ? "travel_admin_posts" : "travel_api",
+    action === "admin.posts"
+      ? { p_actor: actor, p_input: input }
+      : {
     p_action: action,
     p_actor: actor,
     p_input: input,
-  });
+        },
+  );
   if (error) {
     const status = /^PT[0-9]{3}$/.test(error.code)
       ? Number(error.code.slice(2))

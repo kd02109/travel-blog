@@ -523,9 +523,19 @@ export function createMockEngine(options: MockOptions = {}) {
         "admin.revision.restore",
       ].includes(action);
       checkSite(input.site_id, !scopedPost);
-      if (action === "admin.posts")
+      if (action === "admin.posts") {
+        const validStatuses = ["draft", "published", "private", "trashed"];
+        if (input.status !== undefined && !validStatuses.includes(String(input.status)))
+          throw new ApiError(422, "invalid_status");
+        const search = typeof input.search === "string" ? input.search.trim().toLocaleLowerCase() : "";
+        const filtered = state.posts.filter((post) => {
+          const category = post.draft_content.category_code ?? null;
+          return (!input.status || post.status === input.status) &&
+            (!input.category || category === input.category) &&
+            (!search || `${post.draft_content.title ?? ""} ${post.draft_content.slug ?? ""}`.toLocaleLowerCase().includes(search));
+        });
         return paginate(
-          [...state.posts].sort(
+          filtered.sort(
             (a, b) =>
               b.updated_at.localeCompare(a.updated_at) ||
               a.id.localeCompare(b.id),
@@ -535,11 +545,13 @@ export function createMockEngine(options: MockOptions = {}) {
           id: p.id,
           kind: p.kind,
           status: p.status,
+          category_code: p.draft_content.category_code ?? null,
           title: p.draft_content.title ?? null,
           lock_version: p.lock_version,
           updated_at: p.updated_at,
           first_published_at: p.first_published_at,
         }));
+      }
       if (action === "admin.post.create") {
         if (!["article", "pdf"].includes(String(input.kind)))
           throw new ApiError(422, "invalid_kind");

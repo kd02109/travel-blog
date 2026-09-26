@@ -76,6 +76,7 @@ const adminCard = z.object({
   id: uuid,
   kind,
   status,
+  category_code: categorySchema.nullable(),
   title: z.string().nullable(),
   lock_version: version,
   updated_at: timestamp,
@@ -197,7 +198,13 @@ export const actionContracts = {
     z.object({ liked: z.boolean(), count: version }),
   ),
   "admin.posts": contract(
-    z.strictObject({ ...scoped, ...page }),
+    z.strictObject({
+      ...scoped,
+      ...page,
+      category: categorySchema.optional(),
+      status: status.optional(),
+      search: z.string().trim().max(100).optional(),
+    }),
     z.array(adminCard),
   ),
   "admin.post.get": contract(z.strictObject(resource), draft),
