@@ -2,7 +2,6 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { createServerDatabase } from "@repo/database/server";
 import { createTravelApi, TravelApiError } from "@repo/api-client";
-import { membershipSchema } from "@repo/contracts";
 export async function requireEditor() {
   if (
     !process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -22,7 +21,7 @@ export async function requireEditor() {
     baseURL: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/travel-api`,
     getAccessToken: async () => session.access_token,
   });
-  const result = await Promise.all([api.getSite(), api.request("me")]).catch(
+  const result = await Promise.all([api.getSite(), api.getMe()]).catch(
     (error: unknown) => {
       if (error instanceof TravelApiError && error.status === 401)
         redirect("/login?error=expired");
@@ -31,8 +30,7 @@ export async function requireEditor() {
       redirect("/login?error=unavailable");
     },
   );
-  const [site, raw] = result;
-  const me = membershipSchema.parse(raw);
+  const [site, me] = result;
   if (
     !me.memberships.some(
       (m) =>
