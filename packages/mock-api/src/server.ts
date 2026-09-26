@@ -24,7 +24,11 @@ export function startMockServer(options: ServerOptions = {}) {
     throw new Error(
       "MirageJS requires a browser. Use createMockEngine for Node unit tests.",
     );
-  const engine = createMockEngine(options);
+  const nativeFetch = window.fetch.bind(window);
+  const engine = createMockEngine({
+    ...options,
+    origin: window.location.origin,
+  });
   const endpoints = [MOCK_API_PATH];
   if (options.supabaseUrl) {
     const url = new URL(options.supabaseUrl);
@@ -36,7 +40,8 @@ export function startMockServer(options: ServerOptions = {}) {
     environment: options.environment ?? "development",
     logging: false,
     routes() {
-      this.timing = options.timing ?? 250;
+      this.timing =
+        options.timing ?? (options.scenario === "slow" ? 1500 : 250);
       for (const endpoint of endpoints) {
         this.get(endpoint, () =>
           response({
@@ -74,6 +79,33 @@ export function startMockServer(options: ServerOptions = {}) {
       });
     },
   });
-  return { apiPath: MOCK_API_PATH, engine, shutdown: () => server.shutdown() };
+  // Pretender Response objects do not implement streaming bodies. Keep Next RSC
+  // and document navigation on native fetch; intercept only API requests.
+  const interceptedFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    const url = new URL(
+      typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url,
+      window.location.origin,
+    );
+    const apiPath =
+      /^\/(?:api|__mock__|auth\/v1|rest\/v1|storage\/v1|functions\/v1)(?:\/|$)/.test(
+        url.pathname,
+      );
+    return url.origin !== window.location.origin || apiPath
+      ? interceptedFetch(input, init)
+      : nativeFetch(input, init);
+  };
+  return {
+    apiPath: MOCK_API_PATH,
+    engine,
+    shutdown: () => {
+      server.shutdown();
+      window.fetch = nativeFetch;
+    },
+  };
 }
 export type MockRuntime = ReturnType<typeof startMockServer>;

@@ -1,8 +1,10 @@
+import { parseActionOutput, type ApiAction } from "@repo/contracts";
 import { CATEGORIES } from "@repo/constants";
 // These helpers are pure: use the same boundary validation and HTML renderer as Edge.
 import {
   ApiError,
   cleanInput,
+  memberActions,
   validateAction,
   renderBlocks,
   text,
@@ -52,7 +54,7 @@ export function createMockEngine(options: MockOptions = {}) {
   let state = createFixtures(scenario === "empty");
   let sequence = 100;
   const now = options.now ?? (() => MOCK_NOW);
-  const visitors = new Set<string>();
+  const visitors = new Map<string, number>();
   const failures = new Map<string, { status: number; code: string }>();
   const id = () => mockId(9, ++sequence);
   function publicPost(postId: unknown) {
@@ -77,20 +79,25 @@ export function createMockEngine(options: MockOptions = {}) {
     };
   }
   function member(headers: Record<string, string>) {
+    if (
+      headers.authorization &&
+      !/^Bearer [^\s]+$/i.test(headers.authorization)
+    )
+      throw new ApiError(401, "invalid_authorization");
     const token = headers.authorization?.replace(/^Bearer /i, "");
     if (!token) return undefined;
     const index = roles.findIndex((role) => MOCK_TOKENS[role] === token);
     const person = state.members.find(
       (m) => m.user_id === mockId(3, index + 1),
     );
-    if (!person) throw new ApiError(401, "unauthorized");
+    if (!person) throw new ApiError(401, "invalid_session");
     return person;
   }
   function staff(
     person: Member | undefined,
     allowed: Role[] = ["editor", "admin", "owner"],
   ) {
-    if (!person) throw new ApiError(401, "unauthorized");
+    if (!person) throw new ApiError(401, "login_required");
     if (!person.active || !allowed.includes(person.role))
       throw new ApiError(403, "forbidden");
     return person;
@@ -108,8 +115,9 @@ export function createMockEngine(options: MockOptions = {}) {
   ) {
     if (person) return person.user_id;
     const visitor = headers["x-visitor-token"];
-    if (!visitor || !visitors.has(visitor))
-      throw new ApiError(401, "visitor_required");
+    if (!visitor) throw new ApiError(401, "visitor_required");
+    if ((visitors.get(visitor) ?? 0) <= Date.parse(now()) / 1000)
+      throw new ApiError(401, "invalid_visitor");
     return visitor;
   }
   function publicComment(c: Comment) {
@@ -140,6 +148,7 @@ export function createMockEngine(options: MockOptions = {}) {
       actor_id: person.user_id,
       action,
       resource_id: resource,
+      changes: {},
       created_at: now(),
     });
   }
@@ -323,21 +332,25 @@ export function createMockEngine(options: MockOptions = {}) {
     }
     if (action === "visitor.create") {
       const token = `mock-visitor-${id()}`;
-      visitors.add(token);
+      visitors.set(token, Math.floor(Date.parse(now()) / 1000) + 2592000);
       return {
         visitor_token: token,
         expires_at: Math.floor(Date.parse(now()) / 1000) + 2592000,
       };
     }
     if (action === "me" || action === "profile.save") {
-      if (!person) throw new ApiError(401, "unauthorized");
+      if (!person) throw new ApiError(401, "login_required");
       if (action === "profile.save") {
         person.display_name = readText(input.display_name, 2, 30);
         return { saved: true };
       }
       return {
         user_id: person.user_id,
-        profile: { user_id: person.user_id, display_name: person.display_name },
+        profile: {
+          user_id: person.user_id,
+          display_name: person.display_name,
+          avatar_asset_id: null,
+        },
         memberships:
           person.active && person.role !== "reader"
             ? [
@@ -430,7 +443,7 @@ export function createMockEngine(options: MockOptions = {}) {
         throw new ApiError(404, "not_found");
       if (action === "comment.report") {
         if (c.status !== "visible") throw new ApiError(404, "not_found");
-        if (!person) throw new ApiError(401, "unauthorized");
+        if (!person) throw new ApiError(401, "login_required");
         if (
           !["spam", "abuse", "personal_information", "other"].includes(
             String(input.reason),
@@ -458,7 +471,10 @@ export function createMockEngine(options: MockOptions = {}) {
           ? c.author_id !== person?.user_id
           : c.password !== input.password
       )
-        throw new ApiError(403, "forbidden");
+        throw new ApiError(
+          403,
+          c.author_kind === "guest" ? "invalid_password" : "forbidden",
+        );
       requireVersion(c.version, input.version);
       c.body = action === "comment.delete" ? "" : readText(input.body, 1, 1000);
       if (action === "comment.delete") c.status = "deleted";
@@ -485,7 +501,7 @@ export function createMockEngine(options: MockOptions = {}) {
       if (asset.state !== "ready" || !linked) staff(person);
       return {
         id: asset.id,
-        url: asset.url,
+        url: new URL(asset.url, options.origin ?? "http://localhost:3000").href,
         expires_in: 300,
         metadata: asset.metadata,
         preview_asset_id: asset.preview_asset_id,
@@ -710,7 +726,12 @@ export function createMockEngine(options: MockOptions = {}) {
           .filter((m) => m.role !== "reader")
           .map(({ display_name, ...membership }) => {
             void display_name;
-            return membership;
+            return {
+              ...membership,
+              granted_by: null,
+              created_at: MOCK_NOW,
+              updated_at: now(),
+            };
           });
       }
       if (action === "admin.member.set") {
@@ -770,9 +791,22 @@ export function createMockEngine(options: MockOptions = {}) {
             value,
           ]),
         );
+        const person = member(headers);
+        if (memberActions.has(action) && !person)
+          throw new ApiError(401, "login_required");
+        if (
+          scenario === "conflict" &&
+          ["comment.create", "admin.post.save", "admin.settings.save"].includes(
+            action,
+          )
+        )
+          throw new ApiError(409, "version_conflict");
         return {
           status: 200,
-          body: structuredClone(dispatch(action, input, headers)),
+          body: parseActionOutput(
+            action as ApiAction,
+            structuredClone(dispatch(action, input, headers)),
+          ),
         };
       } catch (error) {
         if (error instanceof ApiError)

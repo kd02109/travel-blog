@@ -1,5 +1,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  categorySchema,
+  type ApiAction,
+  type ActionInput,
+} from "@repo/contracts";
 import { createTravelApi } from "@repo/api-client";
 import { CATEGORIES } from "@repo/constants";
 import { Button } from "@repo/ui/button";
@@ -39,9 +44,9 @@ export function MockPlayground() {
     if (!api) return;
     try {
       const site = await api.getSite();
-      const data = await api.request("posts.list", {
+      const data = await api.call("posts.list", {
         site_id: MOCK_SITE_ID,
-        ...(category ? { category } : {}),
+        ...(category ? { category: categorySchema.parse(category) } : {}),
       });
       setTemplate((site.settings as Settings).template_id ?? "D");
       setCards(data as Card[]);
@@ -60,10 +65,10 @@ export function MockPlayground() {
       active = false;
     };
   }, [refresh]);
-  async function action(name: string, input: Record<string, unknown>) {
+  async function action<A extends ApiAction>(name: A, input: ActionInput<A>) {
     if (!api) return;
     try {
-      const data = await api.request(name, input);
+      const data = await api.call(name, input);
       setDetail(data);
       setMessage(`${name} 완료`);
     } catch (error) {
@@ -73,15 +78,15 @@ export function MockPlayground() {
   async function changeTemplate() {
     if (!api) return;
     try {
-      const current = (await api.request("admin.settings.get", {
+      const current = (await api.call("admin.settings.get", {
         site_id: MOCK_SITE_ID,
       })) as { version: number; draft: Settings };
-      const saved = (await api.request("admin.settings.save", {
+      const saved = (await api.call("admin.settings.save", {
         site_id: MOCK_SITE_ID,
         version: current.version,
         settings: { ...current.draft, template_id: "A" },
       })) as { version: number };
-      await api.request("admin.settings.apply", {
+      await api.call("admin.settings.apply", {
         site_id: MOCK_SITE_ID,
         version: saved.version,
       });

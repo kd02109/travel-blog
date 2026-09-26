@@ -72,11 +72,11 @@ test("HTTP errors, authorization, malformed JSON and no real network fallback", 
   }, site_id);
   expect(results).toMatchObject({
     unauthorized: 401,
-    error: { error: "unauthorized" },
+    error: { error: "login_required" },
     invalid: 400,
   });
   await page.getByRole("button", { name: "관리자 목록 조회" }).click();
-  await expect(page.getByTestId("result")).toHaveText("unauthorized");
+  await expect(page.getByTestId("result")).toHaveText("login_required");
   await page.getByLabel("역할", { exact: true }).selectOption("reader");
   await page.getByRole("button", { name: "관리자 목록 조회" }).click();
   await expect(page.getByTestId("result")).toHaveText("forbidden");
@@ -121,7 +121,9 @@ test("typed query list/detail and successful comment mutation refresh", async ({
     page.getByRole("heading", { name: "서울숲에서 천천히 걸었던 하루" }),
   ).toBeVisible();
   await page.getByLabel("이름", { exact: true }).fill("테스트 독자");
-  await page.getByRole("textbox", { name: "댓글", exact: true }).fill("입력 보존 확인");
+  await page
+    .getByRole("textbox", { name: "댓글", exact: true })
+    .fill("입력 보존 확인");
   await page
     .getByLabel("댓글 비밀번호", { exact: true })
     .fill("test-only-password");
@@ -132,5 +134,53 @@ test("typed query list/detail and successful comment mutation refresh", async ({
   await expect(
     page.getByRole("listitem").filter({ hasText: "입력 보존 확인" }),
   ).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "댓글", exact: true })).toHaveValue("");
+  await expect(
+    page.getByRole("textbox", { name: "댓글", exact: true }),
+  ).toHaveValue("");
+});
+test("conflict keeps comment input and offers explicit recovery", async ({
+  page,
+}) => {
+  await page.goto("/posts/example-day-walk?mockScenario=conflict");
+  await expect(
+    page.getByRole("heading", { name: "서울숲에서 천천히 걸었던 하루" }),
+  ).toBeVisible();
+  await page.getByLabel("이름", { exact: true }).fill("테스트 독자");
+  await page
+    .getByRole("textbox", { name: "댓글", exact: true })
+    .fill("실패해도 남아 있는 입력");
+  await page
+    .getByLabel("댓글 비밀번호", { exact: true })
+    .fill("test-only-password");
+  await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
+  await expect(
+    page.getByRole("alert").filter({ hasText: "다른 변경과 충돌했습니다." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "댓글", exact: true }),
+  ).toHaveValue("실패해도 남아 있는 입력");
+  await expect(
+    page.getByRole("button", { name: "최신 내용 확인" }),
+  ).toBeVisible();
+});
+test("slow responses show pending state and disable duplicate comment submission", async ({
+  page,
+}) => {
+  await page.goto("/posts/example-day-walk?mockScenario=slow");
+  await expect(page.getByText("기록을 불러오고 있어요…")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "서울숲에서 천천히 걸었던 하루" }),
+  ).toBeVisible({ timeout: 15000 });
+  await page.getByLabel("이름", { exact: true }).fill("테스트 독자");
+  await page
+    .getByRole("textbox", { name: "댓글", exact: true })
+    .fill("한 번만 등록");
+  await page
+    .getByLabel("댓글 비밀번호", { exact: true })
+    .fill("test-only-password");
+  await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
+  await expect(page.getByRole("button", { name: "등록 중…" })).toBeDisabled();
+  await expect(
+    page.getByRole("listitem").filter({ hasText: "한 번만 등록" }),
+  ).toHaveCount(1, { timeout: 15000 });
 });

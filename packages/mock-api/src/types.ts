@@ -1,6 +1,7 @@
 import type { CategoryCode } from "@repo/constants";
 export type Role = "reader" | "editor" | "admin" | "owner";
-export type Scenario = "default" | "empty" | "error" | "rate-limited";
+export type Scenario =
+  "default" | "empty" | "error" | "rate-limited" | "slow" | "conflict";
 export type Content = {
   title?: string;
   slug?: string;
@@ -108,6 +109,7 @@ export type MockState = {
     created_at: string;
   }[];
   audit: {
+    changes: Record<string, unknown>;
     id: string;
     site_id: string;
     actor_id: string;
@@ -121,4 +123,8 @@ export type MockResult = {
   body: unknown;
   headers?: Record<string, string>;
 };
-export type MockOptions = { scenario?: Scenario; now?: () => string };
+export type MockOptions = {
+  scenario?: Scenario;
+  now?: () => string;
+  origin?: string;
+};
