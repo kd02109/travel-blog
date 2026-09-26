@@ -37,9 +37,13 @@ export function createTravelApi(options: {
     const token = await options.getAccessToken?.();
     const visitor =
       !token &&
-      ["comment.create", "comment.edit", "comment.delete", "like.set"].includes(
-        action,
-      )
+      [
+        "comment.create",
+        "comment.edit",
+        "comment.delete",
+        "like.get",
+        "like.set",
+      ].includes(action)
         ? await options.getVisitorToken?.()
         : undefined;
     try {

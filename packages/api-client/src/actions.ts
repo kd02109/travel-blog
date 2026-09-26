@@ -4,6 +4,7 @@ export const readActions = [
   "posts.list",
   "post.get",
   "comments.list",
+  "like.get",
   "asset.access",
   "me",
   "admin.posts",

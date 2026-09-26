@@ -58,6 +58,7 @@ begin
  r:=public.travel_api('admin.reports',t.owner_id,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=1;
  perform public.travel_api('admin.report.resolve',t.owner_id,jsonb_build_object('site_id',t.site_id,'id',r->0->>'id','status','resolved'));
  r:=public.travel_api('like.set',t.outsider_id,jsonb_build_object('id',base_pid,'liked',true)); assert (r->>'count')::int=1;
+ r:=public.travel_like_get(base_pid,t.outsider_id,null); assert (r->>'liked')::boolean and (r->>'count')::int=1;
  r:=public.travel_api('like.set',t.outsider_id,jsonb_build_object('id',base_pid,'liked',true)); assert (r->>'count')::int=1;
  r:=public.travel_api('like.set',t.outsider_id,jsonb_build_object('id',base_pid,'liked',false)); assert (r->>'count')::int=0;
  begin perform public.travel_api('admin.member.set',t.editor_id,jsonb_build_object('site_id',t.site_id,'user_id',t.editor_id,'role','owner')); raise exception 'self escalation allowed'; exception when sqlstate 'PT403' then null; end;
@@ -77,6 +78,7 @@ end $$;
 set local role anon;
 do $$ begin
  begin perform public.travel_api('site.get',null,'{}'); raise exception 'RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_like_get(gen_random_uuid(),null,repeat('a',64)); raise exception 'like lookup RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_posts(gen_random_uuid(),'{}'); raise exception 'admin listing RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from public.comments; raise exception 'comments exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from app_private.posts; raise exception 'drafts exposed'; exception when insufficient_privilege then null; end;

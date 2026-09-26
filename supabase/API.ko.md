@@ -10,7 +10,7 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 - 성공: 반환 JSON 자체. 실패: `{ "error": "version_conflict", "request_id": "..." }`.
 - 400 잘못된 입력/미지원 action, 401 로그인/방문자 토큰 필요, 403 권한 없음, 404 없음/비공개, 409 충돌, 422 검증 실패, 429 제한, 500 내부 오류.
 
-현재 목록은 `limit` 기본 12/최대 50, `offset` 기본 0이다. 댓글 UI는 limit=20을 전달한다. 글 카드 목록에는 본문 HTML 전체를 포함하지 않는다.
+현재 목록은 `limit` 기본 12/최대 50, `offset` 기본 0이다. 댓글 UI는 최신 50개를 전달한다. 글 카드 목록에는 본문 HTML 전체를 포함하지 않는다.
 
 ## 공개 조회와 사용자
 
@@ -20,6 +20,7 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 | `posts.list` | `site_id`, 선택 `category`, `tag`, `limit`, `offset` | 카드 목록·반응 수 |
 | `post.get` | `site_id` + `id` 또는 `slug` | 게시본·반응 수 |
 | `comments.list` | `id`=글 ID, 선택 `limit`, `offset` | 안전한 공개 댓글 목록 |
+| `like.get` | `id`=글 ID | 현재 회원/탭 방문자의 선택 상태와 실제 집계. 비회원은 방문자 토큰 필요 |
 | `asset.access` | `id`=파일 ID, 선택 `site_id` | URL·유효기간·파일 metadata·PDF preview ID |
 | `visitor.create` | `{}` | 서명 방문자 토큰·만료 시각 |
 | `me` | `{}`; 로그인 필요 | 본인 프로필·활성 사이트 역할 |
@@ -106,13 +107,13 @@ PDF content는 title, slug, category_code=itinerary-pdf, pdf_asset_id를 사용�
 | `comment.edit` | `id`=댓글 ID, `version`, `body`; 비회원은 `password` | 본인 회원 또는 해당 비회원 비밀번호 |
 | `comment.delete` | `id`=댓글 ID, `version`; 비회원은 `password` | 본인 댓글 내용 삭제 |
 | `comment.report` | `id`=댓글 ID, `reason` | 로그인 필요. spam/abuse/personal_information/other |
-| `like.set` | `id`=글 ID, `liked: true 또는 false` | 회원/방문자 토큰. 현재 상태와 count |
+| `like.set` | `id`=글 ID, `liked: true 또는 false` | 회원/방문자 토큰. 변경 상태와 count |
 
 비회원 password는 8–128자, guest_name은 2–30자, body는 1–1,000자다. 네트워크 재시도에서는 같은 request_key를 사용하고 새 댓글에는 새 키를 사용한다. 같은 키로 다른 본문을 보내면 409다. PDF와 비공개 글에는 반응을 등록할 수 없다.
 
 visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 도메인에서 직접 API를 호출하는 초기 클라이언트는 응답 visitor_token을 메모리/탭 세션에 보관하고 X-Visitor-Token으로 보낸다. 운영 웹에서 HttpOnly 쿠키만 쓰려면 같은 출처의 Next.js 프록시를 연결한다. 쿠키 삭제로 중복 좋아요를 완전히 막는 것은 아니며 고유 인원 수로 해석하지 않는다.
 
-댓글 생성 계정/방문자당 분당 3회·일 30회, 댓글 작업 분당 10회, 좋아요 분당 30회 제한. 비회원 비밀번호 시도는 댓글당 15분 5회로 토큰을 바꾸어도 초기화되지 않는다. 배포 전체 요청 제한도 적용한다. Retry-After 헤더에는 해당 제한 창 기준의 대기 시간을 반환한다.
+댓글 생성 계정/방문자당 분당 3회·일 30회, 댓글 작업 분당 10회, 좋아요 조회/변경 분당 30회 제한. 비회원 방문자 토큰은 해당 탭의 `sessionStorage`에 만료 시각과 함께 저장해 새로고침 후에도 좋아요 상태를 조회하고 취소할 수 있다. 비회원 비밀번호 시도는 댓글당 15분 5회로 토큰을 바꾸어도 초기화되지 않는다. 배포 전체 요청 제한도 적용한다. Retry-After 헤더에는 해당 제한 창 기준의 대기 시간을 반환한다.
 
 ## 관리자
 

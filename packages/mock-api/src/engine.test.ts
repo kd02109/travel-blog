@@ -130,25 +130,57 @@ describe("draft and published content", () => {
   });
   it.each([
     ["day-walk", { region: "서울", visited_on: "2026-02-30" }, "invalid_date"],
-    ["overnight-trip", { region: "제주", start_date: "2026-09-20", end_date: "2026-09-20" }, "invalid_dates"],
-    ["food-cafe", { region: "강릉", visited_on: "2026-09-18", place_name: "바다 카페", venue_type: "bar" }, "invalid_venue"],
-    ["stay-review", { region: "제주", check_in: "2026-09-18", check_out: "2026-09-20", place_name: " " }, "missing_place"],
-  ] as const)("enforces %s metadata on the publish endpoint", (category, metadata, error) => {
-    const engine = createMockEngine();
-    const content = {
-      title: "분류 검증 글",
-      slug: `metadata-check-${category}`,
-      category_code: category,
-      cover_asset_id: mockId(4, 1),
-      blocks: [{ type: "paragraph", content: "여행 기록" }],
-      metadata,
-    };
-    const draft = call(engine, "admin.post.create", { ...site, kind: "article", content }, owner).body as Post;
-    expect(call(engine, "admin.post.publish", { id: draft.id, version: 0 }, owner)).toMatchObject({
-      status: 422,
-      body: { error },
-    });
-  });
+    [
+      "overnight-trip",
+      { region: "제주", start_date: "2026-09-20", end_date: "2026-09-20" },
+      "invalid_dates",
+    ],
+    [
+      "food-cafe",
+      {
+        region: "강릉",
+        visited_on: "2026-09-18",
+        place_name: "바다 카페",
+        venue_type: "bar",
+      },
+      "invalid_venue",
+    ],
+    [
+      "stay-review",
+      {
+        region: "제주",
+        check_in: "2026-09-18",
+        check_out: "2026-09-20",
+        place_name: " ",
+      },
+      "missing_place",
+    ],
+  ] as const)(
+    "enforces %s metadata on the publish endpoint",
+    (category, metadata, error) => {
+      const engine = createMockEngine();
+      const content = {
+        title: "분류 검증 글",
+        slug: `metadata-check-${category}`,
+        category_code: category,
+        cover_asset_id: mockId(4, 1),
+        blocks: [{ type: "paragraph", content: "여행 기록" }],
+        metadata,
+      };
+      const draft = call(
+        engine,
+        "admin.post.create",
+        { ...site, kind: "article", content },
+        owner,
+      ).body as Post;
+      expect(
+        call(engine, "admin.post.publish", { id: draft.id, version: 0 }, owner),
+      ).toMatchObject({
+        status: 422,
+        body: { error },
+      });
+    },
+  );
   it("restores a checkpoint without mutating the public revision", () => {
     const engine = createMockEngine();
     const draft = call(engine, "admin.post.get", { id: first }, owner)
@@ -249,6 +281,7 @@ describe("reactions and authorization", () => {
   });
   it("makes likes idempotent and refuses all PDF reactions", () => {
     const engine = createMockEngine();
+    expect(call(engine, "like.get", { id: first }).status).toBe(401);
     expect(call(engine, "like.set", { id: first, liked: true }).status).toBe(
       401,
     );
@@ -256,9 +289,17 @@ describe("reactions and authorization", () => {
       visitor_token: string;
     };
     const headers = { "X-Visitor-Token": visitor.visitor_token };
+    expect(call(engine, "like.get", { id: first }, headers).body).toEqual({
+      liked: false,
+      count: 0,
+    });
     expect(
       call(engine, "like.set", { id: first, liked: true }, headers).body,
     ).toEqual({ liked: true, count: 1 });
+    expect(call(engine, "like.get", { id: first }, headers).body).toEqual({
+      liked: true,
+      count: 1,
+    });
     expect(
       call(engine, "like.set", { id: first, liked: true }, headers).body,
     ).toEqual({ liked: true, count: 1 });
@@ -268,6 +309,9 @@ describe("reactions and authorization", () => {
     expect(
       call(engine, "like.set", { id: MOCK_POST_IDS[4], liked: true }, headers)
         .status,
+    ).toBe(403);
+    expect(
+      call(engine, "like.get", { id: MOCK_POST_IDS[4] }, headers).status,
     ).toBe(403);
     expect(
       call(engine, "comment.create", { id: MOCK_POST_IDS[4] }, headers).status,

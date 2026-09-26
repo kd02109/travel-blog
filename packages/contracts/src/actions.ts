@@ -158,6 +158,10 @@ export const actionContracts = {
     z.strictObject({ id: uuid, ...page }),
     z.array(comment),
   ),
+  "like.get": contract(
+    z.strictObject({ id: uuid }),
+    z.object({ liked: z.boolean(), count: version }),
+  ),
   "visitor.create": contract(
     empty,
     z.object({

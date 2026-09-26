@@ -19,8 +19,18 @@ export function createBrowserTravelApi(
   const baseURL = mocking
     ? "/__mock__/functions/v1/travel-api"
     : `${url}/functions/v1/travel-api`;
-  const visitors = createVisitorTokenProvider(() =>
-    createTravelApi({ baseURL }).createVisitor(),
+  let sessionStorage: Storage | undefined;
+  if (typeof window !== "undefined") {
+    try {
+      sessionStorage = window.sessionStorage;
+    } catch {
+      // Visitor identity will remain in memory if browser storage is blocked.
+    }
+  }
+  const visitors = createVisitorTokenProvider(
+    () => createTravelApi({ baseURL }).createVisitor(),
+    Date.now,
+    sessionStorage,
   );
   const api = createTravelApi({
     getAccessToken: mocking

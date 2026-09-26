@@ -32,19 +32,48 @@ export function createSessionTokenProvider(auth: Auth, now = Date.now) {
     return session.access_token;
   };
 }
-/** A visitor identity lives only in memory, expires at the server timestamp,
- * and is discarded on invalid_visitor. Never log or persist its signed token. */
+/** A visitor identity is tab-scoped for reload-stable likes, expires at the
+ * server timestamp, and is discarded on invalid_visitor. Never log its token. */
 export function createVisitorTokenProvider(
   issue: () => Promise<{ visitor_token: string; expires_at: number }>,
   now = Date.now,
+  storage?: Pick<Storage, "getItem" | "setItem" | "removeItem">,
 ) {
   let current: { visitor_token: string; expires_at: number } | undefined;
   let pending: Promise<string> | undefined;
   return {
     clear() {
       current = undefined;
+      try {
+        storage?.removeItem("travel-visitor-token");
+      } catch {
+        // Fall back to the in-memory visitor when session storage is unavailable.
+      }
     },
     async get() {
+      if (!current && storage) {
+        try {
+          const stored = storage.getItem("travel-visitor-token");
+          if (stored) {
+            const parsed = JSON.parse(stored) as {
+              visitor_token?: unknown;
+              expires_at?: unknown;
+            };
+            if (
+              typeof parsed.visitor_token === "string" &&
+              typeof parsed.expires_at === "number" &&
+              parsed.expires_at * 1000 > now() + 30000
+            ) {
+              current = {
+                visitor_token: parsed.visitor_token,
+                expires_at: parsed.expires_at,
+              };
+            } else storage.removeItem("travel-visitor-token");
+          }
+        } catch {
+          current = undefined;
+        }
+      }
       if (current && current.expires_at * 1000 > now() + 30000)
         return current.visitor_token;
       if (!pending)
@@ -56,6 +85,11 @@ export function createVisitorTokenProvider(
             )
               throw new TravelApiError(401, "invalid_visitor");
             current = value;
+            try {
+              storage?.setItem("travel-visitor-token", JSON.stringify(value));
+            } catch {
+              // Continue with the in-memory token if storage is blocked.
+            }
             return value.visitor_token;
           })
           .finally(() => {

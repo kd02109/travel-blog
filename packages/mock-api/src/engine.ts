@@ -231,7 +231,10 @@ export function createMockEngine(options: MockOptions = {}) {
     if (!readyAsset(d.cover_asset_id, "image"))
       throw new ApiError(422, "cover_not_ready");
     const metadataError = validatePublishedMetadata(
-      d.category_code as Exclude<(typeof CATEGORIES)[number]["code"], "itinerary-pdf">,
+      d.category_code as Exclude<
+        (typeof CATEGORIES)[number]["code"],
+        "itinerary-pdf"
+      >,
       m,
     );
     if (metadataError) throw new ApiError(422, metadataError);
@@ -344,14 +347,16 @@ export function createMockEngine(options: MockOptions = {}) {
             : [],
       };
     }
-    if (action === "like.set") {
+    if (action === "like.get" || action === "like.set") {
       const p = publication(input.id);
       if (!p || p.category_code === "itinerary-pdf")
         throw new ApiError(403, "reactions_unavailable");
       const actor = reactionActor(person, headers);
+      const likes = new Set(state.likes[p.post_id] ?? []);
+      if (action === "like.get")
+        return { liked: likes.has(actor), count: likes.size };
       if (typeof input.liked !== "boolean")
         throw new ApiError(422, "invalid_input");
-      const likes = new Set(state.likes[p.post_id] ?? []);
       if (input.liked) likes.add(actor);
       else likes.delete(actor);
       state.likes[p.post_id] = [...likes];
@@ -506,14 +511,25 @@ export function createMockEngine(options: MockOptions = {}) {
       checkSite(input.site_id, !scopedPost);
       if (action === "admin.posts") {
         const validStatuses = ["draft", "published", "private", "trashed"];
-        if (input.status !== undefined && !validStatuses.includes(String(input.status)))
+        if (
+          input.status !== undefined &&
+          !validStatuses.includes(String(input.status))
+        )
           throw new ApiError(422, "invalid_status");
-        const search = typeof input.search === "string" ? input.search.trim().toLocaleLowerCase() : "";
+        const search =
+          typeof input.search === "string"
+            ? input.search.trim().toLocaleLowerCase()
+            : "";
         const filtered = state.posts.filter((post) => {
           const category = post.draft_content.category_code ?? null;
-          return (!input.status || post.status === input.status) &&
+          return (
+            (!input.status || post.status === input.status) &&
             (!input.category || category === input.category) &&
-            (!search || `${post.draft_content.title ?? ""} ${post.draft_content.slug ?? ""}`.toLocaleLowerCase().includes(search));
+            (!search ||
+              `${post.draft_content.title ?? ""} ${post.draft_content.slug ?? ""}`
+                .toLocaleLowerCase()
+                .includes(search))
+          );
         });
         return paginate(
           filtered.sort(

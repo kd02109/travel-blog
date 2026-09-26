@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { useTravelQuery } from "@repo/api-client/hooks";
+import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { errorMessage, TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
@@ -43,6 +43,24 @@ export function PostDetail({
   const [contents, setContents] = useState<
     Array<{ id: string; title: string }>
   >([]);
+  const [optimisticLike, setOptimisticLike] = useState<{
+    liked: boolean;
+    count: number;
+  } | null>(null);
+  const [likeMessage, setLikeMessage] = useState("");
+  const likeState = useTravelQuery(
+    api,
+    "like.get",
+    { id: post.data?.post_id ?? siteId },
+    scope,
+    {
+      enabled: Boolean(
+        post.data && post.data.category_code !== "itinerary-pdf",
+      ),
+      staleTime: 0,
+    },
+  );
+  const setLike = useTravelMutation(api, "like.set", scope);
   const articleBody = useRef<HTMLDivElement>(null);
   const related = useTravelQuery(
     api,
@@ -73,6 +91,26 @@ export function PostDetail({
     });
     setContents(next);
   }, [post.data?.body_html, slug]);
+  async function toggleLike() {
+    const current = optimisticLike ?? likeState.data;
+    if (!current || setLike.isPending || !post.data) return;
+    const next = {
+      liked: !current.liked,
+      count: Math.max(0, current.count + (current.liked ? -1 : 1)),
+    };
+    setOptimisticLike(next);
+    setLikeMessage("");
+    try {
+      const result = await setLike.submit({
+        id: post.data.post_id,
+        liked: next.liked,
+      });
+      setOptimisticLike(result);
+    } catch (error) {
+      setOptimisticLike(null);
+      setLikeMessage(errorMessage(error));
+    }
+  }
   if (initialError && !site.data && !post.data)
     return (
       <main className="mx-auto w-full max-w-3xl px-5 py-12">
@@ -171,6 +209,53 @@ export function PostDetail({
         <h1 className="font-serif text-3xl leading-relaxed sm:text-4xl">
           {post.data.title}
         </h1>
+        {article && (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => void toggleLike()}
+              disabled={
+                setLike.isPending ||
+                likeState.isLoading ||
+                (!likeState.data && !optimisticLike)
+              }
+              aria-label={
+                (optimisticLike ?? likeState.data)?.liked
+                  ? "좋아요 취소"
+                  : "좋아요"
+              }
+              aria-pressed={(optimisticLike ?? likeState.data)?.liked ?? false}
+              className="rounded-control border-border inline-flex min-h-11 min-w-11 items-center gap-2 border px-4 text-base transition-transform active:scale-95 disabled:opacity-60"
+            >
+              {(optimisticLike ?? likeState.data)?.liked ? (
+                <span aria-hidden="true">♥</span>
+              ) : (
+                <span aria-hidden="true">♡</span>
+              )}
+              좋아요 ·{" "}
+              {(optimisticLike ?? likeState.data)?.count ??
+                post.data.like_count ??
+                0}
+            </button>
+            {likeState.error && (
+              <p className="text-muted-foreground text-sm">
+                좋아요 상태를 확인하지 못했습니다.{" "}
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => void likeState.refetch()}
+                >
+                  다시 시도
+                </button>
+              </p>
+            )}
+            {likeMessage && (
+              <p role="alert" className="text-muted-foreground text-sm">
+                {likeMessage}
+              </p>
+            )}
+          </div>
+        )}
         {article && (
           <>
             <p className="text-muted-foreground">{visitInfo}</p>

@@ -190,7 +190,7 @@ Deno.serve(async (req: Request) => {
     if (actorHash) {
       const group = action.startsWith("comment.")
         ? "comment"
-        : action === "like.set"
+        : action === "like.set" || action === "like.get"
         ? "like"
         : "admin";
       await rate(
@@ -272,6 +272,15 @@ Deno.serve(async (req: Request) => {
         token: data.token,
         path: data.path,
       });
+    }
+    if (action === "like.get") {
+      const { data, error } = await client.rpc("travel_like_get", {
+        p_actor: actor,
+        p_actor_hash: actorHash,
+        p_post_id: input.id,
+      });
+      if (error) throw databaseError(error);
+      return respond(data);
     }
     if (action === "asset.complete") {
       const asset = await rpc("asset.internal", actor, {

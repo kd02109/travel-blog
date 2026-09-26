@@ -108,7 +108,11 @@ it("passes visitor credentials separately from authenticated bearer tokens", asy
     getVisitorToken: async () => "mock-visitor",
   });
   await api.request("like.set", { id: "post", liked: true });
+  await api.request("like.get", { id: "post" });
   expect(post.mock.calls[0]?.[2].headers).toEqual({
+    "X-Visitor-Token": "mock-visitor",
+  });
+  expect(post.mock.calls[1]?.[2].headers).toEqual({
     "X-Visitor-Token": "mock-visitor",
   });
 });
