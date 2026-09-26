@@ -174,6 +174,10 @@ export const actionContracts = {
     z.strictObject({ display_name: z.string().trim().min(2).max(30) }),
     saved,
   ),
+  "account.delete.request": contract(
+    empty,
+    z.object({ requested: z.literal(true), request_id: uuid }),
+  ),
   "comment.create": contract(
     z.strictObject({
       id: uuid,
@@ -286,6 +290,28 @@ export const actionContracts = {
         is_staff: z.boolean(),
       }),
     ),
+  ),
+  "admin.account.deletions": contract(
+    z.strictObject(scoped),
+    z.array(
+      z.object({
+        id: uuid,
+        user_id: uuid.nullable(),
+        email: z.string().email().nullable(),
+        status: z.enum(["pending", "anonymized"]),
+        requested_at: timestamp,
+        anonymized_at: timestamp.nullable(),
+        completed_at: timestamp.nullable(),
+      }),
+    ),
+  ),
+  "admin.account.deletion.anonymize": contract(
+    z.strictObject({ ...scoped, id: uuid }),
+    z.object({ status: z.literal("anonymized"), comments_anonymized: version }),
+  ),
+  "admin.account.deletion.complete": contract(
+    z.strictObject({ ...scoped, id: uuid }),
+    z.object({ status: z.literal("completed") }),
   ),
   "admin.comment.moderate": contract(
     z.strictObject({ ...scoped, id: uuid, version, status: commentStatus }),

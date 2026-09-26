@@ -8,6 +8,7 @@ import {
 } from "./fixtures";
 import type { Post } from "./types";
 const owner = { Authorization: "Bearer mock-owner" };
+const reader = { Authorization: "Bearer mock-reader" };
 const site = { site_id: MOCK_SITE_ID };
 const first = MOCK_POST_IDS[0]!;
 function call(
@@ -56,6 +57,44 @@ describe("public Supabase contract", () => {
     a.reset("empty");
     expect(call(a, "posts.list", site).body).toEqual([]);
     expect(call(b, "posts.list", site).body).toHaveLength(5);
+  });
+});
+describe("reader account lifecycle", () => {
+  it("deduplicates deletion requests and anonymizes comments before completion", () => {
+    const engine = createMockEngine();
+    const firstRequest = call(engine, "account.delete.request", {}, reader);
+    expect(firstRequest.status).toBe(200);
+    expect(call(engine, "account.delete.request", {}, reader).body).toEqual(
+      firstRequest.body,
+    );
+    const requestId = (firstRequest.body as { request_id: string }).request_id;
+    expect(call(engine, "admin.account.deletions", site, reader).status).toBe(
+      403,
+    );
+    expect(
+      call(engine, "admin.account.deletions", site, owner).body,
+    ).toMatchObject([{ id: requestId, status: "pending" }]);
+    expect(
+      call(
+        engine,
+        "admin.account.deletion.anonymize",
+        { ...site, id: requestId },
+        owner,
+      ).body,
+    ).toMatchObject({ status: "anonymized", comments_anonymized: 1 });
+    expect(engine.snapshot().comments[0]).toMatchObject({
+      author_id: null,
+      author_kind: "anonymized",
+      guest_name: null,
+    });
+    expect(
+      call(
+        engine,
+        "admin.account.deletion.complete",
+        { ...site, id: requestId },
+        owner,
+      ).status,
+    ).toBe(409);
   });
 });
 describe("draft and published content", () => {

@@ -55,6 +55,14 @@ async function rpc(
       ? "travel_admin_posts"
       : action === "admin.comments"
       ? "travel_admin_comments"
+      : action === "account.delete.request"
+      ? "travel_account_delete_request"
+      : action === "admin.account.deletions"
+      ? "travel_admin_account_deletions"
+      : action === "admin.account.deletion.anonymize"
+      ? "travel_admin_account_deletion_anonymize"
+      : action === "admin.account.deletion.complete"
+      ? "travel_admin_account_deletion_complete"
       : "travel_api",
     action === "admin.posts"
       ? { p_actor: actor, p_input: input }
@@ -65,6 +73,13 @@ async function rpc(
         p_limit: input.limit,
         p_offset: input.offset,
       }
+      : action === "account.delete.request"
+      ? { p_actor: actor }
+      : action === "admin.account.deletions"
+      ? { p_actor: actor, p_site_id: input.site_id }
+      : action === "admin.account.deletion.anonymize" ||
+          action === "admin.account.deletion.complete"
+      ? { p_actor: actor, p_site_id: input.site_id, p_request_id: input.id }
       : {
     p_action: action,
     p_actor: actor,
@@ -212,6 +227,9 @@ Deno.serve(async (req: Request) => {
       if (action === "comment.create") {
         await rate(actorHash, "comment-create", 3);
         await rate(actorHash, "comment-daily", 30, 86400);
+      }
+      if (action === "account.delete.request") {
+        await rate(actorHash, "account-delete", 2, 86400);
       }
     }
     if (action === "comment.create") {

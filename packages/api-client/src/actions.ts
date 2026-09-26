@@ -13,6 +13,7 @@ export const readActions = [
   "admin.members",
   "admin.settings.get",
   "admin.comments",
+  "admin.account.deletions",
   "admin.reports",
   "admin.audit",
 ] as const satisfies readonly ApiAction[];

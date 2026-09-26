@@ -119,7 +119,7 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 
 | action | input | 권한 |
 | --- | --- | --- |
-| `admin.comments` | `site_id`, 선택 `limit`, `offset` | editor 이상 |
+| `admin.comments` | `site_id`, 선택 `limit`, `offset` | editor 이상. 글 제목·직원 답변 표시 포함 |
 | `admin.comment.moderate` | `site_id`, `id`, `version`, `status: visible/hidden/deleted` | editor 이상. deleted는 되돌리지 않음 |
 | `admin.reports` | `site_id`, 선택 `limit`, `offset` | editor 이상 |
 | `admin.report.resolve` | `site_id`, `id`=신고 ID, `status: resolved/dismissed` | editor 이상 |
@@ -129,6 +129,11 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 | `admin.members` | `site_id` | owner |
 | `admin.member.set` | `site_id`, `user_id`, `role`, `active` | owner. 대상은 이미 가입한 Auth 사용자 |
 | `admin.audit` | `site_id`, 선택 `limit`, `offset` | admin/owner |
+| `admin.account.deletions` | `site_id` | owner/admin. 처리 전 요청과 이메일 |
+| `admin.account.deletion.anonymize` | `site_id`, `id`=요청 ID | owner/admin. 댓글 작성자 연결 및 비회원 자격 증명을 제거 |
+| `admin.account.deletion.complete` | `site_id`, `id`=요청 ID | owner/admin. Auth 사용자가 삭제되어 FK가 분리된 뒤 완료 표시 |
+
+회원은 `account.delete.request`(입력 없음)로 중복 없는 계정 삭제 요청을 제출할 수 있다. 처리 순서는 관리자 화면에서 댓글 익명 처리 → Supabase Auth 사용자 삭제 → 완료 표시다. 댓글 본문은 공개 대화 기록으로 보존하고 작성자 ID·프로필 연결·비회원 댓글 수정 자격증명을 제거한다. 작성자 표시는 익명 독자로 처리한다. 계정 삭제는 즉시 실행되지 않으며 요청 동안 회원은 계정을 계속 사용할 수 있다. 이메일은 요청 데이터에 복사하지 않고 대기 목록을 보여 줄 때 기존 Auth 사용자에서 읽는다. 모든 댓글이 익명 처리되기 전에는 Auth 삭제 단계를 진행하지 않는다.
 
 홈 settings 허용 필드: template_id(A/B/C/D), title(150자), description(500자), hero_asset_id, featured_post_id. 사진은 같은 사이트의 ready 이미지, 대표 글은 현재 공개 글이어야 한다. 선택/저장만으로 공개 홈이 바뀌지 않는다.
 
@@ -148,8 +153,7 @@ DB 내부 `travel_worker`와 `travel_api`는 서비스 역할 전용이다. work
 ## 아직 연결하지 않은 것
 
 - 카카오·네이버 앱 등록과 OAuth provider 설정/검수.
-- 사용자 로그인·댓글·관리자 웹 UI.
 - 파일 작업자의 상시 호스팅/스케줄러와 운영 캐시 재검증 hook.
-- 계정 탈퇴 API, 별도 아바타 변경 API, 운영 백업 스케줄. 현재 계정 삭제는 운영자가 소유권 이전·댓글 익명화 정책을 적용한 후 관리 콘솔에서 처리한다.
+- 별도 아바타 변경 API, 운영 백업 스케줄.
 
 이 항목들은 이미 완료된 DB/API 배포와 구분한다.

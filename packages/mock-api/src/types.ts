@@ -58,7 +58,7 @@ export type Comment = {
   created_at: string;
   updated_at: string;
   author_id: string | null;
-  author_kind: "member" | "guest";
+  author_kind: "member" | "guest" | "anonymized";
   guest_name: string | null;
   // Mock-only credentials and idempotency data must never appear in API responses.
   password?: string;
@@ -107,6 +107,15 @@ export type MockState = {
     reason: string;
     status: string;
     created_at: string;
+  }[];
+  accountDeletions: {
+    id: string;
+    user_id: string | null;
+    email: string | null;
+    status: "pending" | "anonymized" | "completed";
+    requested_at: string;
+    anonymized_at: string | null;
+    completed_at: string | null;
   }[];
   audit: {
     changes: Record<string, unknown>;
