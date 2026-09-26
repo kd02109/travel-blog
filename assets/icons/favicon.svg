@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Travel Blog favicon</title>
+  <desc id="desc">A compact travel pin and route mark using the TravelBook design system colors.</desc>
+  <rect width="64" height="64" rx="15" fill="#173C42"/>
+  <path d="M16 45c8-9 14-13 20-12 7 1 9 8 16 7 3-.5 6-3 8-7" fill="none" stroke="#254FBA" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 12c-8 0-14 6-14 14 0 10 14 23 14 23s14-13 14-23c0-8-6-14-14-14Z" fill="#F6F5EF"/>
+  <circle cx="32" cy="26" r="5" fill="#173C42"/>
+  <path d="m27 40 5-6 5 6" fill="none" stroke="#F6F5EF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

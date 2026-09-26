@@ -21,6 +21,11 @@ export default function AdminHome() {
           </Button>
         )}
       </div>
+      <form action="/auth/signout" method="post" className="mt-6">
+        <button type="submit" className="underline">
+          현재 계정 로그아웃
+        </button>
+      </form>
     </main>
   );
 }

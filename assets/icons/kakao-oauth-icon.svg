@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Travel Blog OAuth icon</title>
+  <desc id="desc">A travel route and location pin using the TravelBook design system colors.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#F6F5EF"/>
+  <circle cx="512" cy="512" r="334" fill="#173C42"/>
+  <path d="M292 700c92-100 153-146 228-138 78 8 102 92 180 78 49-9 80-48 109-93" fill="none" stroke="#254FBA" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="292" cy="700" r="31" fill="#E9E7DC" stroke="#173C42" stroke-width="14"/>
+  <circle cx="809" cy="547" r="31" fill="#E9E7DC" stroke="#173C42" stroke-width="14"/>
+  <path d="M518 293c-91 0-165 73-165 164 0 119 165 274 165 274s165-155 165-274c0-91-74-164-165-164Z" fill="#F6F5EF"/>
+  <circle cx="518" cy="457" r="58" fill="#173C42"/>
+  <path d="m462 625 56-62 56 62" fill="none" stroke="#F6F5EF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

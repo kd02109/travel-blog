@@ -23,6 +23,8 @@
     "start:supabase": "node scripts/run-mode.mjs supabase start",
     "test:mock": "pnpm test && pnpm test:e2e:mock",
     "test:supabase": "node scripts/test-supabase.mjs",
+    "test:auth:kakao": "node scripts/test-kakao.mjs",
+    "test:auth:local": "node scripts/test-auth-local.mjs",
     "test:config": "node --test scripts/environment.test.mjs"
   },
   "devDependencies": {
