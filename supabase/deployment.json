@@ -34,5 +34,7 @@
       "name": "environment_owner_bootstrap"
     }
   ],
-  "edge_function_version": 2
+  "edge_function_version": 2,
+  "edge_version": 3,
+  "edge_change": "Expose Retry-After and X-Request-Id response headers; deployed 2026-09-26"
 }

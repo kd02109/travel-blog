@@ -23,7 +23,8 @@
     "@repo/observability": "workspace:*",
     "@sentry/nextjs": "10.75.0",
     "@repo/analytics": "workspace:*",
-    "@repo/mock-api": "workspace:*"
+    "@repo/mock-api": "workspace:*",
+    "@repo/contracts": "workspace:*"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
