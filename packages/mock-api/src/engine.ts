@@ -1,5 +1,6 @@
 import { parseActionOutput, type ApiAction } from "@repo/contracts";
 import { CATEGORIES } from "@repo/constants";
+import { validatePublishedMetadata } from "@repo/contracts";
 // These helpers are pure: use the same boundary validation and HTML renderer as Edge.
 import {
   ApiError,
@@ -229,31 +230,11 @@ export function createMockEngine(options: MockOptions = {}) {
       throw new ApiError(422, "incomplete_article");
     if (!readyAsset(d.cover_asset_id, "image"))
       throw new ApiError(422, "cover_not_ready");
-    const validDate = (v: unknown) =>
-      typeof v === "string" &&
-      /^\d{4}-\d{2}-\d{2}$/.test(v) &&
-      !Number.isNaN(Date.parse(v)) &&
-      new Date(v).toISOString().slice(0, 10) === v;
-    if (["day-walk", "food-cafe"].includes(d.category_code!)) {
-      if (!validDate(m.visited_on)) throw new ApiError(422, "missing_date");
-    } else {
-      const start =
-        d.category_code === "overnight-trip" ? m.start_date : m.check_in;
-      const end =
-        d.category_code === "overnight-trip" ? m.end_date : m.check_out;
-      if (!validDate(start) || !validDate(end) || String(end) <= String(start))
-        throw new ApiError(422, "invalid_dates");
-    }
-    if (
-      ["food-cafe", "stay-review"].includes(d.category_code!) &&
-      !m.place_name
-    )
-      throw new ApiError(422, "missing_place");
-    if (
-      d.category_code === "food-cafe" &&
-      !["cafe", "restaurant"].includes(String(m.venue_type))
-    )
-      throw new ApiError(422, "invalid_venue");
+    const metadataError = validatePublishedMetadata(
+      d.category_code as Exclude<(typeof CATEGORIES)[number]["code"], "itinerary-pdf">,
+      m,
+    );
+    if (metadataError) throw new ApiError(422, metadataError);
     const rendered = renderBlocks(d.blocks);
     if (rendered.assetIds.some((assetId) => !readyAsset(assetId, "image")))
       throw new ApiError(422, "invalid_asset");
