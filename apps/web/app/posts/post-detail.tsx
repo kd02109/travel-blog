@@ -28,7 +28,7 @@ export function PostDetail({
     "site.get",
     { slug: "parents-travel" },
     { siteId: "lookup", actor: "public" },
-    { initialData: initialSite },
+    { initialData: initialSite, staleTime: 0 },
   );
   const siteId = site.data?.id ?? "00000000-0000-0000-0000-000000000000";
   const scope = { siteId, actor: "public" };
@@ -37,14 +37,14 @@ export function PostDetail({
     "post.get",
     { site_id: siteId, slug },
     scope,
-    { initialData: initialPost, enabled: Boolean(site.data) },
+    { initialData: initialPost, enabled: Boolean(site.data), staleTime: 0 },
   );
   const comments = useTravelQuery(
     api,
     "comments.list",
     { id: post.data?.post_id ?? siteId, limit: 20 },
     scope,
-    { enabled: Boolean(post.data?.comments_enabled) },
+    { enabled: Boolean(post.data?.comments_enabled), staleTime: 0 },
   );
   const mutation = useTravelMutation(api, "comment.create", scope);
   const [body, setBody] = useState("");
@@ -59,7 +59,7 @@ export function PostDetail({
     category: post.data?.category_code as CategoryCode | undefined,
     limit: 6,
     offset: 0,
-  }, scope, { enabled: Boolean(post.data && post.data.category_code !== "itinerary-pdf") });
+  }, scope, { enabled: Boolean(post.data && post.data.category_code !== "itinerary-pdf"), staleTime: 0 });
 
   useEffect(() => {
     const root = articleBody.current;

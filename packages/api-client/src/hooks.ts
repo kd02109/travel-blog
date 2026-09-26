@@ -17,7 +17,7 @@ export function useTravelQuery<A extends ReadAction>(
   action: A,
   input: ActionInput<NoInfer<A>>,
   scope: QueryScope,
-  options: { initialData?: ActionOutput<A>; enabled?: boolean } = {},
+  options: { initialData?: ActionOutput<A>; enabled?: boolean; staleTime?: number } = {},
 ) {
   return useQuery<ActionOutput<A>, Error>({
     queryKey: travelKeys.read(scope, action, input),

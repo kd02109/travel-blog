@@ -9,7 +9,7 @@ import { ErrorState } from "@repo/ui/feedback";
 
 export function AboutContent({ initialSite }: { initialSite?: ActionOutput<"site.get"> }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
-  const site = useTravelQuery(api, "site.get", { slug: "parents-travel" }, { siteId: "lookup", actor: "public" }, { initialData: initialSite });
+  const site = useTravelQuery(api, "site.get", { slug: "parents-travel" }, { siteId: "lookup", actor: "public" }, { initialData: initialSite, staleTime: 0 });
   const settings = site.data?.settings as Record<string, unknown> | undefined;
   const title = typeof settings?.title === "string" && settings.title ? settings.title : site.data?.name ?? SITE_NAME;
   const description = typeof settings?.description === "string" && settings.description ? settings.description : "풍경을 보고, 음식을 맛보고, 골목을 걸으며 여행에서 만난 장면을 기록합니다.";

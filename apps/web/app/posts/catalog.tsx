@@ -55,7 +55,7 @@ export function Catalog({
     "site.get",
     { slug: "parents-travel" },
     { siteId: "lookup", actor: "public" },
-    { initialData: initialSite },
+    { initialData: initialSite, staleTime: 0 },
   );
   const siteId = site.data?.id ?? "00000000-0000-0000-0000-000000000000";
   const posts = useTravelQuery(
@@ -72,6 +72,7 @@ export function Catalog({
     {
       enabled: Boolean(site.data),
       initialData: page === initialPage && category === (initialCategory ?? "all") && tag === (initialTag ?? "") ? initialPosts : undefined,
+      staleTime: 0,
     },
   );
   function move(next: number) {
