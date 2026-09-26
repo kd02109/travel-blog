@@ -21,6 +21,8 @@
     "dev:supabase": "node scripts/run-mode.mjs supabase dev",
     "build:supabase": "node scripts/run-mode.mjs supabase build",
     "start:supabase": "node scripts/run-mode.mjs supabase start",
+    "media:worker": "pnpm --filter @repo/media-worker start",
+    "media:worker:once": "pnpm --filter @repo/media-worker process:once",
     "test:mock": "pnpm test && pnpm test:e2e:mock",
     "test:supabase": "node scripts/test-supabase.mjs",
     "test:auth:kakao": "node scripts/test-kakao.mjs",

@@ -67,15 +67,16 @@
 
 ## 3. 사진·PDF 업로드와 worker — P0
 
-- [ ] 신뢰할 수 있는 실행 환경에 Python worker와 의존성을 배포하고 scheduler 또는 작업 루프를 연결한다. 현재 코드는 한 번 실행할 때 작업 하나를 처리한다.
-- [ ] 타임아웃·메모리/CPU 제한·재시도·lease 회수·실패 로그·작업 적체 감지를 설정한다.
-- [ ] 파일 등록→서명 URL 업로드→`asset.complete`→처리 상태 조회→`ready` 흐름을 관리자에 연결한다. 진행률·실패·재시도·취소 상태를 제공한다.
-- [ ] 이미지 회전·EXIF 제거·대표 이미지·본문 이미지와 캡션을 검증하고, renderer가 지원하는 asset ID 기반 이미지 블록을 연결한다.
-- [ ] PDF 업로드·첫 장 표지·페이지 수·다운로드/뷰어를 연결한다. 손상·암호화·초과 크기/쪽수 오류를 안내한다.
-- [ ] private 버킷의 5분 signed URL 만료와 갱신을 처리한다. 장시간 열어 둔 페이지 및 비공개 전환 후 접근 정책을 검증한다.
-- [ ] 고아 파일·영구 삭제 대상·만료 제한 데이터의 정리 기준과 실행 주기를 마련한다. 공개 파일을 잘못 지우지 않도록 참조 확인과 보존 기간을 둔다.
+- [x] Python 대신 모노레포 `@repo/media-worker` TypeScript 패키지를 사용한다. Node.js `sharp`로 이미지 방향 보정·EXIF 제거·대표 이미지를 만들고, `pdfjs-dist`와 Node Canvas로 PDF 페이지 수·첫 장 표지를 만든다.
+- [x] 신뢰된 Node.js 컨테이너 실행 명령과 polling loop를 마련한다. Supabase worker RPC의 5분 lease·만료 lease 회수·최대 5회 지수 backoff를 유지하고 요청 timeout, 입력 크기/픽셀/페이지 제한, 구조화 로그를 적용한다.
+- [x] 관리자에서 파일 등록→signed upload URL 전송→`asset.complete`→상태 polling을 연결한다. 업로드/처리 중·완료·실패를 표시하고 재시도 및 원격 작업 취소를 제공한다. 취소된 파일은 failed 상태로 남는다.
+- [x] 이미지 방향·위치정보 제거, 1600px 파생 파일, 대표 사진 선택 UI, BlockNote asset ID 이미지 블록과 캡션을 연결한다. 발행 renderer는 asset ID로 승인된 signed URL을 조회한다. 관리자 초안의 서버 저장 연결은 5단계 작업이다.
+- [x] PDF private 업로드·쪽수와 첫 장 표지 생성·private 원본 다운로드 링크·브라우저 뷰어를 연결한다. 손상·암호화·1–200쪽 제한·20MB 초과 오류를 안내한다.
+- [x] 기존 `asset.access`로 발급하는 5분 private signed URL을 만료 전에 갱신한다. 공개 글의 파일도 private 버킷과 API 권한 확인을 거치며, 비공개 전환 전에 발급한 URL은 만료까지 유효할 수 있음을 문서화한다.
+- [x] DB migration과 worker에 7일 격리·참조 fencing·Storage API 삭제·최종 참조 재검사 설계를 추가하고 Supabase에 적용한다.
+- [ ] Supabase migration 적용 후 격리된 staging에서 미참조·참조 중·삭제 실패·lease 재시도 흐름을 검증한다. `storage.objects` 직접 SQL 삭제는 사용하지 않는다.
 
-완료 기준: 실제 사진과 PDF가 업로드부터 처리·열람까지 성공하고, worker 중단 후 재시작해도 작업이 복구된다. 비공개 전환 전 발급한 URL은 만료까지 유효할 수 있다는 현재 정책을 운영 문서에 반영한다.
+구현 완료 기준: 관리자 업로드 UI, TypeScript 변환 worker, 취소 API, private signed URL viewer/갱신, 컨테이너 실행 설정과 격리·재검증 자동 정리를 마련했다. 격리 환경 검증, worker 상시 배포, 실제 파일 종단 검증은 남아 있다.
 
 ## 4. 디자인 시스템과 화면 골격 — P1
 
@@ -135,7 +136,7 @@
 ## 9. 통합 QA와 배포 자동화 — P0
 
 - [ ] 기존 CI에 제품별 계약·권한·저장/충돌·댓글·홈 적용 브라우저 테스트를 추가한다.
-- [ ] SQL·Edge·Python worker 테스트를 격리 환경에서 실행하는 backend 검증 경로를 마련한다.
+- [ ] SQL·Edge·TypeScript worker 검증을 격리 환경에서 실행하는 backend 검증 경로를 마련한다.
 - [ ] staging에서 실제 로그인→업로드→worker→저장→발행→공개 열람을 검증한다. 읽기 전용 `test:supabase`와 별개의 종단 테스트로 관리한다.
 - [ ] 만료 세션·느린 네트워크·업로드 중단·중복 제출·권한 회수·서명 URL 만료·worker 재시작을 검증한다.
 - [ ] HTML/링크 렌더링, 권한 우회, CORS/redirect 허용 범위, 비밀값 노출과 공개 번들/소스맵을 점검한다.

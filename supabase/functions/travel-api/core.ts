@@ -45,6 +45,7 @@ export const memberActions = new Set([
   "admin.audit",
   "asset.create",
   "asset.complete",
+  "asset.cancel",
 ]);
 export function validateAction(action: unknown): string {
   if (
