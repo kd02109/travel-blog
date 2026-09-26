@@ -100,12 +100,22 @@ export function PostDetail({
       <main>
         <p role="status">기록을 불러오고 있어요…</p>
       </main>
-    );
+      );
+  const article = post.data.category_code !== "itinerary-pdf";
+  const metadata = post.data.metadata as Record<string, unknown>;
+  const formatDay = (value: unknown) => typeof value === "string" ? new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(new Date(`${value}T00:00:00Z`)) : "";
+  const visitInfo = article ? [
+    typeof metadata.region === "string" ? `지역 ${metadata.region}` : "",
+    post.data.category_code === "day-walk" ? `다녀온 날 ${formatDay(metadata.visited_on)}` : "",
+    post.data.category_code === "overnight-trip" ? `여행 기간 ${formatDay(metadata.start_date)}${metadata.end_date ? ` – ${formatDay(metadata.end_date)}` : ""}` : "",
+    post.data.category_code === "food-cafe" ? `${metadata.venue_type === "cafe" ? "카페" : "음식점"}${typeof metadata.place_name === "string" ? ` · ${metadata.place_name}` : ""} · 방문일 ${formatDay(metadata.visited_on)}` : "",
+    post.data.category_code === "stay-review" ? `${typeof metadata.place_name === "string" ? metadata.place_name : "숙소"} · ${formatDay(metadata.check_in)} – ${formatDay(metadata.check_out)}` : "",
+  ].filter(Boolean).join(" · ") : "";
   return (
     <main className="mx-auto w-full max-w-[var(--article-max)] space-y-7 px-5 py-10 md:px-8 md:py-16">
       <Link className="inline-flex min-h-12 items-center underline underline-offset-4" href={`/posts?category=${post.data.category_code}`}>← {CATEGORIES.find((item) => item.code === post.data?.category_code)?.label ?? "여행 기록"} 목록</Link>
-      <header className="space-y-4"><p className="text-muted-foreground">{CATEGORIES.find((item) => item.code === post.data?.category_code)?.label} · {new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(new Date(post.data.published_at))}</p><h1 className="font-serif text-3xl leading-relaxed sm:text-4xl">{post.data.title}</h1>
-        {post.data.category_code !== "itinerary-pdf" && <><p className="text-muted-foreground">{Object.entries(post.data.metadata).filter(([key, value]) => ["region", "visited_on", "start_date", "end_date", "check_in", "check_out", "place_name", "venue_type"].includes(key) && typeof value === "string").map(([key, value]) => `${key === "region" ? "지역" : key === "place_name" ? "장소" : key === "venue_type" ? value === "cafe" ? "카페" : "음식점" : ""} ${value}`).join(" · ")}</p><p className="flex flex-wrap gap-3">{post.data.tags.map((tag) => <Link key={tag} href={`/posts?tag=${encodeURIComponent(tag)}`} className="text-sm underline underline-offset-4">#{tag}</Link>)}</p></>}
+      <header className="space-y-4"><p className="text-muted-foreground">{CATEGORIES.find((item) => item.code === post.data?.category_code)?.label} · 게시일 {new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(new Date(post.data.published_at))}</p><h1 className="font-serif text-3xl leading-relaxed sm:text-4xl">{post.data.title}</h1>
+        {article && <><p className="text-muted-foreground">{visitInfo}</p><p className="flex flex-wrap gap-3">{post.data.tags.map((tag) => <Link key={tag} href={`/posts?tag=${encodeURIComponent(tag)}`} className="text-sm underline underline-offset-4">#{tag}</Link>)}</p></>}
       </header>
       {post.data.cover_asset_id && (
         <PrivateImage

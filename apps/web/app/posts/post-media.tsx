@@ -7,10 +7,12 @@ export function PrivateImage({
   assetId,
   siteId,
   title,
+  className,
 }: {
   assetId: string;
   siteId: string;
   title: string;
+  className?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
@@ -50,11 +52,26 @@ export function PrivateImage({
       width={1600}
       height={1200}
       unoptimized
-      className="h-auto max-h-[70vh] max-w-full rounded object-contain"
+      className={className ?? "h-auto max-h-[70vh] max-w-full rounded object-contain"}
     />
   ) : (
     <p role="status">사진을 여는 중…</p>
   );
+}
+
+export function PdfCover({ assetId, siteId, title }: { assetId: string; siteId: string; title: string }) {
+  const api = useMemo(() => createBrowserTravelApi(), []);
+  const [previewAssetId, setPreviewAssetId] = useState("");
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void api.call("asset.access", { id: assetId, site_id: siteId }).then((asset) => {
+      if (active) setPreviewAssetId(asset.preview_asset_id ?? "");
+    }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [api, assetId, siteId]);
+  if (previewAssetId) return <PrivateImage assetId={previewAssetId} siteId={siteId} title={`${title} 표지`} className="h-full w-full max-h-none rounded-none object-cover" />;
+  return <div className="flex aspect-[3/2] items-center justify-center bg-muted px-4 text-center text-sm text-muted-foreground" role={failed ? "alert" : "status"}>{failed ? "PDF 표지를 불러오지 못했습니다" : "PDF 표지를 여는 중…"}</div>;
 }
 
 export function PostAssetFigures({
