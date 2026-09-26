@@ -27,6 +27,7 @@ export function startMockServer(options: ServerOptions = {}) {
   const nativeFetch = window.fetch.bind(window);
   const engine = createMockEngine({
     ...options,
+    now: options.now ?? (() => new Date().toISOString()),
     origin: window.location.origin,
   });
   const endpoints = [MOCK_API_PATH];

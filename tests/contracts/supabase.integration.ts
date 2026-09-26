@@ -79,3 +79,22 @@ for (const app of ["web", "admin"]) {
     });
   });
 }
+
+describe("SSR transport against the actual Supabase HTTP endpoint", () => {
+  it("reads site and list using server fetch without Mirage", async () => {
+    const { createServerReader } =
+      await import("../../packages/api-client/src/server-transport");
+    const env = createAppEnvironment({
+      root: process.cwd(),
+      app: "web",
+      mode: "supabase",
+    });
+    const reader = createServerReader({
+      baseURL: `${env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/travel-api`,
+    });
+    const site = await reader.getSite();
+    expect(Array.isArray(await reader.listPosts({ site_id: site.id }))).toBe(
+      true,
+    );
+  });
+});

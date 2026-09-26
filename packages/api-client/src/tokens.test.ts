@@ -6,18 +6,14 @@ import {
 import { TravelApiError, parseRetryAfter, shouldRetryQuery } from "./errors";
 it("coalesces imminent session refresh and stops using a signed-out session", async () => {
   const auth = {
-    getSession: vi
-      .fn()
-      .mockResolvedValue({
-        data: { session: { access_token: "old", expires_at: 1 } },
-        error: null,
-      }),
-    refreshSession: vi
-      .fn()
-      .mockResolvedValue({
-        data: { session: { access_token: "new", expires_at: 999 } },
-        error: null,
-      }),
+    getSession: vi.fn().mockResolvedValue({
+      data: { session: { access_token: "old", expires_at: 1 } },
+      error: null,
+    }),
+    refreshSession: vi.fn().mockResolvedValue({
+      data: { session: { access_token: "new", expires_at: 999 } },
+      error: null,
+    }),
   };
   const get = createSessionTokenProvider(auth, () => 1000);
   expect(await Promise.all([get(), get()])).toEqual(["new", "new"]);
