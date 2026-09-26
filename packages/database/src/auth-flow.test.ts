@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleCallback, handleSignOut } from "./auth-flow";
+import { handleCallback, handleSignOut, safeReturnPath } from "./auth-flow";
 
 function client(error: unknown = null) {
   return {
@@ -36,6 +36,27 @@ describe("OAuth callbacks", () => {
     expect(response.headers.get("location")).toBe("http://localhost/");
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
+  it("returns to a same-site post and preserves it on cancellation", async () => {
+    const db = client();
+    const response = await handleCallback(
+      new Request(
+        "http://localhost/auth/callback?code=valid&next=%2Fposts%2Fspring-trip%23comments",
+      ),
+      async () => db,
+    );
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/posts/spring-trip#comments",
+    );
+    const cancelled = await handleCallback(
+      new Request(
+        "http://localhost/auth/callback?error=access_denied&next=%2Fposts%2Fspring-trip%23comments",
+      ),
+      async () => db,
+    );
+    expect(cancelled.headers.get("location")).toBe(
+      "http://localhost/login?error=cancelled&next=%2Fposts%2Fspring-trip%23comments",
+    );
+  });
   it("handles missing, rejected codes and service failure", async () => {
     for (const suffix of ["", "?code=rejected"]) {
       const response = await handleCallback(
@@ -53,6 +74,22 @@ describe("OAuth callbacks", () => {
       },
     );
     expect(response.headers.get("location")).toContain("error=unavailable");
+  });
+});
+
+describe("OAuth return path", () => {
+  it("allows only local post routes", () => {
+    expect(safeReturnPath("/posts/my-trip#comments")).toBe(
+      "/posts/my-trip#comments",
+    );
+    for (const value of [
+      "https://evil.example",
+      "//evil.example",
+      "/admin",
+      "/posts/a/../../admin",
+    ]) {
+      expect(safeReturnPath(value)).toBe("/");
+    }
   });
 });
 
