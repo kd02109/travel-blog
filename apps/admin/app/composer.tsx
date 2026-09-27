@@ -64,6 +64,7 @@ export function Composer({ postId }: { postId?: string }) {
   ]);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -71,6 +72,7 @@ export function Composer({ postId }: { postId?: string }) {
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [latestDraft, setLatestDraft] = useState<PostDraft>();
   const savingRef = useRef(false);
+  const editVersionRef = useRef(0);
   const revisions = useTravelQuery(api, "admin.revisions", { id: postId ?? "00000000-0000-4000-8000-000000000000", limit: 20, offset: 0 }, mutationScope, { enabled: !!postId });
 
   function applyDraft(draft: PostDraft) {
@@ -91,6 +93,7 @@ export function Composer({ postId }: { postId?: string }) {
   }
 
   function markDirty() {
+    editVersionRef.current += 1;
     setDirty(true);
     setSaveError("");
     setAutoSaveBlocked(false);
@@ -131,7 +134,8 @@ export function Composer({ postId }: { postId?: string }) {
       }
     }
     savingRef.current = true;
-    setBusy(true);
+    const editVersionAtStart = editVersionRef.current;
+    setSaving(true);
     setSaveError("");
     setMetadataError("");
     try {
@@ -156,7 +160,8 @@ export function Composer({ postId }: { postId?: string }) {
         setMetadata(saved.draft_content.metadata as Record<string, unknown>);
       }
       setLastSavedAt(saved.updated_at);
-      setDirty(false);
+      // Keep changes made during this request dirty for the next idle save.
+      setDirty(editVersionRef.current !== editVersionAtStart);
       setAutoSaveBlocked(false);
       setSaveError("");
       return true;
@@ -170,7 +175,7 @@ export function Composer({ postId }: { postId?: string }) {
       return false;
     } finally {
       savingRef.current = false;
-      setBusy(false);
+      setSaving(false);
     }
   }, [api, category, coverAssetId, document, metadata, pdfAssetId, post, slug, submitSave, tags, title]);
 
@@ -247,10 +252,10 @@ export function Composer({ postId }: { postId?: string }) {
   }
 
   useEffect(() => {
-    if (!dirty || busy || autoSaveBlocked || !post) return;
-    const timer = setTimeout(() => void saveDraft(), 1200);
+    if (!dirty || busy || saving || autoSaveBlocked || !post) return;
+    const timer = setTimeout(() => void saveDraft(), 1800);
     return () => clearTimeout(timer);
-  }, [autoSaveBlocked, busy, dirty, post, saveDraft]);
+  }, [autoSaveBlocked, busy, dirty, post, saveDraft, saving]);
 
   useEffect(() => {
     if (!dirty || !post) return;
@@ -315,9 +320,9 @@ export function Composer({ postId }: { postId?: string }) {
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12 md:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div><p className="text-muted-foreground">초안 편집</p><h1 className="font-editorial mt-2 text-3xl font-semibold">{post.kind === "pdf" ? "PDF 일정표" : "여행 기록"}</h1></div>
-        <div className="flex flex-wrap gap-2">{post.kind === "article" && <Button variant="outline" onClick={() => setPreview(!preview)}>{preview ? "이어서 쓰기" : "미리보기"}</Button>}<Button variant="outline" disabled={busy} onClick={() => void changeStatus("trashed")}>휴지통</Button>{post.status === "published" && <Button variant="outline" disabled={busy} onClick={() => void changeStatus("private")}>비공개</Button>}{post.status !== "published" && post.status !== "trashed" && <Button disabled={busy} onClick={() => void publish()}>발행</Button>}<Button variant="outline" disabled={busy || !dirty} onClick={() => void saveDraft()}>{busy ? "저장 중…" : "초안 저장"}</Button></div>
+        <div className="flex flex-wrap gap-2">{post.kind === "article" && <Button variant="outline" onClick={() => setPreview(!preview)}>{preview ? "이어서 쓰기" : "미리보기"}</Button>}<Button variant="outline" disabled={busy} onClick={() => void changeStatus("trashed")}>휴지통</Button>{post.status === "published" && <Button variant="outline" disabled={busy} onClick={() => void changeStatus("private")}>비공개</Button>}{post.status !== "published" && post.status !== "trashed" && <Button disabled={busy} onClick={() => void publish()}>발행</Button>}<Button variant="outline" disabled={busy || saving || !dirty} onClick={() => void saveDraft()}>{saving || busy ? "저장 중…" : "초안 저장"}</Button></div>
       </header>
-      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{busy ? "저장 중…" : saveError ? `저장 실패: ${saveError}` : dirty ? "저장되지 않은 변경 사항 · 자동 저장 대기 중" : lastSavedAt ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}` : "저장된 변경 사항 없음"}</p>
+      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">{busy || saving ? "저장 중…" : saveError ? `저장 실패: ${saveError}` : dirty ? "저장되지 않은 변경 사항 · 자동 저장 대기 중" : lastSavedAt ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}` : "저장된 변경 사항 없음"}</p>
       {latestDraft && <aside className="space-y-3 rounded-panel border border-amber-500 p-4" aria-label="버전 충돌 해결">
         <h2 className="font-semibold">최신 저장본과 충돌</h2>
         <p>최신본 v{latestDraft.lock_version} · {new Date(latestDraft.updated_at).toLocaleString("ko-KR")} · 제목: {typeof latestDraft.draft_content.title === "string" ? latestDraft.draft_content.title || "(제목 없음)" : "(제목 없음)"}</p>
@@ -342,7 +347,7 @@ export function Composer({ postId }: { postId?: string }) {
       {message && <p role="status" aria-live="polite">{message}</p>}
       {post.kind === "article" && <section className="space-y-3 rounded-panel border p-4" aria-label="수정 이력"><h2 className="font-semibold">수정 이력</h2>{revisions.data?.length ? <ul className="space-y-2">{revisions.data.map((revision) => <li className="flex flex-wrap items-center justify-between gap-2" key={revision.id}><span>{new Date(revision.created_at).toLocaleString("ko-KR")}</span><Button variant="outline" disabled={busy} onClick={() => void restoreSnapshot(revision.id)}>이 이력 복원</Button></li>)}</ul> : <p className="text-sm text-muted-foreground">저장된 체크포인트 이력이 없습니다. 발행본은 수정 이력으로 보존됩니다.</p>}</section>}
       {post.kind === "article" && <section className="space-y-3 rounded-panel border p-4" aria-label={preview ? "공개 미리보기" : "본문 편집기"}>
-        {preview ? <article className="mx-auto max-w-2xl space-y-5 py-6"><p className="text-sm text-muted-foreground">{CATEGORIES.find((item) => item.code === category)?.label} · {typeof metadata.region === "string" ? metadata.region : "지역 미입력"}</p><h2 className="font-editorial text-3xl font-semibold">{title || "제목을 입력해 주세요"}</h2>{coverAssetId && siteId && <PrivateAssetView assetId={coverAssetId} siteId={siteId} kind="image" title="대표 사진 미리보기" />}<div className="flex flex-wrap gap-2">{tags.map((tag) => <span className="rounded-full bg-stone-100 px-3 py-1 text-sm" key={tag}>#{tag}</span>)}</div><div className="space-y-4">{document.map((block, index) => { const previewBlock = block as { type?: string; props?: Record<string, unknown> }; return previewBlock.type === "image" && typeof previewBlock.props?.asset_id === "string" && siteId ? <PrivateAssetView key={block.id ?? index} assetId={previewBlock.props.asset_id} siteId={siteId} kind="image" title={typeof previewBlock.props.caption === "string" ? previewBlock.props.caption : "본문 사진"} /> : previewBlock.type === "heading" ? <h3 className="font-editorial text-2xl font-semibold" key={block.id ?? index}>{blockText(block)}</h3> : <p className="whitespace-pre-wrap" key={block.id ?? index}>{blockText(block)}</p>; })}</div></article> : <Editor key={`${post.id}-edit`} initialContent={document} editable={!busy} onChange={(nextDocument) => { setDocument(nextDocument); markDirty(); }} onReady={onEditorReady} />}
+        {preview ? <article className="mx-auto max-w-2xl space-y-5 py-6"><p className="text-sm text-muted-foreground">{CATEGORIES.find((item) => item.code === category)?.label} · {typeof metadata.region === "string" ? metadata.region : "지역 미입력"}</p><h2 className="font-editorial text-3xl font-semibold">{title || "제목을 입력해 주세요"}</h2>{coverAssetId && siteId && <PrivateAssetView assetId={coverAssetId} siteId={siteId} kind="image" title="대표 사진 미리보기" />}<div className="flex flex-wrap gap-2">{tags.map((tag) => <span className="rounded-full bg-stone-100 px-3 py-1 text-sm" key={tag}>#{tag}</span>)}</div><div className="space-y-4">{document.map((block, index) => { const previewBlock = block as { type?: string; props?: Record<string, unknown> }; return previewBlock.type === "image" && typeof previewBlock.props?.asset_id === "string" && siteId ? <PrivateAssetView key={block.id ?? index} assetId={previewBlock.props.asset_id} siteId={siteId} kind="image" title={typeof previewBlock.props.caption === "string" ? previewBlock.props.caption : "본문 사진"} /> : previewBlock.type === "heading" ? <h3 className="font-editorial text-2xl font-semibold" key={block.id ?? index}>{blockText(block)}</h3> : <p className="whitespace-pre-wrap" key={block.id ?? index}>{blockText(block)}</p>; })}</div></article> : <Editor key={`${post.id}-edit`} initialContent={document} editable={!busy} onChange={(nextDocument) => { if (JSON.stringify(nextDocument) === JSON.stringify(document)) return; setDocument(nextDocument); markDirty(); }} onReady={onEditorReady} />}
       </section>}
       {post.kind === "article" && preview && <section className="space-y-2 rounded-panel border p-4" aria-label="발행 전 확인"><h2 className="font-semibold">발행 전 확인</h2><ul>{publishChecks.map((check) => <li key={check.label}>{check.valid ? "✓" : "○"} {check.label}</li>)}</ul><p>{publishChecks.every((check) => check.valid) ? "필수 항목이 준비되었습니다. 발행은 별도 확인 후 진행합니다." : "비어 있는 항목을 채우면 발행할 수 있습니다."}</p></section>}
       {siteId && (post.kind === "pdf" ? <MediaUpload key="pdf-upload" siteId={siteId} kindFilter="pdf" onSelectPdf={(assetId) => { setPdfAssetId(assetId); markDirty(); }} /> : <MediaUpload key="image-upload" siteId={siteId} kindFilter="image" onInsertImage={(assetId, caption) => { insertImage?.(assetId, caption); markDirty(); }} onSetCoverImage={(assetId) => { setCoverAssetId(assetId); markDirty(); }} />)}
