@@ -29,7 +29,7 @@ export default function RootLayout({
       lang="ko"
       className={`${bodyFont.variable} ${editorialFont.variable}`}
     >
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <AdminFrame>{children}</AdminFrame>
         </Providers>
