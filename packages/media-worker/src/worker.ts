@@ -4,6 +4,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { createClient } from "@supabase/supabase-js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import sharp from "sharp";
+import { createWorkerFetch, workerApiKeyHeaders } from "./request-auth.ts";
 
 const base = process.env.SUPABASE_URL?.replace(/\/$/, "");
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,9 +14,11 @@ if (!base || !key)
 const MAX_BYTES = 20 * 1024 * 1024;
 const MAX_PIXELS = 40_000_000;
 const MAX_PAGES = 200;
-const headers = { apikey: key, Authorization: `Bearer ${key}` };
+const headers = workerApiKeyHeaders(key);
+const workerFetch = createWorkerFetch(key);
 const supabase = createClient(base, key, {
   auth: { autoRefreshToken: false, persistSession: false },
+  global: { fetch: workerFetch },
 });
 type MediaAsset = {
   id: string;
