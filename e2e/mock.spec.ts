@@ -1,5 +1,14 @@
 import { expect, test } from "@playwright/test";
 const site_id = "10000000-0000-4000-8000-000000000001";
+
+test("mock mode does not bypass administrator login", async ({ page }) => {
+  await page.goto("http://localhost:3012/posts");
+  await expect(page).toHaveURL("http://localhost:3012/login");
+  await expect(
+    page.getByRole("button", { name: "카카오 로그인" }),
+  ).toBeVisible();
+});
+
 for (const port of [3010, 3012]) {
   test(`Mirage intercepts native fetch, Axios and BFF on ${port}`, async ({
     page,

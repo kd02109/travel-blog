@@ -24,6 +24,50 @@ describe("OAuth callbacks", () => {
     );
     expect(create).not.toHaveBeenCalled();
   });
+  it.each([
+    ["server_error", "unavailable"],
+    ["invalid_client", "oauth_setup"],
+    ["over_request_rate_limit", "oauth_rate_limit"],
+    ["flow_state_expired", "expired"],
+    ["unknown_error", "oauth"],
+  ])("maps provider error %s to safe guidance", async (error, expected) => {
+    const create = vi.fn();
+    const response = await handleCallback(
+      new Request(
+        `http://localhost/auth/callback?error=${error}&error_description=secret-provider-detail`,
+      ),
+      create,
+    );
+    expect(response.headers.get("location")).toBe(
+      `http://localhost/login?error=${expected}`,
+    );
+    expect(response.headers.get("location")).not.toContain(
+      "secret-provider-detail",
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+  it("uses a known Supabase error code without exposing provider text", async () => {
+    const response = await handleCallback(
+      new Request(
+        "http://localhost/auth/callback?error=server_error&error_code=provider_disabled&error_description=secret-provider-detail",
+      ),
+      vi.fn(),
+    );
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/login?error=oauth_setup",
+    );
+  });
+  it("does not mistake a denied account for a cancelled Kakao login", async () => {
+    const response = await handleCallback(
+      new Request(
+        "http://localhost/auth/callback?error=access_denied&error_code=user_banned&error_description=private-detail",
+      ),
+      vi.fn(),
+    );
+    expect(response.headers.get("location")).toBe(
+      "http://localhost/login?error=oauth_account",
+    );
+  });
   it("exchanges the code and drops external next destinations", async () => {
     const db = client();
     const response = await handleCallback(
@@ -58,15 +102,23 @@ describe("OAuth callbacks", () => {
     );
   });
   it("handles missing, rejected codes and service failure", async () => {
-    for (const suffix of ["", "?code=rejected"]) {
+    for (const [suffix, expected] of [
+      ["", "oauth"],
+      ["?code=rejected", "oauth_exchange"],
+    ]) {
       const response = await handleCallback(
         new Request(`http://localhost/auth/callback${suffix}`),
         async () => client(new Error("sensitive")),
       );
       expect(response.headers.get("location")).toBe(
-        "http://localhost/login?error=oauth",
+        `http://localhost/login?error=${expected}`,
       );
     }
+    const expired = await handleCallback(
+      new Request("http://localhost/auth/callback?code=x"),
+      async () => client({ code: "flow_state_expired" }),
+    );
+    expect(expired.headers.get("location")).toContain("error=expired");
     const response = await handleCallback(
       new Request("http://localhost/auth/callback?code=x"),
       async () => {
