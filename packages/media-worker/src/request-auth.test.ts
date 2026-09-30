@@ -19,7 +19,10 @@ describe("worker API key headers", () => {
     const fetchImplementation = vi.fn<typeof fetch>(
       async () => new Response("ok"),
     );
-    const workerFetch = createWorkerFetch("sb_secret_example", fetchImplementation);
+    const workerFetch = createWorkerFetch(
+      "sb_secret_example",
+      fetchImplementation,
+    );
 
     await workerFetch("https://example.supabase.co/rest/v1/rpc/example", {
       headers: { Authorization: "Bearer sb_secret_example" },
