@@ -35,7 +35,18 @@ pnpm test:supabase
 pnpm dev:supabase
 ```
 
-공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 기본 예제 URL은 기존 `supabase/deployment.json`의 프로젝트입니다. 다른 개발 프로젝트를 사용하려면 변경하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다.
+루트의 `pnpm dev:supabase`는 두 앱을 함께 실행합니다. 블로그는 http://localhost:3000, 관리자는 http://localhost:3002 에서 확인할 수 있으며 소스 변경이 바로 반영됩니다.
+
+앱 하나만 실행하려면 루트에서 다음 명령을 사용하세요.
+
+```sh
+pnpm --filter web dev:supabase
+pnpm --filter admin dev:supabase
+```
+
+각 앱 디렉터리(`apps/web`, `apps/admin`)에서는 `pnpm dev:supabase`로 실행할 수 있습니다. `pnpm start`는 이전 운영 빌드를 실행하므로 개발 중에는 `dev:supabase`를 사용하세요. 실제 연결의 운영 결과를 확인하려면 `pnpm build:supabase` 후 `pnpm start:supabase`를 실행하세요.
+
+공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 예제 파일은 프로젝트 URL을 비워 두므로 `supabase/deployment.json`에서 복사하거나 사용할 개발 프로젝트 URL을 입력하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다.
 
 우선순위는 **셸 환경 변수 > 앱별 profile > 루트 profile**입니다. 값은 `$VARIABLE` 참조 없이 직접 입력하세요. 선택한 실행 명령은 `NEXT_PUBLIC_API_MOCKING` 값을 항상 덮어쓰므로 `.env.local`이나 셸에 남은 플래그 때문에 모드가 뒤바뀌지 않습니다. 기존 `.env.local`의 Supabase 연결 값은 profile 파일로 옮겨 주세요. Next는 그 외 일반 환경 변수를 기존 방식으로 읽습니다.
 
