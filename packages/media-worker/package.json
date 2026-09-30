@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node --experimental-strip-types src/worker.ts",
     "process:once": "MEDIA_WORKER_ONCE=1 node --experimental-strip-types src/worker.ts",
+    "docker:build": "docker build -f Dockerfile -t travel-media-worker ../..",
+    "docker:run": "docker run --env-file .env.local --restart unless-stopped --memory=512m --cpus=1 travel-media-worker",
     "lint": "eslint . --max-warnings 0",
     "check-types": "tsc --noEmit"
   },
