@@ -15,7 +15,9 @@ const editorialFont = Noto_Serif_KR({
   display: "swap",
 });
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  ),
   title: "오늘도 함께 걷다",
   description: "세상을 여행하고 삶을 기록합니다.",
   alternates: { canonical: "/" },
@@ -39,7 +41,7 @@ export default function RootLayout({
       lang="ko"
       className={`${bodyFont.variable} ${editorialFont.variable}`}
     >
-      <body>
+      <body suppressHydrationWarning>
         <Providers>
           <SiteFrame>{children}</SiteFrame>
         </Providers>
