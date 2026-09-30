@@ -15,8 +15,19 @@ for (const port of [3000, 3002]) {
     await expect(page.locator("body")).not.toContainText("private-detail");
     await page.goto(`${origin}/auth/callback`);
     await expect(alert).toContainText("완료하지 못했습니다");
+    await page.goto(
+      `${origin}/auth/callback?error=invalid_client&error_description=private-detail`,
+    );
+    await expect(page).toHaveURL(`${origin}/login?error=oauth_setup`);
+    await expect(alert).toContainText("로그인 설정 확인");
+    await expect(page.locator("body")).not.toContainText("private-detail");
+    await page.goto(`${origin}/auth/callback?error=over_request_rate_limit`);
+    await expect(alert).toContainText("요청이 너무 많습니다");
     await page.goto(`${origin}/login?error=expired`);
     await expect(alert).toContainText("만료되었습니다");
+    await expect(
+      page.getByRole("button", { name: "카카오 로그인" }),
+    ).toBeVisible();
     await page.goto(`${origin}/login?error=__proto__`);
     await expect(alert).toContainText("완료하지 못했습니다");
     expect((await request.get(`${origin}/auth/signout`)).status()).toBe(405);
@@ -27,16 +38,28 @@ for (const port of [3000, 3002]) {
         })
       ).status(),
     ).toBe(403);
-    await page.getByRole("button", { name: "현재 계정 로그아웃" }).click();
-    // This suite deliberately runs without Supabase credentials.
-    await expect(alert).toContainText("로그아웃하지 못했습니다");
+    if (port === 3002) {
+      await expect(
+        page.getByRole("button", { name: "현재 계정 로그아웃" }),
+      ).toHaveCount(0);
+      await page.goto(`${origin}/login`);
+      await expect(alert).toContainText("인증 서비스에 연결하지 못했습니다");
+      await page.getByRole("button", { name: "카카오 로그인" }).click();
+      // This suite deliberately runs without Supabase credentials.
+      await expect(alert).toHaveCount(1);
+      await expect(alert).toContainText("로그인 설정 확인");
+    } else {
+      await page.getByRole("button", { name: "현재 계정 로그아웃" }).click();
+      // This suite deliberately runs without Supabase credentials.
+      await expect(alert).toContainText("로그아웃하지 못했습니다");
+    }
   });
 }
 
 test("forbidden page offers recovery", async ({ page }) => {
   await page.goto("http://localhost:3002/forbidden");
-  await expect(page.getByRole("heading")).toHaveText("관리 권한이 없습니다.");
+  await expect(page.getByRole("heading")).toHaveText("관리 권한이 없습니다");
   await expect(
-    page.getByRole("button", { name: "현재 계정 로그아웃" }),
+    page.getByRole("button", { name: "다른 계정으로 로그인" }),
   ).toBeVisible();
 });

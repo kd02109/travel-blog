@@ -8,7 +8,7 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm --filter web exec next dev --port 3000",
-      url: "http://localhost:3000",
+      url: "http://localhost:3000/login",
       reuseExistingServer: false,
       env: {
         NEXT_PUBLIC_API_MOCKING: "disabled",
@@ -20,7 +20,7 @@ export default defineConfig({
     },
     {
       command: "pnpm --filter admin exec next dev --port 3002",
-      url: "http://localhost:3002",
+      url: "http://localhost:3002/login",
       reuseExistingServer: false,
       env: {
         NEXT_PUBLIC_API_MOCKING: "disabled",
