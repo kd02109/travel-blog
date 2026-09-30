@@ -23,6 +23,8 @@
     "start:supabase": "node scripts/run-mode.mjs supabase start",
     "media:worker": "pnpm --filter @repo/media-worker start",
     "media:worker:once": "pnpm --filter @repo/media-worker process:once",
+    "media:worker:docker:build": "pnpm --filter @repo/media-worker docker:build",
+    "media:worker:docker:run": "pnpm --filter @repo/media-worker docker:run",
     "test:mock": "pnpm test && pnpm test:e2e:mock",
     "test:supabase": "node scripts/test-supabase.mjs",
     "test:auth:kakao": "node scripts/test-kakao.mjs",

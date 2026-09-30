@@ -4,13 +4,19 @@ TypeScript/Node.js worker는 Supabase Storage의 private 원본을 읽고, 이�
 
 ## 실행
 
-필수 환경변수는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`다. 지속 실행은 `pnpm --filter @repo/media-worker start`, 한 건 처리 확인은 `pnpm --filter @repo/media-worker process:once`다. 저장소 루트에서 Docker image를 빌드한다.
+필수 환경변수는 `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`다. 두 번째 변수에는 기존 `service_role` JWT 또는 새 `sb_secret_...` 키를 사용할 수 있다. 새 secret 키는 JWT가 아니므로 Worker가 `apikey` 헤더로만 보내며, `Authorization: Bearer`에는 사용하지 않는다. Docker 실행용 환경 파일은 `packages/media-worker/.env.local`에 두며, Docker 빌드 컨텍스트에서 제외되고 컨테이너 실행 때만 전달된다.
 
 ```sh
-docker build -f packages/media-worker/Dockerfile -t travel-media-worker .
-docker run --restart unless-stopped --memory=512m --cpus=1 \
-  -e SUPABASE_URL -e SUPABASE_SERVICE_ROLE_KEY travel-media-worker
+# 저장소 루트에서 실행
+pnpm media:worker:docker:build
+pnpm media:worker:docker:run
+남은 나머지 내역도 커밋을 나누어서 진행해줄 수 있을까?
+# Docker 없이 로컬 Node.js로 실행할 때
+pnpm media:worker
+pnpm media:worker:once
 ```
+
+패키지 디렉터리에서 직접 실행하려면 `pnpm docker:build`, `pnpm docker:run`을 사용한다. 실행 스크립트는 `travel-media-worker` 이미지를 사용하며, 같은 환경 파일을 사용하는 컨테이너를 이미 실행 중이면 Docker가 중복 실행을 거부할 수 있다.
 
 호스트의 컨테이너 스케줄러가 상시 실행과 재시작을 관리하고, worker는 비어 있는 큐에서 5초, 연결 오류에서는 15초 쉬며 다시 조회한다. 작업 claim은 DB의 5분 lease와 `FOR UPDATE SKIP LOCKED`를 사용한다. lease가 만료되면 다음 worker가 회수하고, SQL이 실패를 최대 5회까지 지수 간격으로 재시도한다. 요청은 30초에 timeout한다. 파일은 20MB, 이미지 디코딩은 40MP, PDF는 200쪽으로 제한한다. 런타임 heap은 384MB, 컨테이너 memory는 512MB다.
 
