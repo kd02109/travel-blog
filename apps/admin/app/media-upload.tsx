@@ -32,6 +32,59 @@ function pause(ms: number, signal: AbortSignal) {
   });
 }
 
+/** Upload an editor-dropped image through the same asset lifecycle as the media panel. */
+export async function uploadEditorImage(
+  siteId: string,
+  file: File,
+): Promise<string> {
+  const api = createBrowserTravelApi();
+  const created = await api.call("asset.create", {
+    site_id: siteId,
+    kind: "image",
+  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open("PUT", created.upload_url);
+      request.setRequestHeader("Content-Type", file.type);
+      request.setRequestHeader("x-upsert", "false");
+      request.onload = () =>
+        request.status >= 200 && request.status < 300
+          ? resolve()
+          : reject(
+              new Error(`이미지 업로드에 실패했습니다 (${request.status}).`),
+            );
+      request.onerror = () =>
+        reject(new Error("네트워크 연결을 확인해 주세요."));
+      request.send(file);
+    });
+    let result = await api.mutate("asset.complete", {
+      id: created.id,
+      site_id: siteId,
+    });
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (result.state === "processing" && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      result = await api.mutate("asset.complete", {
+        id: created.id,
+        site_id: siteId,
+      });
+    }
+    if (result.state !== "ready")
+      throw new Error(
+        result.state === "failed"
+          ? "이미지 처리에 실패했습니다. 다시 시도해 주세요."
+          : "이미지 처리가 오래 걸리고 있습니다. 다시 확인해 주세요.",
+      );
+    return created.id;
+  } catch (error) {
+    await api
+      .mutate("asset.cancel", { id: created.id, site_id: siteId })
+      .catch(() => undefined);
+    throw error;
+  }
+}
+
 export function MediaUpload({
   siteId,
   onInsertImage,
@@ -200,31 +253,35 @@ export function MediaUpload({
     >
       <h2 className="text-lg font-semibold">사진과 PDF</h2>
       <div className="flex flex-wrap gap-3">
-        {kindFilter !== "pdf" && <label className="cursor-pointer rounded border px-4 py-2">
-          사진 올리기
-          <input
-            className="sr-only"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            multiple
-            onChange={(event) => {
-              addFiles(event.currentTarget.files, "image");
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>}
-        {kindFilter !== "image" && <label className="cursor-pointer rounded border px-4 py-2">
-          PDF 올리기
-          <input
-            className="sr-only"
-            type="file"
-            accept="application/pdf"
-            onChange={(event) => {
-              addFiles(event.currentTarget.files, "pdf");
-              event.currentTarget.value = "";
-            }}
-          />
-        </label>}
+        {kindFilter !== "pdf" && (
+          <label className="cursor-pointer rounded border px-4 py-2">
+            사진 올리기
+            <input
+              className="sr-only"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              onChange={(event) => {
+                addFiles(event.currentTarget.files, "image");
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        )}
+        {kindFilter !== "image" && (
+          <label className="cursor-pointer rounded border px-4 py-2">
+            PDF 올리기
+            <input
+              className="sr-only"
+              type="file"
+              accept="application/pdf"
+              onChange={(event) => {
+                addFiles(event.currentTarget.files, "pdf");
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        )}
       </div>
       <ul className="space-y-4">
         {items.map((item) => (
