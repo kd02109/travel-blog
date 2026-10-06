@@ -15,6 +15,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -30,13 +31,16 @@ import {
   getFormattingToolbarItems,
 } from "@blocknote/react";
 import {
+  dragPairSharePct,
   dragImageLayout,
+  firstPairSharePct,
   imageAspectRatio,
   imagePairState,
   imagePointerDelta,
   imagePositionPct,
   imageWidthPct,
   minImageWidthPct,
+  minPairSharePct,
   type ImageDragMode,
   type ImageLayoutMode,
   type ImagePercentLayout,
@@ -107,6 +111,12 @@ const ImagePreviewContext = createContext<
       renderPreview?: (assetId: string) => ReactNode;
       editable: boolean;
       documentVersion: number;
+      pairDrafts: Record<string, number>;
+      setPairDraft: (
+        blockId: string,
+        partnerId: string,
+        sharePct: number | null,
+      ) => void;
     }
   | undefined
 >(undefined);
@@ -120,44 +130,86 @@ type ImagePointerSession = {
   start: ImagePercentLayout;
   mode: ImageDragMode;
   layout: ImageLayoutMode;
+  partnerId?: string;
 };
 
 function AssetImage({
+  blockId,
   assetId,
   caption,
   width,
   align,
   widthPct,
   positionPct,
+  pairSharePct,
   layout,
   onCaptionChange,
   onLayoutChange,
+  onPairShareChange,
   onPairToggle,
   getPairState,
 }: {
+  blockId: string;
   assetId: string;
   caption: string;
   width: "small" | "medium" | "large";
   align: "left" | "center" | "right";
   widthPct: number;
   positionPct: number;
+  pairSharePct: number;
   layout: "single" | "pair";
   onCaptionChange: (caption: string) => void;
   onLayoutChange: (layout: ImagePercentLayout) => void;
+  onPairShareChange: (sharePct: number) => boolean;
   onPairToggle: () => void;
-  getPairState: () => { canPair: boolean; paired: boolean };
+  getPairState: () => {
+    canPair: boolean;
+    paired: boolean;
+    partnerId?: string;
+    partnerWidthPct?: number;
+    partnerSharePct?: number;
+    side?: "first" | "second";
+  };
 }) {
-  const { renderPreview, editable = true } =
-    useContext(ImagePreviewContext) ?? {};
-  const { canPair, paired } = getPairState();
+  const {
+    renderPreview,
+    editable = true,
+    documentVersion,
+    pairDrafts = {},
+    setPairDraft,
+  } = useContext(ImagePreviewContext) ?? {};
+  const {
+    canPair,
+    paired,
+    partnerId,
+    partnerWidthPct = 0,
+    partnerSharePct = 0,
+    side,
+  } = getPairState();
   const hasPairSetting = paired || layout === "pair";
   const activeLayout: ImageLayoutMode = paired ? "pair" : "single";
+  const firstSharePct = firstPairSharePct(
+    side === "first" ? pairSharePct : partnerSharePct,
+    side === "first" ? partnerSharePct : pairSharePct,
+    side === "first" ? widthPct : partnerWidthPct,
+    side === "first" ? partnerWidthPct : widthPct,
+  );
+  const preferredPairSharePct =
+    pairDrafts[blockId] ??
+    (side === "first" ? firstSharePct : 100 - firstSharePct);
   const slotRef = useRef<HTMLDivElement>(null);
   const pointerSession = useRef<ImagePointerSession | null>(null);
   const [draftLayout, setDraftLayout] = useState<ImagePercentLayout | null>(
     null,
   );
   const [containerWidth, setContainerWidth] = useState(0);
+  const [rowWidth, setRowWidth] = useState(0);
+  const minPairShare = minPairSharePct(rowWidth);
+  const ownPairSharePct = Math.min(
+    100 - minPairShare,
+    Math.max(minPairShare, preferredPairSharePct),
+  );
+  const pairRowStacked = paired && rowWidth > 0 && rowWidth < 208;
   const hintId = useId();
   const hasCustomLayout =
     Number.isFinite(widthPct) &&
@@ -171,6 +223,40 @@ function AssetImage({
     imagePositionPct(hasCustomLayout ? positionPct : -1, align);
   const displayedWidth =
     draftLayout?.widthPct ?? (hasCustomLayout ? widthPct : null);
+
+  useLayoutEffect(() => {
+    const outer = slotRef.current?.closest<HTMLElement>(".bn-block-outer");
+    if (!outer) return;
+    if (paired) outer.style.setProperty("--pair-share", `${ownPairSharePct}%`);
+    else outer.style.removeProperty("--pair-share");
+    return () => {
+      outer.style.removeProperty("--pair-share");
+    };
+  }, [documentVersion, ownPairSharePct, paired]);
+
+  useEffect(() => {
+    const draftShare = pairDrafts[blockId];
+    if (
+      draftShare === undefined ||
+      pointerSession.current ||
+      !partnerId ||
+      pairSharePct !== draftShare ||
+      partnerSharePct !== pairDrafts[partnerId]
+    )
+      return;
+    const timer = window.setTimeout(
+      () => setPairDraft?.(blockId, partnerId, null),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [
+    blockId,
+    pairDrafts,
+    pairSharePct,
+    partnerId,
+    partnerSharePct,
+    setPairDraft,
+  ]);
 
   const readLayout = () => {
     const containerWidth = slotRef.current?.getBoundingClientRect().width ?? 0;
@@ -198,6 +284,7 @@ function AssetImage({
     event: ReactPointerEvent<HTMLElement>,
   ) => {
     if (!editable || pointerSession.current) return;
+    if (paired && (mode === "move" || !partnerId || pairRowStacked)) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     if (
       mode === "move" &&
@@ -205,8 +292,13 @@ function AssetImage({
       event.target.closest("button, input, a, textarea")
     )
       return;
-    const current = readLayout();
-    if (!current) return;
+    const current = paired ? null : readLayout();
+    const rowWidth = paired
+      ? (slotRef.current
+          ?.closest<HTMLElement>(".bn-block-group")
+          ?.getBoundingClientRect().width ?? 0)
+      : 0;
+    if (!current && rowWidth <= 0) return;
     const image = slotRef.current?.querySelector("img");
     pointerSession.current = {
       pointerId: event.pointerId,
@@ -216,10 +308,13 @@ function AssetImage({
         image?.naturalWidth ?? 0,
         image?.naturalHeight ?? 0,
       ),
-      containerWidth: current.containerWidth,
-      start: current.layout,
+      containerWidth: paired ? rowWidth : current!.containerWidth,
+      start: paired
+        ? { widthPct: ownPairSharePct, positionPct: 0 }
+        : current!.layout,
       mode,
       layout: activeLayout,
+      partnerId: paired ? partnerId : undefined,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -229,6 +324,23 @@ function AssetImage({
   const moveDrag = (event: ReactPointerEvent<HTMLElement>) => {
     const session = pointerSession.current;
     if (!session || session.pointerId !== event.pointerId) return;
+    if (session.layout === "pair" && session.partnerId) {
+      const nextShare = dragPairSharePct(
+        session.start.widthPct,
+        session.containerWidth,
+        imagePointerDelta(
+          session.mode,
+          event.clientX - session.startX,
+          event.clientY - session.startY,
+          session.aspectRatio,
+        ),
+        session.mode === "resize-left" ? "left" : "right",
+      );
+      setPairDraft?.(blockId, session.partnerId, nextShare);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     const next = dragImageLayout(
       session.start,
       session.containerWidth,
@@ -259,6 +371,24 @@ function AssetImage({
       event.clientY - session.startY,
       session.aspectRatio,
     );
+    if (session.layout === "pair" && session.partnerId) {
+      const nextShare = dragPairSharePct(
+        session.start.widthPct,
+        session.containerWidth,
+        delta,
+        session.mode === "resize-left" ? "left" : "right",
+      );
+      if (
+        Math.abs(delta) >= 2 &&
+        nextShare !== session.start.widthPct &&
+        onPairShareChange(nextShare)
+      ) {
+        setPairDraft?.(blockId, session.partnerId, nextShare);
+      } else setPairDraft?.(blockId, session.partnerId, null);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
     if (Math.abs(delta) >= 2) {
       const next = dragImageLayout(
         session.start,
@@ -278,18 +408,25 @@ function AssetImage({
   };
 
   const cancelDrag = (event: ReactPointerEvent<HTMLElement>) => {
-    if (pointerSession.current?.pointerId !== event.pointerId) return;
+    const session = pointerSession.current;
+    if (session?.pointerId !== event.pointerId) return;
     pointerSession.current = null;
     setDraftLayout(null);
+    if (session.partnerId) setPairDraft?.(blockId, session.partnerId, null);
   };
 
   useEffect(() => {
     const slot = slotRef.current;
     if (!slot || typeof ResizeObserver === "undefined") return;
+    const row = slot.closest<HTMLElement>(".bn-block-group");
     let previousWidth = slot.getBoundingClientRect().width;
     const observer = new ResizeObserver(() => {
       const nextWidth = slot.getBoundingClientRect().width;
-      if (Math.abs(nextWidth - previousWidth) > 1 && pointerSession.current) {
+      setRowWidth(row?.getBoundingClientRect().width ?? 0);
+      if (
+        Math.abs(nextWidth - previousWidth) > 1 &&
+        pointerSession.current?.layout === "single"
+      ) {
         pointerSession.current = null;
         setDraftLayout(null);
       }
@@ -297,13 +434,14 @@ function AssetImage({
       setContainerWidth(nextWidth);
     });
     observer.observe(slot);
+    if (row) observer.observe(row);
     return () => observer.disconnect();
   }, []);
 
   const changePositionWithKeyboard = (
     event: ReactKeyboardEvent<HTMLElement>,
   ) => {
-    if (!editable || event.target !== event.currentTarget) return;
+    if (!editable || paired || event.target !== event.currentTarget) return;
     const current = readLayout();
     if (!current) return;
     const step = event.shiftKey ? 10 : 5;
@@ -328,7 +466,7 @@ function AssetImage({
     edge: "left" | "right",
     event: ReactKeyboardEvent<HTMLElement>,
   ) => {
-    if (!editable) return;
+    if (!editable || pairRowStacked) return;
     const current = readLayout();
     if (!current) return;
     const outward = edge === "left" ? -1 : 1;
@@ -342,6 +480,21 @@ function AssetImage({
     else return;
     event.preventDefault();
     event.stopPropagation();
+    if (paired) {
+      const rowWidth =
+        slotRef.current
+          ?.closest<HTMLElement>(".bn-block-group")
+          ?.getBoundingClientRect().width ?? 0;
+      if (rowWidth <= 0) return;
+      const nextShare = dragPairSharePct(
+        ownPairSharePct,
+        rowWidth,
+        rowWidth * (event.shiftKey ? 0.1 : 0.05) * direction,
+        edge,
+      );
+      if (nextShare !== ownPairSharePct) onPairShareChange(nextShare);
+      return;
+    }
     const next = dragImageLayout(
       current.layout,
       current.containerWidth,
@@ -362,9 +515,13 @@ function AssetImage({
         className="writer-image"
         data-image-width={width}
         data-image-layout={activeLayout}
-        data-image-dragging={draftLayout ? "true" : undefined}
+        data-image-pair-side={paired ? side : undefined}
+        data-image-row-stacked={pairRowStacked ? "true" : undefined}
+        data-image-dragging={
+          draftLayout || pairDrafts[blockId] !== undefined ? "true" : undefined
+        }
         style={
-          paired && !hasCustomLayout && !draftLayout
+          paired
             ? undefined
             : {
                 width:
@@ -378,7 +535,7 @@ function AssetImage({
           <div className="writer-image-toolbar" aria-label="사진 배치 설정">
             <span className="writer-image-hint" id={hintId}>
               {paired
-                ? "사진을 끌어 열 안에서 이동 · 모서리를 끌어 크기 조절"
+                ? "모서리를 끌어 두 사진의 열 너비 조절"
                 : "사진을 끌어 위치 이동 · 모서리를 끌어 크기 조절"}
             </span>
             <button
@@ -409,13 +566,15 @@ function AssetImage({
         <div className="writer-image-media-wrap">
           <div
             className="writer-image-media"
-            role={editable ? "slider" : undefined}
-            aria-label={editable ? "사진 가로 위치" : undefined}
-            aria-describedby={editable ? hintId : undefined}
-            aria-valuemin={editable ? 0 : undefined}
-            aria-valuemax={editable ? 100 : undefined}
-            aria-valuenow={editable ? Math.round(displayedPosition) : undefined}
-            tabIndex={editable ? 0 : undefined}
+            role={editable && !paired ? "slider" : undefined}
+            aria-label={editable && !paired ? "사진 가로 위치" : undefined}
+            aria-describedby={editable && !paired ? hintId : undefined}
+            aria-valuemin={editable && !paired ? 0 : undefined}
+            aria-valuemax={editable && !paired ? 100 : undefined}
+            aria-valuenow={
+              editable && !paired ? Math.round(displayedPosition) : undefined
+            }
+            tabIndex={editable && !paired ? 0 : undefined}
             onPointerDown={(event) => beginDrag("move", event)}
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
@@ -440,20 +599,32 @@ function AssetImage({
                   className={`writer-image-resize-handle writer-image-resize-handle-${edge}`}
                   role="slider"
                   tabIndex={0}
-                  aria-label={`사진 ${edge === "left" ? "왼쪽" : "오른쪽"} 모서리에서 폭 조절`}
+                  aria-label={
+                    paired
+                      ? `사진 ${edge === "left" ? "왼쪽" : "오른쪽"} 모서리에서 열 너비 조절`
+                      : `사진 ${edge === "left" ? "왼쪽" : "오른쪽"} 모서리에서 폭 조절`
+                  }
                   aria-describedby={hintId}
-                  aria-valuemin={Math.ceil(
-                    minImageWidthPct(containerWidth, activeLayout),
+                  aria-valuemin={Math.floor(
+                    paired
+                      ? minPairSharePct(rowWidth)
+                      : minImageWidthPct(containerWidth, activeLayout),
                   )}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(
-                    imageWidthPct(
-                      displayedWidth ?? 0,
-                      width,
-                      containerWidth,
-                      activeLayout,
-                    ),
-                  )}
+                  aria-valuemax={
+                    paired ? 100 - Math.floor(minPairSharePct(rowWidth)) : 100
+                  }
+                  aria-valuenow={
+                    paired
+                      ? Math.round(ownPairSharePct)
+                      : Math.round(
+                          imageWidthPct(
+                            displayedWidth ?? 0,
+                            width,
+                            containerWidth,
+                            activeLayout,
+                          ),
+                        )
+                  }
                   onPointerDown={(event) =>
                     beginDrag(
                       edge === "left" ? "resize-left" : "resize-right",
@@ -506,6 +677,7 @@ const assetImage = createReactBlockSpec(
       // Sentinels keep older drafts on their original width and alignment.
       width_pct: { default: 0 },
       position_pct: { default: -1 },
+      pair_share_pct: { default: 0 },
       layout: {
         default: "single" as const,
         values: ["single", "pair"] as const,
@@ -517,18 +689,34 @@ const assetImage = createReactBlockSpec(
     render: ({ block, editor }) => {
       return (
         <AssetImage
+          blockId={block.id}
           assetId={block.props.asset_id}
           caption={block.props.caption}
           width={block.props.width}
           align={block.props.align}
           widthPct={block.props.width_pct}
           positionPct={block.props.position_pct}
+          pairSharePct={block.props.pair_share_pct}
           layout={block.props.layout}
           getPairState={() => {
-            const state = imagePairState(editor.document, block.id);
+            const blocks = editor.document;
+            const state = imagePairState(blocks, block.id);
+            const partner = blocks[state.partnerIndex];
+            const index = blocks.findIndex((item) => item.id === block.id);
             return {
               paired: state.partnerIndex >= 0,
               canPair: state.canPair,
+              partnerId: partner?.id,
+              partnerWidthPct:
+                partner?.type === "image" ? partner.props.width_pct : 0,
+              partnerSharePct:
+                partner?.type === "image" ? partner.props.pair_share_pct : 0,
+              side:
+                state.partnerIndex < 0
+                  ? undefined
+                  : index < state.partnerIndex
+                    ? ("first" as const)
+                    : ("second" as const),
             };
           }}
           onCaptionChange={(caption) =>
@@ -539,6 +727,17 @@ const assetImage = createReactBlockSpec(
               props: { width_pct: widthPct, position_pct: positionPct },
             })
           }
+          onPairShareChange={(sharePct) => {
+            const blocks = editor.document;
+            const { partnerIndex } = imagePairState(blocks, block.id);
+            const partner = blocks[partnerIndex];
+            if (partner?.type !== "image") return false;
+            editor.updateBlock(block, { props: { pair_share_pct: sharePct } });
+            editor.updateBlock(partner, {
+              props: { pair_share_pct: Math.round((100 - sharePct) * 10) / 10 },
+            });
+            return true;
+          }}
           onPairToggle={() => {
             const blocks = editor.document;
             const { partnerIndex, canPair, next } = imagePairState(
@@ -556,8 +755,12 @@ const assetImage = createReactBlockSpec(
             ) {
               editor.updateBlock(block, { props: { layout: "single" } });
             } else if (canPair) {
-              editor.updateBlock(block, { props: { layout: "pair" } });
-              editor.updateBlock(next!, { props: { layout: "pair" } });
+              editor.updateBlock(block, {
+                props: { layout: "pair", pair_share_pct: 0 },
+              });
+              editor.updateBlock(next!, {
+                props: { layout: "pair", pair_share_pct: 0 },
+              });
             }
           }}
         />
@@ -598,6 +801,23 @@ export function WriterEditor({
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(0);
   const [documentVersion, setDocumentVersion] = useState(0);
+  const [pairDrafts, setPairDrafts] = useState<Record<string, number>>({});
+  const setPairDraft = useCallback(
+    (blockId: string, partnerId: string, sharePct: number | null) => {
+      setPairDrafts((previous) => {
+        const next = { ...previous };
+        if (sharePct === null) {
+          delete next[blockId];
+          delete next[partnerId];
+        } else {
+          next[blockId] = sharePct;
+          next[partnerId] = Math.round((100 - sharePct) * 10) / 10;
+        }
+        return next;
+      });
+    },
+    [],
+  );
   const editor = useCreateBlockNote({
     schema,
     dictionary: ko,
@@ -705,7 +925,13 @@ export function WriterEditor({
 
   return (
     <ImagePreviewContext.Provider
-      value={{ renderPreview: imageRenderer, editable, documentVersion }}
+      value={{
+        renderPreview: imageRenderer,
+        editable,
+        documentVersion,
+        pairDrafts,
+        setPairDraft,
+      }}
     >
       <div
         className="writer-editor space-y-2"

@@ -190,10 +190,14 @@ export function renderBlocks(
       throw new ApiError(422, "invalid_blocks");
     }
     let html = "";
-    let pairedImage = "";
+    let pairedImage: {
+      html: string;
+      sharePct: number | null;
+      widthWeight: number;
+    } | null = null;
     const flushPair = () => {
-      html += pairedImage;
-      pairedImage = "";
+      if (pairedImage) html += pairedImage.html;
+      pairedImage = null;
     };
     for (const b of items) {
       if (!b || typeof b !== "object" || ++nodes > 2000) {
@@ -201,6 +205,8 @@ export function renderBlocks(
       }
       let out = "";
       let pair = false;
+      let pairSharePct: number | null = null;
+      let pairWidthWeight = 100;
       const content = () => inline(b.content ?? []);
       switch (b.type) {
         case "paragraph":
@@ -244,6 +250,15 @@ export function renderBlocks(
           const layout = b.props?.layout === "pair" ? "pair" : "single";
           const widthPct = b.props?.width_pct;
           const positionPct = b.props?.position_pct;
+          const sharePct = b.props?.pair_share_pct;
+          if (
+            typeof sharePct === "number" && Number.isFinite(sharePct) &&
+            sharePct >= 20 && sharePct <= 80
+          ) pairSharePct = sharePct;
+          if (
+            typeof widthPct === "number" && Number.isFinite(widthPct) &&
+            widthPct >= 20 && widthPct <= 100
+          ) pairWidthWeight = widthPct;
           const customLayout =
             typeof widthPct === "number" && Number.isFinite(widthPct) &&
             widthPct >= 20 && widthPct <= 100 &&
@@ -271,10 +286,26 @@ export function renderBlocks(
       out += b.children?.length ? render(b.children, depth + 1) : "";
       if (pair) {
         if (pairedImage) {
-          html += `<div data-image-pair>${pairedImage}${out}</div>`;
-          pairedImage = "";
+          const firstShare = pairedImage.sharePct ??
+            (pairSharePct === null
+              ? Math.min(
+                80,
+                Math.max(
+                  20,
+                  100 * pairedImage.widthWeight /
+                    (pairedImage.widthWeight + pairWidthWeight),
+                ),
+              )
+              : 100 - pairSharePct);
+          const safeShare = Math.round(firstShare * 10) / 10;
+          html += `<div data-image-pair data-pair-first-pct="${safeShare}" style="--pair-first:${safeShare}%">${pairedImage.html}${out}</div>`;
+          pairedImage = null;
         } else {
-          pairedImage = out;
+          pairedImage = {
+            html: out,
+            sharePct: pairSharePct,
+            widthWeight: pairWidthWeight,
+          };
         }
       } else {
         flushPair();

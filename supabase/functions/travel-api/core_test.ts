@@ -87,17 +87,47 @@ Deno.test("renderer pairs adjacent images with safe layout attributes", () => {
   const first = "00000000-0000-0000-0000-000000000001";
   const second = "00000000-0000-0000-0000-000000000002";
   const output = renderBlocks([
-    { type: "image", props: { asset_id: first, caption: "첫 사진", width: "small", align: "left", layout: "pair", width_pct: 65, position_pct: 25 } },
-    { type: "image", props: { asset_id: second, caption: "둘째 사진", width: "medium", align: "right", layout: "pair" } },
+    { type: "image", props: { asset_id: first, caption: "첫 사진", width: "small", align: "left", layout: "pair", width_pct: 65, position_pct: 25, pair_share_pct: 64 } },
+    { type: "image", props: { asset_id: second, caption: "둘째 사진", width: "medium", align: "right", layout: "pair", pair_share_pct: 30 } },
     { type: "image", props: { asset_id: first, caption: "다시", width: '" onmouseover="x', align: "invalid", layout: "pair" } },
   ]);
-  assert(output.html.includes('<div data-image-pair>'));
-  assert((output.html.match(/<div data-image-pair>/g) ?? []).length === 1);
+  assert(output.html.includes('<div data-image-pair data-pair-first-pct="64" style="--pair-first:64%">'));
+  assert((output.html.match(/<div data-image-pair /g) ?? []).length === 1);
   assert(output.html.includes('data-image-width="small" data-image-align="left" data-image-layout="pair"'));
   assert(output.html.includes('data-image-layout="pair" data-image-custom="true" data-image-width-pct="65"'));
   assert(output.html.includes('data-image-width="medium" data-image-align="right" data-image-layout="pair"'));
   assert(!output.html.includes("onmouseover"));
   assert(output.assetIds.length === 2);
+});
+Deno.test("renderer derives pair allocation from legacy widths and ignores malformed values", () => {
+  const id = "00000000-0000-0000-0000-000000000001";
+  const image = (props: Record<string, unknown>) => ({
+    type: "image",
+    props: { asset_id: id, layout: "pair", ...props },
+  });
+  const output = renderBlocks([
+    image({ width_pct: 70 }),
+    image({ width_pct: 30 }),
+    image({ pair_share_pct: "80%;color:red", width_pct: 100 }),
+    image({ pair_share_pct: Number.POSITIVE_INFINITY, width_pct: 20 }),
+    image({ pair_share_pct: 0, width_pct: "bad" }),
+    image({ pair_share_pct: -10, width_pct: 100 }),
+    image({ pair_share_pct: "80%;color:red" }),
+  ]);
+  assert(output.html.includes('data-pair-first-pct="70" style="--pair-first:70%"'));
+  assert(output.html.includes('data-pair-first-pct="80" style="--pair-first:80%"'));
+  assert(output.html.includes('data-pair-first-pct="50" style="--pair-first:50%"'));
+  assert(!output.html.includes("color:red"));
+  assert((output.html.match(/<div data-image-pair /g) ?? []).length === 3);
+  assert(output.html.endsWith('</figure>'));
+});
+Deno.test("renderer uses the second image share when the first has no valid share", () => {
+  const id = "00000000-0000-0000-0000-000000000001";
+  const output = renderBlocks([
+    { type: "image", props: { asset_id: id, layout: "pair", pair_share_pct: 0 } },
+    { type: "image", props: { asset_id: id, layout: "pair", pair_share_pct: 27.25 } },
+  ]);
+  assert(output.html.includes('data-pair-first-pct="72.8" style="--pair-first:72.8%"'));
 });
 Deno.test("renderer keeps dragged image geometry within a safe article flow", () => {
   const id = "00000000-0000-0000-0000-000000000001";

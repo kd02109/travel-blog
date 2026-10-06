@@ -11,6 +11,68 @@ export type ImagePercentLayout = {
   positionPct: number;
 };
 
+const MIN_PAIR_SHARE_PCT = 20;
+const MIN_PAIRED_IMAGE_WIDTH_PX = 96;
+const PAIR_GAP_PX = 16;
+
+function validPairShare(value: number) {
+  return Number.isFinite(value) && value >= 20 && value <= 80;
+}
+
+function pairWidthWeight(value: number) {
+  return Number.isFinite(value) && value >= 20 && value <= 100 ? value : 100;
+}
+
+/** Explicit shares take precedence; old paired widths supply a split until edited. */
+export function firstPairSharePct(
+  firstSharePct: number,
+  secondSharePct: number,
+  firstWidthPct: number,
+  secondWidthPct: number,
+) {
+  if (validPairShare(firstSharePct)) return firstSharePct;
+  if (validPairShare(secondSharePct)) return 100 - secondSharePct;
+  const firstWeight = pairWidthWeight(firstWidthPct);
+  const secondWeight = pairWidthWeight(secondWidthPct);
+  return rounded(
+    clamp(
+      (firstWeight / (firstWeight + secondWeight)) * 100,
+      MIN_PAIR_SHARE_PCT,
+      100 - MIN_PAIR_SHARE_PCT,
+    ),
+  );
+}
+
+/** Each flex item includes half the row gap as padding. */
+export function minPairSharePct(rowWidth: number) {
+  if (!Number.isFinite(rowWidth) || rowWidth <= 0) return MIN_PAIR_SHARE_PCT;
+  return Math.min(
+    50,
+    Math.max(
+      MIN_PAIR_SHARE_PCT,
+      ((MIN_PAIRED_IMAGE_WIDTH_PX + PAIR_GAP_PX / 2) / rowWidth) * 100,
+    ),
+  );
+}
+
+export function dragPairSharePct(
+  startSharePct: number,
+  rowWidth: number,
+  deltaX: number,
+  edge: "left" | "right",
+) {
+  if (!Number.isFinite(rowWidth) || rowWidth <= 0) return startSharePct;
+  const minimum = minPairSharePct(rowWidth);
+  const direction = edge === "left" ? -1 : 1;
+  return rounded(
+    clamp(
+      startSharePct + (deltaX * direction * 100) / rowWidth,
+      minimum,
+      100 - minimum,
+    ),
+  );
+}
+
 export function imageAspectRatio(naturalWidth: number, naturalHeight: number) {
   return Number.isFinite(naturalWidth) &&
     Number.isFinite(naturalHeight) &&
@@ -40,7 +102,6 @@ export function imagePointerDelta(
 
 const MIN_IMAGE_WIDTH_PCT = 20;
 const MIN_IMAGE_WIDTH_PX = 160;
-const MIN_PAIRED_IMAGE_WIDTH_PX = 96;
 
 export type ImageLayoutMode = "single" | "pair";
 

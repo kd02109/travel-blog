@@ -1,13 +1,42 @@
 import { expect, test } from "vitest";
 import {
+  dragPairSharePct,
   dragImageLayout,
+  firstPairSharePct,
   imageAspectRatio,
   imagePairState,
   imagePointerDelta,
   imagePositionPct,
   imageWidthPct,
   minImageWidthPct,
+  minPairSharePct,
 } from "./image-layout";
+
+test("paired columns use explicit shares or derive a split from existing image widths", () => {
+  expect(firstPairSharePct(0, 0, 0, 0)).toBe(50);
+  expect(firstPairSharePct(0, 0, 70, 100)).toBe(41.2);
+  expect(firstPairSharePct(0, 0, 20, 100)).toBe(20);
+  expect(firstPairSharePct(65, 35, 30, 100)).toBe(65);
+  expect(firstPairSharePct(0, 35, 30, 100)).toBe(65);
+  expect(firstPairSharePct(90, 0, 100, 100)).toBe(50);
+});
+
+test("dragging either corner changes pair column share in either direction", () => {
+  expect(dragPairSharePct(50, 800, 80, "right")).toBe(60);
+  expect(dragPairSharePct(50, 800, -80, "left")).toBe(60);
+  expect(dragPairSharePct(50, 800, -80, "right")).toBe(40);
+  expect(dragPairSharePct(50, 800, 80, "left")).toBe(40);
+  expect(dragPairSharePct(50, 800, 800, "right")).toBe(80);
+  expect(dragPairSharePct(50, 800, -800, "right")).toBe(20);
+});
+
+test("paired column drag leaves space for both photos in narrow rows", () => {
+  expect(minPairSharePct(800)).toBe(20);
+  expect(minPairSharePct(260)).toBe(40);
+  expect(minPairSharePct(180)).toBe(50);
+  expect(dragPairSharePct(50, 260, -200, "right")).toBe(40);
+  expect(dragPairSharePct(50, 260, 200, "right")).toBe(60);
+});
 
 test("adjacent paired photos share a row and an odd leftover stays single", () => {
   const photos = [
