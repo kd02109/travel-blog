@@ -42,6 +42,8 @@ test("preserves text and asset references in an existing draft", () => {
         caption: "바다",
         width: "large",
         align: "center",
+        width_pct: 0,
+        position_pct: -1,
         layout: "single",
       },
     },
@@ -77,4 +79,23 @@ test("restores each image's size, alignment, and paired layout from a saved draf
     { type: "image", props: initialContent[0]!.props },
     { type: "image", props: initialContent[1]!.props },
   ]);
+});
+
+test("restores continuous image width and position from a saved draft", () => {
+  const initialContent: EditorDocument = [
+    {
+      type: "image",
+      props: {
+        asset_id: "positioned-asset",
+        width_pct: 62.5,
+        position_pct: 37.5,
+      },
+    },
+  ];
+  renderToStaticMarkup(createElement(WriterEditor, { initialContent }));
+  const editor = vi.mocked(useCreateBlockNote).mock.results[0]!.value;
+  expect(editor.document[0]).toMatchObject({
+    type: "image",
+    props: { width_pct: 62.5, position_pct: 37.5 },
+  });
 });

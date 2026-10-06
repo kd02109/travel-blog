@@ -242,8 +242,25 @@ export function renderBlocks(
             ? b.props.align
             : "center";
           const layout = b.props?.layout === "pair" ? "pair" : "single";
+          const widthPct = b.props?.width_pct;
+          const positionPct = b.props?.position_pct;
+          const customLayout = layout === "single" &&
+            typeof widthPct === "number" && Number.isFinite(widthPct) &&
+            widthPct >= 20 && widthPct <= 100 &&
+            typeof positionPct === "number" && Number.isFinite(positionPct) &&
+            positionPct >= 0 && positionPct <= 100;
+          const customAttributes = customLayout
+            ? (() => {
+              const safeWidth = Math.round(widthPct * 10) / 10;
+              const safePosition = Math.round(positionPct * 10) / 10;
+              const offset = Math.round(
+                (100 - safeWidth) * safePosition,
+              ) / 100;
+              return ` data-image-custom="true" data-image-width-pct="${safeWidth}" data-image-position-pct="${safePosition}" style="--image-width:${safeWidth}%;--image-offset:${offset}%"`;
+            })()
+            : "";
           pair = layout === "pair";
-          out = `<figure data-asset-id="${id}" data-image-width="${width}" data-image-align="${align}" data-image-layout="${layout}"><figcaption>${
+          out = `<figure data-asset-id="${id}" data-image-width="${width}" data-image-align="${align}" data-image-layout="${layout}"${customAttributes}><figcaption>${
             escapeHtml(String(b.props?.caption ?? ""))
           }</figcaption></figure>`;
           break;

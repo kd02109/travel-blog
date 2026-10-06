@@ -43,10 +43,6 @@ html.travel-home-snap footer {
   width: 100%;
   max-width: 100%;
   margin-block: 2rem;
-  overflow: hidden;
-  border: 1px solid #d9ded5;
-  border-radius: 0.65rem;
-  background: #f5f7f3;
 }
 
 .post-body-media figure[data-image-width="small"] {
@@ -69,6 +65,12 @@ html.travel-home-snap footer {
   margin-inline: auto 0;
 }
 
+.post-body-media figure[data-image-custom="true"] {
+  width: var(--image-width);
+  margin-inline: 0;
+  margin-inline-start: var(--image-offset);
+}
+
 .post-body-media [data-image-pair] > figure[data-asset-id] {
   width: 100%;
   margin: 0;
@@ -80,6 +82,7 @@ html.travel-home-snap footer {
   max-width: 100%;
   max-height: min(70vh, 760px);
   margin-inline: auto;
+  border-radius: 0.4rem;
   object-fit: contain;
 }
 
@@ -96,13 +99,11 @@ html.travel-home-snap footer {
 }
 
 .post-body-media figure[data-asset-id] > figcaption {
-  padding: 0.7rem 0.9rem;
-  border-top: 1px solid #dfe5dc;
-  background: #f5f7f3;
-  color: #4c5d51;
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.6;
+  padding: 0.45rem 0.25rem 0;
+  color: #737a73;
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -111,6 +112,11 @@ html.travel-home-snap footer {
 }
 
 @media (max-width: 640px) {
+  .post-body-media figure[data-image-custom="true"] {
+    width: 100%;
+    margin-inline: 0;
+  }
+
   .post-body-media [data-image-pair] {
     grid-template-columns: minmax(0, 1fr);
   }

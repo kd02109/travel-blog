@@ -147,6 +147,22 @@ describe("draft and published content", () => {
     expect(rendered.html).not.toContain("onload");
     expect(rendered.assetIds).toHaveLength(3);
   });
+  it("renders dragged image size and position without accepting CSS injection", () => {
+    const image = (props: Record<string, unknown>) => ({
+      type: "image",
+      props: { asset_id: mockId(4, 1), ...props },
+    });
+    const rendered = renderBlocks([
+      image({ width_pct: 62, position_pct: 40 }),
+      image({ width_pct: "62%;color:red", position_pct: 40 }),
+      image({ width_pct: 40, position_pct: 80, layout: "pair" }),
+    ]);
+    expect(rendered.html).toContain(
+      'style="--image-width:62%;--image-offset:15.2%"',
+    );
+    expect(rendered.html.match(/data-image-custom="true"/g)).toHaveLength(1);
+    expect(rendered.html).not.toContain("color:red");
+  });
   it("summarizes image-only checkpoints by photo count", () => {
     const engine = createMockEngine();
     const draft = call(engine, "admin.post.get", { id: first }, owner)

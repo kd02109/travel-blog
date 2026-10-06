@@ -98,6 +98,24 @@ Deno.test("renderer pairs adjacent images with safe layout attributes", () => {
   assert(!output.html.includes("onmouseover"));
   assert(output.assetIds.length === 2);
 });
+Deno.test("renderer keeps dragged image geometry within a safe article flow", () => {
+  const id = "00000000-0000-0000-0000-000000000001";
+  const image = (props: Record<string, unknown>) => ({
+    type: "image",
+    props: { asset_id: id, ...props },
+  });
+  const output = renderBlocks([
+    image({ width_pct: 62, position_pct: 40 }),
+    image({ width_pct: 42, position_pct: 100, layout: "pair" }),
+    image({ width_pct: '65%;color:red', position_pct: 50 }),
+    image({ width_pct: 125, position_pct: -10 }),
+  ]);
+  assert(output.html.includes('data-image-width-pct="62"'));
+  assert(output.html.includes('data-image-position-pct="40"'));
+  assert(output.html.includes('style="--image-width:62%;--image-offset:15.2%"'));
+  assert((output.html.match(/data-image-custom="true"/g) ?? []).length === 1);
+  assert(!output.html.includes("color:red"));
+});
 Deno.test("file signature checked independently of filename", () => {
   assert(sniff(new TextEncoder().encode("%PDF-1.7\n")) === "application/pdf");
   assert(

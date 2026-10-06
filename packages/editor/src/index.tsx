@@ -14,15 +14,30 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
+  useRef,
   useState,
 } from "react";
-import type { ReactNode, DragEvent } from "react";
+import type {
+  ReactNode,
+  DragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   FormattingToolbar,
   FormattingToolbarController,
   getFormattingToolbarItems,
 } from "@blocknote/react";
-import { imagePairState } from "./image-layout";
+import {
+  dragImageLayout,
+  imagePairState,
+  imagePositionPct,
+  imageWidthPct,
+  minImageWidthPct,
+  type ImageDragMode,
+  type ImagePercentLayout,
+} from "./image-layout";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
@@ -93,15 +108,24 @@ const ImagePreviewContext = createContext<
   | undefined
 >(undefined);
 
+type ImagePointerSession = {
+  pointerId: number;
+  startX: number;
+  containerWidth: number;
+  start: ImagePercentLayout;
+  mode: ImageDragMode;
+};
+
 function AssetImage({
   assetId,
   caption,
   width,
   align,
+  widthPct,
+  positionPct,
   layout,
   onCaptionChange,
-  onWidthChange,
-  onAlignChange,
+  onLayoutChange,
   onPairToggle,
   getPairState,
 }: {
@@ -109,10 +133,11 @@ function AssetImage({
   caption: string;
   width: "small" | "medium" | "large";
   align: "left" | "center" | "right";
+  widthPct: number;
+  positionPct: number;
   layout: "single" | "pair";
   onCaptionChange: (caption: string) => void;
-  onWidthChange: (width: "small" | "medium" | "large") => void;
-  onAlignChange: (align: "left" | "center" | "right") => void;
+  onLayoutChange: (layout: ImagePercentLayout) => void;
   onPairToggle: () => void;
   getPairState: () => { canPair: boolean; paired: boolean };
 }) {
@@ -120,116 +145,314 @@ function AssetImage({
     useContext(ImagePreviewContext) ?? {};
   const { canPair, paired } = getPairState();
   const hasPairSetting = paired || layout === "pair";
-  const widths = [
-    ["small", "작게"],
-    ["medium", "보통"],
-    ["large", "넓게"],
-  ] as const;
-  const alignments = [
-    ["left", "왼쪽"],
-    ["center", "가운데"],
-    ["right", "오른쪽"],
-  ] as const;
+  const slotRef = useRef<HTMLDivElement>(null);
+  const pointerSession = useRef<ImagePointerSession | null>(null);
+  const [draftLayout, setDraftLayout] = useState<ImagePercentLayout | null>(
+    null,
+  );
+  const [containerWidth, setContainerWidth] = useState(0);
+  const hintId = useId();
+  const hasCustomLayout =
+    Number.isFinite(widthPct) &&
+    widthPct >= 20 &&
+    widthPct <= 100 &&
+    Number.isFinite(positionPct) &&
+    positionPct >= 0 &&
+    positionPct <= 100;
+  const displayedPosition =
+    draftLayout?.positionPct ??
+    imagePositionPct(hasCustomLayout ? positionPct : -1, align);
+  const displayedWidth =
+    draftLayout?.widthPct ?? (hasCustomLayout ? widthPct : null);
+
+  const readLayout = () => {
+    const containerWidth = slotRef.current?.getBoundingClientRect().width ?? 0;
+    if (containerWidth <= 0) return null;
+    return {
+      containerWidth,
+      layout: {
+        widthPct:
+          draftLayout?.widthPct ??
+          imageWidthPct(hasCustomLayout ? widthPct : 0, width, containerWidth),
+        positionPct:
+          draftLayout?.positionPct ??
+          imagePositionPct(hasCustomLayout ? positionPct : -1, align),
+      },
+    };
+  };
+
+  const beginDrag = (
+    mode: ImageDragMode,
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    if (!editable || hasPairSetting || pointerSession.current) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    if (
+      mode === "move" &&
+      event.target instanceof Element &&
+      event.target.closest("button, input, a, textarea")
+    )
+      return;
+    const current = readLayout();
+    if (!current) return;
+    pointerSession.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      containerWidth: current.containerWidth,
+      start: current.layout,
+      mode,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const moveDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = pointerSession.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    const next = dragImageLayout(
+      session.start,
+      session.containerWidth,
+      event.clientX - session.startX,
+      session.mode,
+    );
+    setDraftLayout(next);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const endDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const session = pointerSession.current;
+    if (!session || session.pointerId !== event.pointerId) return;
+    pointerSession.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    setDraftLayout(null);
+    if (Math.abs(event.clientX - session.startX) >= 2) {
+      const next = dragImageLayout(
+        session.start,
+        session.containerWidth,
+        event.clientX - session.startX,
+        session.mode,
+      );
+      if (
+        next.widthPct !== session.start.widthPct ||
+        next.positionPct !== session.start.positionPct
+      )
+        onLayoutChange(next);
+    }
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const cancelDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    if (pointerSession.current?.pointerId !== event.pointerId) return;
+    pointerSession.current = null;
+    setDraftLayout(null);
+  };
+
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot || typeof ResizeObserver === "undefined") return;
+    let previousWidth = slot.getBoundingClientRect().width;
+    const observer = new ResizeObserver(() => {
+      const nextWidth = slot.getBoundingClientRect().width;
+      if (Math.abs(nextWidth - previousWidth) > 1 && pointerSession.current) {
+        pointerSession.current = null;
+        setDraftLayout(null);
+      }
+      previousWidth = nextWidth;
+      setContainerWidth(nextWidth);
+    });
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, []);
+
+  const changePositionWithKeyboard = (
+    event: ReactKeyboardEvent<HTMLElement>,
+  ) => {
+    if (!editable || hasPairSetting || event.target !== event.currentTarget)
+      return;
+    const current = readLayout();
+    if (!current) return;
+    const step = event.shiftKey ? 10 : 5;
+    const nextPosition =
+      event.key === "ArrowLeft"
+        ? Math.max(0, current.layout.positionPct - step)
+        : event.key === "ArrowRight"
+          ? Math.min(100, current.layout.positionPct + step)
+          : event.key === "Home"
+            ? 0
+            : event.key === "End"
+              ? 100
+              : null;
+    if (nextPosition === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (nextPosition !== current.layout.positionPct)
+      onLayoutChange({ ...current.layout, positionPct: nextPosition });
+  };
+
+  const changeWidthWithKeyboard = (
+    edge: "left" | "right",
+    event: ReactKeyboardEvent<HTMLElement>,
+  ) => {
+    if (!editable || hasPairSetting) return;
+    const current = readLayout();
+    if (!current) return;
+    const outward = edge === "left" ? -1 : 1;
+    let direction: number;
+    if (event.key === "ArrowUp") direction = outward;
+    else if (event.key === "ArrowDown") direction = -outward;
+    else if (event.key === "ArrowLeft") direction = -1;
+    else if (event.key === "ArrowRight") direction = 1;
+    else if (event.key === "Home") direction = -outward * 100;
+    else if (event.key === "End") direction = outward * 100;
+    else return;
+    event.preventDefault();
+    event.stopPropagation();
+    const next = dragImageLayout(
+      current.layout,
+      current.containerWidth,
+      current.containerWidth * (event.shiftKey ? 0.1 : 0.05) * direction,
+      edge === "left" ? "resize-left" : "resize-right",
+    );
+    if (
+      next.widthPct !== current.layout.widthPct ||
+      next.positionPct !== current.layout.positionPct
+    )
+      onLayoutChange(next);
+  };
+
   return (
-    <figure
-      className="writer-image"
-      data-image-width={width}
-      data-image-align={align}
-      data-image-layout={paired ? "pair" : "single"}
-    >
-      {editable && (
-        <div className="writer-image-toolbar" aria-label="사진 배치 설정">
-          <div
-            className="writer-image-toolbar-group"
-            role="group"
-            aria-label="사진 크기"
-          >
-            <span>크기</span>
-            {widths.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-label={`사진 크기 ${label}`}
-                aria-pressed={width === value}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onWidthChange(value);
-                }}
-              >
-                {label}
-              </button>
-            ))}
+    <div className="writer-image-slot" ref={slotRef}>
+      <figure
+        className="writer-image"
+        data-image-width={width}
+        data-image-layout={paired ? "pair" : "single"}
+        data-image-dragging={draftLayout ? "true" : undefined}
+        style={
+          hasPairSetting
+            ? undefined
+            : {
+                width:
+                  displayedWidth === null ? undefined : `${displayedWidth}%`,
+                left: `${displayedPosition}%`,
+                transform: `translateX(-${displayedPosition}%)`,
+              }
+        }
+      >
+        {editable && (
+          <div className="writer-image-toolbar" aria-label="사진 배치 설정">
+            <span className="writer-image-hint" id={hintId}>
+              {hasPairSetting
+                ? "나란히 놓은 사진은 위치와 크기가 고정됩니다"
+                : "사진을 끌어 위치 이동 · 모서리를 끌어 크기 조절"}
+            </span>
+            <button
+              className="writer-image-pair-button"
+              type="button"
+              aria-label={
+                hasPairSetting
+                  ? "사진 나란히 배치 해제"
+                  : "다음 사진과 나란히 배치"
+              }
+              aria-pressed={hasPairSetting}
+              title={
+                canPair || hasPairSetting
+                  ? undefined
+                  : "바로 다음 블록에 사진을 넣으면 묶을 수 있습니다"
+              }
+              disabled={!canPair && !hasPairSetting}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation();
+                onPairToggle();
+              }}
+            >
+              {hasPairSetting ? "나란히 해제" : "다음 사진과 나란히"}
+            </button>
           </div>
+        )}
+        <div className="writer-image-media-wrap">
           <div
-            className="writer-image-toolbar-group"
-            role="group"
-            aria-label="사진 정렬"
-          >
-            <span>정렬</span>
-            {alignments.map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                aria-label={`사진 정렬 ${label}`}
-                aria-pressed={align === value}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onAlignChange(value);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <button
-            className="writer-image-pair-button"
-            type="button"
+            className="writer-image-media"
+            role={editable && !hasPairSetting ? "slider" : undefined}
             aria-label={
-              hasPairSetting
-                ? "사진 나란히 배치 해제"
-                : "다음 사진과 나란히 배치"
+              editable && !hasPairSetting ? "사진 가로 위치" : undefined
             }
-            aria-pressed={hasPairSetting}
-            title={
-              canPair || hasPairSetting
-                ? undefined
-                : "바로 다음 블록에 사진을 넣으면 묶을 수 있습니다"
+            aria-describedby={editable && !hasPairSetting ? hintId : undefined}
+            aria-valuemin={editable && !hasPairSetting ? 0 : undefined}
+            aria-valuemax={editable && !hasPairSetting ? 100 : undefined}
+            aria-valuenow={
+              editable && !hasPairSetting
+                ? Math.round(displayedPosition)
+                : undefined
             }
-            disabled={!canPair && !hasPairSetting}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onPairToggle();
+            tabIndex={editable && !hasPairSetting ? 0 : undefined}
+            onPointerDown={(event) => beginDrag("move", event)}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onPointerCancel={cancelDrag}
+            onLostPointerCapture={cancelDrag}
+            onKeyDown={changePositionWithKeyboard}
+            onDragStart={(event) => {
+              if (editable && !hasPairSetting) event.preventDefault();
             }}
           >
-            {hasPairSetting ? "나란히 해제" : "다음 사진과 나란히"}
-          </button>
+            {renderPreview?.(assetId) ?? (
+              <p className="text-muted-foreground text-sm">
+                사진을 불러오는 중…
+              </p>
+            )}
+          </div>
+          {editable && !hasPairSetting && (
+            <>
+              {(["left", "right"] as const).map((edge) => (
+                <div
+                  key={edge}
+                  className={`writer-image-resize-handle writer-image-resize-handle-${edge}`}
+                  role="slider"
+                  tabIndex={0}
+                  aria-label={`사진 ${edge === "left" ? "왼쪽" : "오른쪽"} 모서리에서 폭 조절`}
+                  aria-describedby={hintId}
+                  aria-valuemin={Math.ceil(minImageWidthPct(containerWidth))}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(
+                    imageWidthPct(displayedWidth ?? 0, width, containerWidth),
+                  )}
+                  onPointerDown={(event) =>
+                    beginDrag(
+                      edge === "left" ? "resize-left" : "resize-right",
+                      event,
+                    )
+                  }
+                  onPointerMove={moveDrag}
+                  onPointerUp={endDrag}
+                  onPointerCancel={cancelDrag}
+                  onLostPointerCapture={cancelDrag}
+                  onKeyDown={(event) => changeWidthWithKeyboard(edge, event)}
+                />
+              ))}
+            </>
+          )}
         </div>
-      )}
-      <div className="writer-image-media">
-        {renderPreview?.(assetId) ?? (
-          <p className="text-muted-foreground text-sm">사진을 불러오는 중…</p>
-        )}
-      </div>
-      <figcaption>
-        {editable ? (
-          <label>
-            <span>사진 설명</span>
+        <figcaption>
+          {editable ? (
             <input
               aria-label="사진 설명"
-              placeholder="사진 설명을 적어 주세요"
+              placeholder="사진 설명 추가"
+              maxLength={160}
               value={caption}
               onChange={(event) => onCaptionChange(event.currentTarget.value)}
               onKeyDown={(event) => event.stopPropagation()}
             />
-          </label>
-        ) : caption ? (
-          caption
-        ) : null}
-      </figcaption>
-    </figure>
+          ) : caption ? (
+            caption
+          ) : null}
+        </figcaption>
+      </figure>
+    </div>
   );
 }
 
@@ -247,6 +470,9 @@ const assetImage = createReactBlockSpec(
         default: "center" as const,
         values: ["left", "center", "right"] as const,
       },
+      // Sentinels keep older drafts on their original width and alignment.
+      width_pct: { default: 0 },
+      position_pct: { default: -1 },
       layout: {
         default: "single" as const,
         values: ["single", "pair"] as const,
@@ -262,6 +488,8 @@ const assetImage = createReactBlockSpec(
           caption={block.props.caption}
           width={block.props.width}
           align={block.props.align}
+          widthPct={block.props.width_pct}
+          positionPct={block.props.position_pct}
           layout={block.props.layout}
           getPairState={() => {
             const state = imagePairState(editor.document, block.id);
@@ -273,11 +501,10 @@ const assetImage = createReactBlockSpec(
           onCaptionChange={(caption) =>
             editor.updateBlock(block, { props: { caption } })
           }
-          onWidthChange={(width) =>
-            editor.updateBlock(block, { props: { width } })
-          }
-          onAlignChange={(align) =>
-            editor.updateBlock(block, { props: { align } })
+          onLayoutChange={({ widthPct, positionPct }) =>
+            editor.updateBlock(block, {
+              props: { width_pct: widthPct, position_pct: positionPct },
+            })
           }
           onPairToggle={() => {
             const blocks = editor.document;
