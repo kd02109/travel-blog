@@ -9,11 +9,13 @@ export function PrivateImage({
   siteId,
   title,
   className,
+  eager = false,
 }: {
   assetId: string;
   siteId: string;
   title: string;
   className?: string;
+  eager?: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
@@ -54,6 +56,8 @@ export function PrivateImage({
       width={1600}
       height={1200}
       unoptimized
+      loading={eager ? "eager" : "lazy"}
+      fetchPriority={eager ? "high" : undefined}
       className={className ?? "h-auto max-h-[70vh] max-w-full rounded object-contain"}
     />
   ) : (

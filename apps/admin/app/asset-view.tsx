@@ -9,11 +9,13 @@ export function PrivateAssetView({
   siteId,
   kind,
   title,
+  className,
 }: {
   assetId: string;
   siteId: string;
   kind: "image" | "pdf";
   title: string;
+  className?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [asset, setAsset] = useState<ActionOutput<"asset.access">>();
@@ -57,14 +59,18 @@ export function PrivateAssetView({
         width={1200}
         height={900}
         unoptimized
-        className="h-auto max-h-96 max-w-full rounded object-contain"
+        className={
+          className ?? "h-auto max-h-96 max-w-full rounded object-contain"
+        }
       />
     );
   return (
     <div className="space-y-3">
       {asset.preview_asset_id ? (
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">첫 페이지 미리보기</p>
+          <p className="text-muted-foreground mb-2 text-sm">
+            첫 페이지 미리보기
+          </p>
           <PrivateAssetView
             assetId={asset.preview_asset_id}
             siteId={siteId}
