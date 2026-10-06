@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
@@ -27,6 +27,7 @@ import {
 import { MediaUpload } from "../media-upload";
 import { PrivateAssetView } from "../asset-view";
 import { HomeCoverThumbnail } from "./home-cover-thumbnail";
+import styles from "./home-preview.module.css";
 
 const latestFeaturedPostValue = "__latest_featured_post__";
 
@@ -51,12 +52,12 @@ const templates = [
   {
     id: "A",
     name: "여백의 여행책",
-    description: "여백과 세로 사진으로 펼치는 기록",
+    description: "여백과 세로 사진으로 펼치는 기록 · 사진 2장부터 자동 전환",
   },
   {
     id: "B",
     name: "숲과 물 사이",
-    description: "풍경과 깊은 초록을 담는 표지",
+    description: "한 장은 사진과 색면, 두 장부터는 풍경을 나누어 배치",
   },
   {
     id: "C",
@@ -114,6 +115,8 @@ export function HomeDesignEditor({
   const [busy, setBusy] = useState(false);
   const [processingImages, setProcessingImages] = useState(false);
   const [applyDialog, setApplyDialog] = useState(false);
+  const [fullscreenPreview, setFullscreenPreview] = useState(false);
+  const previewDialogRef = useRef<HTMLDialogElement>(null);
   const [feedback, setFeedback] = useState("");
   const [operationError, setOperationError] = useState<unknown>(null);
   const current = settings.data?.published as
@@ -142,6 +145,13 @@ export function HomeDesignEditor({
       ),
     },
   );
+
+  useEffect(() => {
+    const dialog = previewDialogRef.current;
+    if (!dialog) return;
+    if (fullscreenPreview && !dialog.open) dialog.showModal();
+    if (!fullscreenPreview && dialog.open) dialog.close();
+  }, [fullscreenPreview]);
 
   function update(key: string, value: string | null) {
     setDraft((previous) => ({
@@ -323,6 +333,29 @@ export function HomeDesignEditor({
       {featuredTitle ? featuredTitle + " 읽기 ↗" : "이 여행 펼치기 ↗"}
     </span>
   );
+  const renderPreviewCover = (headingId: string) => (
+    <HomeCover
+      template={selected}
+      title={
+        typeof draftSettings.title === "string"
+          ? draftSettings.title
+          : undefined
+      }
+      description={
+        typeof draftSettings.description === "string"
+          ? draftSettings.description
+          : undefined
+      }
+      siteName={siteName}
+      image={previewImage}
+      secondaryImages={previewSecondaryImages}
+      secondarySampleImages={previewSecondarySampleImages}
+      action={previewAction}
+      sampleImage={!previewAssetId}
+      headingAs="h3"
+      headingId={headingId}
+    />
+  );
 
   return (
     <main className="mx-auto w-full max-w-6xl space-y-8 px-5 py-10 md:px-8 md:py-14">
@@ -332,7 +365,7 @@ export function HomeDesignEditor({
         </p>
         <h1 className="mt-2 text-3xl font-semibold">홈 디자인</h1>
         <p className="text-muted-foreground mt-3 max-w-2xl">
-          디자인과 문구를 고르면 아래에 공개 홈의 실제 표지가 표시됩니다.
+          디자인과 문구를 고르면 아래에서 표지 구성을 확인할 수 있습니다.
           방문자에게 보이게 하려면 적용을 눌러 주세요.
         </p>
       </header>
@@ -410,43 +443,62 @@ export function HomeDesignEditor({
       <section aria-labelledby="preview-heading" className="space-y-4">
         <div>
           <h2 id="preview-heading" className="text-xl font-semibold">
-            초안 미리보기
+            초안 배치 미리보기
           </h2>
           <p className="text-muted-foreground mt-1">
-            선택한 디자인·문구·사진이 공개 홈 상단에 표시되는 모습입니다. 적용
-            전까지 공개 사이트는 바뀌지 않습니다.
+            아래는 관리 화면에 맞춘 배치입니다. 전체 화면에서 보기를 누르면 현재
+            브라우저 창 크기의 표지를 확인할 수 있습니다. 모바일 크기는 브라우저
+            창을 줄여 확인해 주세요. 적용 전까지 공개 사이트는 바뀌지 않습니다.
           </p>
+          <Button
+            variant="outline"
+            className="mt-3"
+            onClick={() => setFullscreenPreview(true)}
+          >
+            전체 화면에서 보기
+          </Button>
         </div>
         <div className="rounded-panel bg-background overflow-hidden border">
-          <div className="bg-surface border-b px-5 py-3 text-sm">
-            <span className="font-medium">{siteName}</span>
-            <span className="text-muted-foreground ml-3">/ 홈 미리보기</span>
+          <div className="bg-surface flex flex-wrap items-center justify-between gap-2 border-b px-5 py-3 text-sm">
+            <div>
+              <span className="font-medium">{siteName}</span>
+              <span className="text-muted-foreground ml-3">/ 표지 초안</span>
+            </div>
+            <span className="text-muted-foreground text-xs">
+              관리 화면 너비 · 높이 축소
+            </span>
           </div>
-          <div className="mx-auto w-full max-w-[var(--content-max)] px-5 py-10 md:px-8 md:py-16 xl:px-16">
-            <HomeCover
-              template={selected}
-              title={
-                typeof draftSettings.title === "string"
-                  ? draftSettings.title
-                  : undefined
-              }
-              description={
-                typeof draftSettings.description === "string"
-                  ? draftSettings.description
-                  : undefined
-              }
-              siteName={siteName}
-              image={previewImage}
-              secondaryImages={previewSecondaryImages}
-              secondarySampleImages={previewSecondarySampleImages}
-              action={previewAction}
-              sampleImage={!previewAssetId}
-              headingAs="h3"
-              headingId="home-draft-preview-title"
-            />
-          </div>
+          <div>{renderPreviewCover("home-draft-preview-title")}</div>
         </div>
       </section>
+
+      <dialog
+        ref={previewDialogRef}
+        className={styles.previewDialog}
+        aria-labelledby="home-fullscreen-preview-heading"
+        onCancel={(event) => {
+          event.preventDefault();
+          setFullscreenPreview(false);
+        }}
+        onClose={() => setFullscreenPreview(false)}
+      >
+        <h2 id="home-fullscreen-preview-heading" className="sr-only">
+          홈 초안 전체 화면 미리보기
+        </h2>
+        {fullscreenPreview && (
+          <div className={styles.cover}>
+            {renderPreviewCover("home-fullscreen-preview-title")}
+          </div>
+        )}
+        <button
+          type="button"
+          autoFocus
+          className="bg-background/95 text-foreground focus-visible:outline-ring fixed top-4 right-4 z-50 min-h-11 border px-4 text-sm font-semibold shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+          onClick={() => setFullscreenPreview(false)}
+        >
+          미리보기 닫기
+        </button>
+      </dialog>
 
       <div className="grid gap-5 md:grid-cols-2">
         <label className="block space-y-2">
@@ -554,6 +606,22 @@ export function HomeDesignEditor({
             중심이 되고, 나머지는 선택한 디자인의 사진 구성에 함께 나타납니다.
             사진이 없으면 예시 사진이 표시됩니다.
           </p>
+          {selected === "A" && (
+            <p className="text-muted-foreground mt-2 text-sm">
+              {selectedImageIds.length === 0
+                ? "A안에서는 예시 사진 네 장이 자동으로 전환됩니다. 직접 올린 사진을 쓰려면 두 장 이상 선택해 주세요."
+                : selectedImageIds.length === 1
+                  ? "A안은 사진 한 장일 때 정지된 표지로 표시됩니다. 자동 전환을 사용하려면 사진을 한 장 더 추가해 주세요."
+                  : `A안에서는 선택한 사진 ${selectedImageIds.length}장이 약 5초 간격으로 자동 전환됩니다.`}
+            </p>
+          )}
+          {selected === "B" && selectedImageIds.length === 1 && (
+            <p className="text-muted-foreground mt-2 text-sm">
+              B안에 사진이 한 장이면 위쪽에만 사진이 나오고 아래쪽은 녹색
+              색면으로 채워집니다. 두 장 이상 선택하면 사진이 위아래로
+              배치됩니다.
+            </p>
+          )}
         </div>
         {selectedImageIds.length > 0 && (
           <ul
