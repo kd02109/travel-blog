@@ -26,6 +26,14 @@ function LoginUrlObserver({
   return null;
 }
 
+function hasPassedHomeHero() {
+  const journal = document.getElementById("home-journal");
+  return journal
+    ? journal.getBoundingClientRect().top <=
+        Math.min(96, window.innerHeight * 0.12)
+    : window.scrollY >= window.innerHeight;
+}
+
 export function SiteFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isHome = pathname === "/";
@@ -43,15 +51,14 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
   }>();
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    const update = () =>
-      setPastHero(window.scrollY >= window.innerHeight * 0.72);
+    const update = () => setPastHero(hasPassedHomeHero());
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, [pathname]);
 
-  useMotionValueEvent(scrollY, "change", (latest) => {
-    setPastHero(latest >= window.innerHeight * 0.72);
+  useMotionValueEvent(scrollY, "change", () => {
+    setPastHero(hasPassedHomeHero());
   });
 
   useEffect(() => {
@@ -197,28 +204,28 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
         }}
         className={`border-border bg-background border-b ${isHome ? "fixed inset-x-0 top-0 z-40 shadow-[0_8px_28px_rgb(23_60_66_/_8%)]" : "relative"}`}
       >
-        <div className="mx-auto flex min-h-[88px] max-w-[var(--content-max)] items-center justify-between gap-3 px-5 md:px-8 xl:px-16">
+        <div className="mx-auto flex min-h-[72px] max-w-[var(--content-max)] items-center justify-between gap-3 px-5 md:min-h-[76px] md:px-8 xl:px-16">
           <Link
             href="/"
-            className="shrink-0 font-serif text-base leading-tight sm:text-2xl"
+            className="focus-visible:outline-ring shrink-0 font-serif text-lg leading-tight focus-visible:outline-2 focus-visible:outline-offset-4 sm:text-[1.35rem]"
           >
             {SITE_NAME}
           </Link>
           <nav
             aria-label="주요 메뉴"
-            className="hidden items-center gap-2 lg:flex"
+            className="hidden items-center gap-5 lg:flex"
           >
             <Link
               href="/posts"
               aria-current={onPosts ? "page" : undefined}
-              className={`rounded-control text-foreground hover:bg-muted inline-flex min-h-12 items-center px-3 text-base ${onPosts ? "font-semibold" : ""}`}
+              className={`rounded-control text-foreground hover:bg-muted focus-visible:outline-ring inline-flex min-h-12 items-center px-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 ${onPosts ? "font-semibold" : ""}`}
             >
               여행 기록
             </Link>
             <Link
               href="/about"
               aria-current={onAbout ? "page" : undefined}
-              className={`rounded-control text-foreground hover:bg-muted inline-flex min-h-12 items-center px-3 text-base ${onAbout ? "font-semibold" : ""}`}
+              className={`rounded-control text-foreground hover:bg-muted focus-visible:outline-ring inline-flex min-h-12 items-center px-2 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 ${onAbout ? "font-semibold" : ""}`}
             >
               우리의 기록
             </Link>
@@ -312,13 +319,13 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
       <div id="main-content" className="flex flex-1 flex-col">
         {children}
       </div>
-      <footer className="border-border bg-surface mt-16 border-t">
-        <div className="text-muted-foreground mx-auto grid w-full max-w-[var(--content-max)] gap-4 px-5 py-8 text-sm md:grid-cols-[1fr_auto] md:items-center md:px-8 xl:px-16">
+      <footer className="border-border bg-background mt-16 border-t">
+        <div className="text-muted-foreground mx-auto grid w-full max-w-[var(--content-max)] gap-2 px-5 py-6 text-xs sm:text-sm md:grid-cols-[1fr_auto] md:items-center md:gap-6 md:px-8 xl:px-16">
           <p>
             © {new Date().getFullYear()} {SITE_NAME} · 세상을 여행하고 삶을
             기록합니다.
           </p>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <Link
               href="/posts"
               className="inline-flex min-h-12 items-center underline-offset-4 hover:underline"
