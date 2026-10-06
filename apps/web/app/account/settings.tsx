@@ -5,6 +5,7 @@ import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { Button } from "@repo/ui/button";
+import { Dialog } from "@repo/ui/dialog";
 import { Input } from "@repo/ui/input";
 
 export function AccountSettings({
@@ -22,6 +23,7 @@ export function AccountSettings({
   const [editedName, setEditedName] = useState<string | null>(null);
   const displayName = editedName ?? me.data?.profile?.display_name ?? "";
   const [feedback, setFeedback] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   async function saveProfile(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,15 +37,10 @@ export function AccountSettings({
   }
 
   async function requestDeletion() {
-    if (
-      !window.confirm(
-        "계정 삭제를 요청할까요? 삭제 후에는 로그인하거나 기존 댓글을 수정할 수 없습니다.",
-      )
-    )
-      return;
     setFeedback("");
     try {
       await request.submit({});
+      setDeleteDialogOpen(false);
       setFeedback(
         "계정 삭제 요청을 접수했습니다. 처리 전까지 로그인과 계정 사용은 계속 가능합니다.",
       );
@@ -136,16 +133,47 @@ export function AccountSettings({
               type="button"
               variant="outline"
               disabled={request.isPending}
-              onClick={() => void requestDeletion()}
+              onClick={() => setDeleteDialogOpen(true)}
             >
               {request.isPending ? "요청 중…" : "계정 삭제 요청"}
             </Button>
-            {request.error && (
-              <ApiMutationError
-                error={request.error}
-                title="계정 삭제 요청을 접수하지 못했어요"
-              />
-            )}
+            <Dialog
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              title="계정 삭제를 요청할까요?"
+              description="관리자가 요청을 확인한 뒤 계정을 삭제합니다. 처리 전까지는 계정을 계속 사용할 수 있습니다."
+            >
+              <p className="text-muted-foreground mb-6 text-sm leading-relaxed">
+                삭제 후에는 로그인하거나 기존 댓글을 수정할 수 없습니다. 댓글은
+                남고 이름은 &quot;삭제된 사용자&quot;로 표시됩니다.
+              </p>
+              {request.error && (
+                <div className="mb-5">
+                  <ApiMutationError
+                    error={request.error}
+                    title="계정 삭제 요청을 접수하지 못했어요"
+                  />
+                </div>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDeleteDialogOpen(false)}
+                  disabled={request.isPending}
+                >
+                  취소
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => void requestDeletion()}
+                  disabled={request.isPending}
+                >
+                  {request.isPending ? "요청 중…" : "삭제 요청 접수"}
+                </Button>
+              </div>
+            </Dialog>
           </section>
         </>
       )}
