@@ -1,27 +1,196 @@
+.eyebrow {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.pageTitle {
+  margin: 0.65rem 0 0;
+  font-family: var(--font-editorial), "Noto Serif KR", serif;
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: -0.035em;
+}
+
+.intro {
+  margin: 0.75rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  word-break: keep-all;
+}
+
+.categoryNav {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: clamp(1rem, 2.5vw, 2rem);
+  margin-top: clamp(1.8rem, 4vw, 2.7rem);
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--primary);
+}
+
+.categoryButton {
+  min-height: 44px;
+  padding: 0.5rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 400;
+  white-space: nowrap;
+  transition: color var(--motion-feedback) ease;
+}
+
+.categoryButton:hover,
+.categoryButton[data-selected="true"] {
+  color: var(--foreground);
+}
+
+.categoryButton[data-selected="true"] {
+  font-weight: 700;
+}
+
+.catalogContent {
+  display: grid;
+  gap: 2rem;
+  margin-top: clamp(1.55rem, 3vw, 2.25rem);
+}
+
+.listNote {
+  margin: 0 0 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.postList,
 .singlePostList {
   display: grid;
   gap: 1.25rem;
 }
 
+.singlePostList > li > a {
+  border-radius: var(--radius-postcard);
+}
+
+.emptyState {
+  border-top: 1px solid var(--primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.emptyLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 4rem);
+  min-height: 350px;
+  padding: clamp(2rem, 4vw, 3.25rem) 0;
+}
+
+.emptyCopy {
+  max-width: 38rem;
+}
+
+.emptyTitle {
+  max-width: 17ch;
+  margin: 1rem 0 0;
+  font-family: var(--font-editorial), "Noto Serif KR", serif;
+  font-size: clamp(1.9rem, 3.1vw, 2.75rem);
+  font-weight: 400;
+  line-height: 1.38;
+  letter-spacing: -0.035em;
+  word-break: keep-all;
+}
+
+.emptyDescription {
+  max-width: 28rem;
+  margin: 1rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.9375rem;
+  line-height: 1.75;
+  word-break: keep-all;
+}
+
+.emptyAction {
+  margin-top: 1.75rem;
+}
+
+.emptyArtwork {
+  display: flex;
+  justify-content: center;
+}
+
+.emptyArtwork svg {
+  width: min(100%, 390px);
+}
+
+@media (min-width: 640px) {
+  .postList {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .postList {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (min-width: 900px) {
   .singlePostList > li > a[data-has-image="true"] {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-    min-height: 350px;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+    min-height: 390px;
   }
 
-  .singlePostList > li > a[data-has-image="true"] > div:first-child {
-    height: clamp(350px, 35vw, 430px);
+  .singlePostList > li > a[data-has-image="true"] > [data-card-media] {
+    height: clamp(390px, 36vw, 460px);
     min-height: 0;
     aspect-ratio: auto;
-    overflow: hidden;
   }
 
-  .singlePostList > li > a[data-has-image="true"] > span:last-child {
-    padding: clamp(1.5rem, 4vw, 3.5rem);
+  .singlePostList > li > a[data-has-image="true"] > [data-card-copy] {
+    padding: clamp(2rem, 4vw, 3.5rem);
+  }
+
+  .singlePostList [data-card-title] {
+    font-size: clamp(1.65rem, 2.65vw, 2.45rem);
+    line-height: 1.38;
+    letter-spacing: -0.025em;
   }
 
   .singlePostList > li > a[data-has-image="false"] {
-    max-width: 46rem;
+    max-width: 48rem;
+    min-height: 330px;
+  }
+}
+
+@media (max-width: 639px) {
+  .categoryNav {
+    column-gap: 1.1rem;
+  }
+
+  .intro {
+    font-size: 0.875rem;
+  }
+
+  .singlePostList [data-card-title] {
+    font-size: 1.6rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .emptyLayout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.5rem;
+    padding: 2.25rem 0 1.75rem;
+  }
+
+  .emptyArtwork {
+    justify-content: flex-start;
   }
 }

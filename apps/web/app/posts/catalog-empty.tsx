@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import styles from "./catalog.module.css";
 
 function EmptyJourneyIllustration() {
   return (
@@ -92,25 +93,18 @@ export function CatalogEmpty({
   return (
     <section
       aria-labelledby="catalog-empty-title"
-      className="rounded-panel border-border bg-surface overflow-hidden border"
+      className={styles.emptyState}
     >
-      <div className="grid items-center gap-3 px-6 py-8 sm:px-10 md:min-h-[330px] md:grid-cols-[minmax(0,1fr)_minmax(280px,0.95fr)] md:gap-8 md:py-10 lg:px-14">
-        <div className="order-2 md:order-1">
-          <p className="text-muted-foreground text-xs font-semibold tracking-[0.18em]">
-            THE NEXT JOURNEY
-          </p>
-          <h2
-            id="catalog-empty-title"
-            className="mt-4 font-serif text-2xl leading-snug break-keep sm:text-3xl"
-          >
+      <div className={styles.emptyLayout}>
+        <div className={styles.emptyCopy}>
+          <p className={styles.eyebrow}>THE NEXT JOURNEY</p>
+          <h2 id="catalog-empty-title" className={styles.emptyTitle}>
             {title}
           </h2>
-          <p className="text-muted-foreground mt-3 max-w-md leading-relaxed break-keep">
-            {description}
-          </p>
-          <div className="mt-7">{action}</div>
+          <p className={styles.emptyDescription}>{description}</p>
+          <div className={styles.emptyAction}>{action}</div>
         </div>
-        <div className="order-1 flex justify-center md:order-2">
+        <div className={styles.emptyArtwork}>
           <EmptyJourneyIllustration />
         </div>
       </div>
