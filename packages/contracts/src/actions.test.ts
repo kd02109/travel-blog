@@ -64,6 +64,8 @@ const samples = {
       updated_at: date,
       display_name: "독자",
       is_staff: false,
+      can_manage: false,
+      is_guest: true,
     },
   ],
   "like.get": { liked: false, count: 0 },
@@ -93,14 +95,43 @@ const samples = {
     },
   ],
   "admin.post.get": draft,
+  "admin.post.published": {
+    revision_id: id,
+    snapshot: { title: "공개 글" },
+    published_at: date,
+    updated_at: date,
+  },
   "admin.post.create": draft,
   "admin.post.save": draft,
   "admin.post.publish": { post_id: id, revision_id: id, version: 1 },
   "admin.post.status": { status: "private", version: 1 },
   "admin.revisions": [
-    { id, created_at: date, created_by: id, schema_version: 1 },
+    {
+      id,
+      created_at: date,
+      created_by: id,
+      schema_version: 1,
+      reason: "published",
+      post_version: 1,
+      title: "공개 글",
+      excerpt: "본문",
+      is_published: true,
+    },
   ],
+  "admin.revision.get": {
+    id,
+    created_at: date,
+    created_by: id,
+    schema_version: 1,
+    reason: "published",
+    post_version: 1,
+    title: "공개 글",
+    excerpt: "본문",
+    is_published: true,
+    snapshot: { title: "공개 글" },
+  },
   "admin.revision.restore": draft,
+  "admin.revision.delete": { deleted: true },
   "admin.members": [
     {
       site_id: id,
@@ -248,7 +279,11 @@ describe("deployed action boundaries", () => {
   for (const action of Object.keys(samples) as ApiAction[]) {
     it(`accepts ${action} response and rejects a missing/wrong payload`, () => {
       expect(() => parseActionOutput(action, samples[action])).not.toThrow();
-      expect(() => parseActionOutput(action, null)).toThrow();
+      if (action === "admin.post.published") {
+        expect(parseActionOutput(action, null)).toBeNull();
+      } else {
+        expect(() => parseActionOutput(action, null)).toThrow();
+      }
       expect(() => parseActionOutput(action, { unexpected: true })).toThrow();
     });
   }

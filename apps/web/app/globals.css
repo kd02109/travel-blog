@@ -29,3 +29,89 @@ html.travel-home-snap footer {
     scroll-snap-type: none;
   }
 }
+
+.post-body-media [data-image-pair] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 1rem;
+  margin-block: 2rem;
+}
+
+.post-body-media figure[data-asset-id] {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-block: 2rem;
+  overflow: hidden;
+  border: 1px solid #d9ded5;
+  border-radius: 0.65rem;
+  background: #f5f7f3;
+}
+
+.post-body-media figure[data-image-width="small"] {
+  width: min(100%, 320px);
+}
+
+.post-body-media figure[data-image-width="medium"] {
+  width: min(100%, 520px);
+}
+
+.post-body-media figure[data-image-align="left"] {
+  margin-inline: 0 auto;
+}
+
+.post-body-media figure[data-image-align="center"] {
+  margin-inline: auto;
+}
+
+.post-body-media figure[data-image-align="right"] {
+  margin-inline: auto 0;
+}
+
+.post-body-media [data-image-pair] > figure[data-asset-id] {
+  width: 100%;
+  margin: 0;
+}
+
+.post-body-media figure[data-asset-id] > img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(70vh, 760px);
+  margin-inline: auto;
+  object-fit: contain;
+}
+
+.post-body-media figure[data-image-width="small"] > img {
+  max-height: min(42vh, 340px);
+}
+
+.post-body-media figure[data-image-width="medium"] > img {
+  max-height: min(56vh, 540px);
+}
+
+.post-body-media [data-image-pair] figure[data-asset-id] > img {
+  max-height: min(52vh, 480px);
+}
+
+.post-body-media figure[data-asset-id] > figcaption {
+  padding: 0.7rem 0.9rem;
+  border-top: 1px solid #dfe5dc;
+  background: #f5f7f3;
+  color: #4c5d51;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.post-body-media figure[data-asset-id] > figcaption:empty {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .post-body-media [data-image-pair] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

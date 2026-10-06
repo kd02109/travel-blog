@@ -1,5 +1,5 @@
 import { CATEGORIES, SITE_NAME, SITE_SLUG } from "@repo/constants";
-import type { MockState, Role, Content, Publication } from "./types";
+import type { MockState, Role, Content, Publication, Revision } from "./types";
 export const MOCK_API_PATH = "/__mock__/functions/v1/travel-api";
 export const MOCK_SITE_ID = "10000000-0000-4000-8000-000000000001";
 export const MOCK_NOW = "2026-09-19T00:00:00.000Z";
@@ -130,8 +130,19 @@ export function createFixtures(empty = false): MockState {
           deleted_at: null,
         };
       });
-  const publications: Publication[] = posts.map((p) => ({
+  const revisions: Revision[] = posts.map((p, i) => ({
+    id: mockId(10, i + 1),
     post_id: p.id,
+    snapshot: structuredClone(p.draft_content),
+    created_at: MOCK_NOW,
+    created_by: p.author_id,
+    schema_version: 1,
+    reason: "published",
+    post_version: p.lock_version,
+  }));
+  const publications: Publication[] = posts.map((p, i) => ({
+    post_id: p.id,
+    revision_id: revisions[i]!.id,
     site_id: p.site_id,
     title: p.draft_content.title!,
     slug: p.draft_content.slug!,
@@ -176,7 +187,7 @@ export function createFixtures(empty = false): MockState {
     members,
     assets: [...assets, pdf],
     likes: {},
-    revisions: [],
+    revisions,
     reports: [],
     accountDeletions: [],
     audit: [],

@@ -66,6 +66,69 @@ export function createMockEngine(options: MockOptions = {}) {
       ? state.publications.find((p) => p.post_id === postId)
       : undefined;
   }
+  const sameContent = (left: unknown, right: unknown) =>
+    JSON.stringify(left) === JSON.stringify(right);
+  function revisionSummary(revision: (typeof state.revisions)[number]) {
+    const bodyParts: string[] = [];
+    let photoCount = 0;
+    function visit(block: unknown) {
+      if (!block || typeof block !== "object") return;
+      const item = block as {
+        type?: unknown;
+        content?: unknown;
+        children?: unknown;
+      };
+      if (item.type === "image") photoCount++;
+      if (
+        bodyParts.length < 2 &&
+        [
+          "paragraph",
+          "bulletListItem",
+          "numberedListItem",
+          "quote",
+          "codeBlock",
+        ].includes(String(item.type))
+      ) {
+        const bodyText =
+          typeof item.content === "string"
+            ? item.content
+            : Array.isArray(item.content)
+              ? item.content
+                  .filter(
+                    (part): part is { text: string } =>
+                      !!part &&
+                      typeof part === "object" &&
+                      (part as { type?: unknown }).type === "text" &&
+                      typeof (part as { text?: unknown }).text === "string",
+                  )
+                  .map((part) => part.text)
+                  .join("")
+              : "";
+        if (bodyText.trim()) bodyParts.push(bodyText.trim());
+      }
+      if (Array.isArray(item.children)) item.children.forEach(visit);
+    }
+    revision.snapshot.blocks?.forEach(visit);
+    const bodyText = bodyParts.join(" · ");
+    const excerpt = bodyText
+      ? `${bodyText.slice(0, photoCount ? 110 : 140)}${photoCount ? ` · 사진 ${photoCount}장` : ""}`
+      : photoCount
+        ? `사진 ${photoCount}장`
+        : "본문 없음";
+    return {
+      id: revision.id,
+      created_at: revision.created_at,
+      created_by: revision.created_by,
+      schema_version: revision.schema_version,
+      reason: revision.reason,
+      post_version: revision.post_version,
+      title: revision.snapshot.title ?? "",
+      excerpt,
+      is_published: state.publications.some(
+        (published) => published.revision_id === revision.id,
+      ),
+    };
+  }
   function counts(postId: string) {
     const post = state.posts.find((p) => p.id === postId)!;
     return {
@@ -121,7 +184,7 @@ export function createMockEngine(options: MockOptions = {}) {
       throw new ApiError(401, "invalid_visitor");
     return visitor;
   }
-  function publicComment(c: Comment) {
+  function publicComment(c: Comment, viewerId?: string) {
     return {
       id: c.id,
       parent_id: c.parent_id,
@@ -140,6 +203,11 @@ export function createMockEngine(options: MockOptions = {}) {
       is_staff: state.members.some(
         (m) => m.user_id === c.author_id && m.active && m.role !== "reader",
       ),
+      can_manage:
+        c.status === "visible" &&
+        c.author_kind === "member" &&
+        c.author_id === viewerId,
+      is_guest: c.status === "visible" && c.author_kind === "guest",
     };
   }
   function audit(person: Member, action: string, resource: string) {
@@ -331,7 +399,7 @@ export function createMockEngine(options: MockOptions = {}) {
               a.id.localeCompare(b.id),
           ),
         input,
-      ).map(publicComment);
+      ).map((comment) => publicComment(comment, person?.user_id));
     }
     if (action === "visitor.create") {
       const token = `mock-visitor-${id()}`;
@@ -550,11 +618,14 @@ export function createMockEngine(options: MockOptions = {}) {
       const actor = staff(person);
       const scopedPost = [
         "admin.post.get",
+        "admin.post.published",
         "admin.post.save",
         "admin.post.publish",
         "admin.post.status",
         "admin.revisions",
+        "admin.revision.get",
         "admin.revision.restore",
+        "admin.revision.delete",
       ].includes(action);
       checkSite(input.site_id, !scopedPost);
       if (action === "admin.posts") {
@@ -622,6 +693,20 @@ export function createMockEngine(options: MockOptions = {}) {
         const p = state.posts.find((p) => p.id === input.id);
         if (!p) throw new ApiError(404, "not_found");
         if (action === "admin.post.get") return p;
+        if (action === "admin.post.published") {
+          const published = publication(p.id);
+          if (!published) return null;
+          const revision = state.revisions.find(
+            (candidate) => candidate.id === published.revision_id,
+          );
+          if (!revision) throw new ApiError(500, "internal_error");
+          return {
+            revision_id: published.revision_id,
+            snapshot: structuredClone(revision.snapshot),
+            published_at: published.published_at,
+            updated_at: published.updated_at,
+          };
+        }
         if (action === "admin.revisions")
           return paginate(
             state.revisions
@@ -629,18 +714,30 @@ export function createMockEngine(options: MockOptions = {}) {
               .slice()
               .reverse(),
             input,
-          ).map(({ id, created_at, created_by, schema_version }) => ({
-            id,
-            created_at,
-            created_by,
-            schema_version,
-          }));
+          ).map(revisionSummary);
+        if (action === "admin.revision.get") {
+          const revision = state.revisions.find(
+            (candidate) =>
+              candidate.id === input.revision_id && candidate.post_id === p.id,
+          );
+          if (!revision) throw new ApiError(404, "not_found");
+          return {
+            ...revisionSummary(revision),
+            snapshot: structuredClone(revision.snapshot),
+          };
+        }
         requireVersion(p.lock_version, input.version);
         if (action === "admin.post.save") {
           p.draft_content = structuredClone(object(input.content));
           p.lock_version++;
           p.updated_at = now();
-          if (input.checkpoint === true)
+          const latest = state.revisions
+            .filter((revision) => revision.post_id === p.id)
+            .at(-1);
+          if (
+            input.checkpoint === true &&
+            (!latest || !sameContent(latest.snapshot, p.draft_content))
+          )
             state.revisions.push({
               id: id(),
               post_id: p.id,
@@ -648,6 +745,8 @@ export function createMockEngine(options: MockOptions = {}) {
               created_at: now(),
               created_by: actor.user_id,
               schema_version: 1,
+              reason: "checkpoint",
+              post_version: p.lock_version,
             });
           return p;
         }
@@ -656,10 +755,45 @@ export function createMockEngine(options: MockOptions = {}) {
             (r) => r.id === input.revision_id && r.post_id === p.id,
           );
           if (!r) throw new ApiError(404, "not_found");
+          const latest = state.revisions
+            .filter((revision) => revision.post_id === p.id)
+            .at(-1);
+          if (
+            !sameContent(p.draft_content, r.snapshot) &&
+            (!latest || !sameContent(latest.snapshot, p.draft_content))
+          )
+            state.revisions.push({
+              id: id(),
+              post_id: p.id,
+              snapshot: structuredClone(p.draft_content),
+              created_at: now(),
+              created_by: actor.user_id,
+              schema_version: 1,
+              reason: "before_restore",
+              post_version: p.lock_version,
+            });
           p.draft_content = structuredClone(r.snapshot);
           p.lock_version++;
           p.updated_at = now();
           return p;
+        }
+        if (action === "admin.revision.delete") {
+          const index = state.revisions.findIndex(
+            (revision) =>
+              revision.id === input.revision_id && revision.post_id === p.id,
+          );
+          if (index < 0) throw new ApiError(404, "not_found");
+          if (
+            state.publications.some(
+              (published) =>
+                published.post_id === p.id &&
+                published.revision_id === input.revision_id,
+            )
+          )
+            throw new ApiError(409, "published_revision_protected");
+          state.revisions.splice(index, 1);
+          audit(actor, "post.revision.delete", p.id);
+          return { deleted: true };
         }
         if (action === "admin.post.status") {
           if (input.status !== "private" && input.status !== "trashed")
@@ -674,15 +808,39 @@ export function createMockEngine(options: MockOptions = {}) {
         if (action === "admin.post.publish") {
           const rendered = validatePublication(p);
           const d = p.draft_content;
-          const revision = id();
-          state.revisions.push({
-            id: revision,
-            post_id: p.id,
-            snapshot: structuredClone(d),
-            created_at: now(),
-            created_by: actor.user_id,
-            schema_version: 1,
-          });
+          const current = state.publications.find(
+            (published) => published.post_id === p.id,
+          );
+          const currentRevision = state.revisions.find(
+            (candidate) => candidate.id === current?.revision_id,
+          );
+          const latest = state.revisions
+            .filter((candidate) => candidate.post_id === p.id)
+            .at(-1);
+          let revision: string;
+          if (currentRevision && sameContent(currentRevision.snapshot, d)) {
+            revision = currentRevision.id;
+          } else if (
+            latest &&
+            latest.reason === "checkpoint" &&
+            sameContent(latest.snapshot, d)
+          ) {
+            revision = latest.id;
+            latest.reason = "published";
+            latest.post_version = p.lock_version + 1;
+          } else {
+            revision = id();
+            state.revisions.push({
+              id: revision,
+              post_id: p.id,
+              snapshot: structuredClone(d),
+              created_at: now(),
+              created_by: actor.user_id,
+              schema_version: 1,
+              reason: "published",
+              post_version: p.lock_version + 1,
+            });
+          }
           p.first_published_at ??= now();
           p.status = "published";
           p.deleted_at = null;
@@ -690,6 +848,7 @@ export function createMockEngine(options: MockOptions = {}) {
           p.updated_at = now();
           const published = {
             post_id: p.id,
+            revision_id: revision,
             site_id: p.site_id,
             title: d.title!,
             slug: d.slug!,

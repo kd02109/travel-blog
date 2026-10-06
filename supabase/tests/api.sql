@@ -9,7 +9,7 @@ insert into app_private.site_memberships(site_id,user_id,role) select site_id,ow
 insert into app_private.media_assets(id,site_id,owner_id,kind,bucket,object_path,state,metadata) select asset_id,site_id,owner_id,'image','published-media',asset_id::text,'ready','{"mime":"image/png","bytes":100,"width":10,"height":10}'::jsonb from test_ids union all select metadata_asset_id,site_id,owner_id,'image','published-media',metadata_asset_id::text,'ready','{"mime":"image/png","bytes":100,"width":10,"height":10}'::jsonb from test_ids;
 set local role service_role;
 do $$
-declare t record; r jsonb; pid uuid; base_pid uuid; cid uuid; ver int; rid uuid; req uuid:=gen_random_uuid(); d jsonb; base_d jsonb; meta_case record; hash text:='$argon2id$v=19$m=19456,t=2,p=1$example$example';
+declare t record; r jsonb; pid uuid; base_pid uuid; cid uuid; guest_reply_id uuid; member_reply_id uuid; ver int; rid uuid; req uuid:=gen_random_uuid(); d jsonb; base_d jsonb; meta_case record; hash text:='$argon2id$v=19$m=19456,t=2,p=1$example$example';
 begin
  select * into t from test_ids;
  r:=public.travel_api('site.get',null,jsonb_build_object('site_id',t.site_id)); assert r->>'name'='Test';
@@ -63,6 +63,21 @@ begin
  begin perform public.travel_api('comment.edit',t.outsider_id,jsonb_build_object('id',cid,'version',0,'body','bad')); raise exception 'comment hijack allowed'; exception when sqlstate 'PT403' then null; end;
  begin perform public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','비밀번호 없는 수정','guest_verified',false)); raise exception 'guest password bypass allowed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','수정','guest_verified',true)); assert (r->>'version')::int=1;
+ r:=public.travel_api('comment.create',t.outsider_id,jsonb_build_object('id',base_pid,'body','회원 답글','parent_id',cid,'request_hash','member-reply','request_key',gen_random_uuid())); member_reply_id:=(r->>'id')::uuid;
+ r:=public.travel_api('comments.list',t.outsider_id,jsonb_build_object('id',base_pid));
+ select value into d from jsonb_array_elements(r) value where value->>'id'=member_reply_id::text;
+ assert (d->>'can_manage')::boolean and not (d->>'is_guest')::boolean;
+ r:=public.travel_api('comments.list',null,jsonb_build_object('id',base_pid));
+ select value into d from jsonb_array_elements(r) value where value->>'id'=member_reply_id::text;
+ assert not (d->>'can_manage')::boolean;
+ begin perform public.travel_api('comment.delete',t.owner_id,jsonb_build_object('id',member_reply_id,'version',0)); raise exception 'other account deleted member reply'; exception when sqlstate 'PT403' then null; end;
+ r:=public.travel_api('comment.delete',t.outsider_id,jsonb_build_object('id',member_reply_id,'version',0)); assert (r->>'version')::int=1;
+ r:=public.travel_api('comment.create',null,jsonb_build_object('id',base_pid,'body','비회원 답글','parent_id',cid,'guest_name','방문자','password_hash',hash,'actor_hash',repeat('b',64),'request_hash','guest-reply','request_key',gen_random_uuid())); guest_reply_id:=(r->>'id')::uuid;
+ r:=public.travel_api('comments.list',t.outsider_id,jsonb_build_object('id',base_pid));
+ select value into d from jsonb_array_elements(r) value where value->>'id'=guest_reply_id::text;
+ assert not (d->>'can_manage')::boolean and (d->>'is_guest')::boolean;
+ begin perform public.travel_api('comment.delete',t.outsider_id,jsonb_build_object('id',guest_reply_id,'version',0)); raise exception 'guest reply deleted without password verification'; exception when sqlstate 'PT403' then null; end;
+ r:=public.travel_api('comment.delete',t.outsider_id,jsonb_build_object('id',guest_reply_id,'version',0,'guest_verified',true)); assert (r->>'version')::int=1;
  r:=public.travel_api('comment.report',t.outsider_id,jsonb_build_object('id',cid,'reason','spam'));
  r:=public.travel_api('admin.reports',t.owner_id,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=1;
  perform public.travel_api('admin.report.resolve',t.owner_id,jsonb_build_object('site_id',t.site_id,'id',r->0->>'id','status','resolved'));
@@ -80,6 +95,40 @@ begin
  r:=public.travel_api('admin.post.status',t.editor_id,jsonb_build_object('id',base_pid,'version',3,'status','private'));
  begin perform public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',base_pid)); raise exception 'private leaked'; exception when sqlstate 'PT404' then null; end;
  begin perform public.travel_api('asset.access',null,jsonb_build_object('id',t.asset_id)); raise exception 'private asset leaked'; exception when sqlstate 'PT401' then null; end;
+ -- Draft edits remain private; checkpoints, restores and publication updates keep distinct snapshots.
+ d:=jsonb_build_object('title','이력 원본','slug','revision-workflow','category_code','day-walk',
+  'tags',jsonb_build_array('서울'),'blocks',jsonb_build_array(jsonb_build_object('type','paragraph','content','원본 본문')),
+  'metadata',jsonb_build_object('region','서울','visited_on','2026-09-18'),'cover_asset_id',t.asset_id);
+ r:=public.travel_api('admin.post.create',t.editor_id,jsonb_build_object('site_id',t.site_id,'kind','article','content',d)); pid:=(r->>'id')::uuid;
+ r:=public.travel_api('admin.post.published',t.editor_id,jsonb_build_object('id',pid)); assert r is null;
+ r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',0,'rendered_html','<p>원본 본문</p>','asset_ids','[]'::jsonb)); rid:=(r->>'revision_id')::uuid;
+ d:=jsonb_set(d,'{title}','"보관할 초안"'::jsonb);
+ r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',1,'content',d,'checkpoint',true)); assert (r->>'lock_version')::int=2;
+ r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',pid)); assert r->>'title'='이력 원본';
+ r:=public.travel_api('admin.post.published',t.editor_id,jsonb_build_object('id',pid)); assert r->>'revision_id'=rid::text and r->'snapshot'->>'title'='이력 원본';
+ r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',2,'content',d,'checkpoint',true)); assert (r->>'lock_version')::int=3;
+ r:=public.travel_api('admin.revisions',t.editor_id,jsonb_build_object('id',pid)); assert jsonb_array_length(r)=2;
+ select id into cid from app_private.post_revisions where post_id=pid and reason='checkpoint';
+ r:=public.travel_api('admin.revision.get',t.editor_id,jsonb_build_object('id',pid,'revision_id',cid)); assert r->>'title'='보관할 초안' and r->>'reason'='checkpoint';
+ begin perform public.travel_api('admin.revision.delete',t.editor_id,jsonb_build_object('id',pid,'revision_id',rid,'version',3)); raise exception 'active publication deleted'; exception when sqlstate 'PT409' then assert sqlerrm='published_revision_protected'; end;
+ begin perform public.travel_api('admin.revision.delete',t.editor_id,jsonb_build_object('id',pid,'revision_id',cid,'version',2)); raise exception 'stale delete allowed'; exception when sqlstate 'PT409' then assert sqlerrm='version_conflict'; end;
+ d:=jsonb_set(d,'{title}','"복원 전 초안"'::jsonb);
+ r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',3,'content',d));
+ r:=public.travel_api('admin.revision.restore',t.editor_id,jsonb_build_object('id',pid,'version',4,'revision_id',rid)); assert r->'draft_content'->>'title'='이력 원본';
+ assert exists(select 1 from app_private.post_revisions where post_id=pid and reason='before_restore' and snapshot->>'title'='복원 전 초안');
+ r:=public.travel_api('admin.revision.delete',t.editor_id,jsonb_build_object('id',pid,'revision_id',cid,'version',5)); assert (r->>'deleted')::boolean;
+ assert not exists(select 1 from app_private.post_revisions where id=cid);
+ d:=jsonb_set(d,'{title}','"최종 공개"'::jsonb);
+ r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',5,'content',d));
+ r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',pid)); assert r->>'title'='이력 원본';
+ r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',6,'rendered_html','<p>최종 공개</p>','asset_ids','[]'::jsonb)); assert (r->>'version')::int=7;
+ r:=public.travel_api('admin.revision.delete',t.editor_id,jsonb_build_object('id',pid,'revision_id',rid,'version',7)); assert (r->>'deleted')::boolean;
+ assert not exists(select 1 from app_private.post_revisions where id=rid);
+ r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',pid)); assert r->>'title'='최종 공개';
+ select count(*) into ver from app_private.post_revisions where post_id=pid;
+ r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',7,'rendered_html','<p>최종 공개</p>','asset_ids','[]'::jsonb)); assert (r->>'version')::int=8;
+ assert (select count(*) from app_private.post_revisions where post_id=pid)=ver;
+ assert app_private.revision_excerpt('{"blocks":[{"type":"heading","content":[{"type":"text","text":"test 안녕"}]},{"type":"paragraph","content":[{"type":"text","text":"수정된 본문"}]},{"type":"image","props":{}},{"type":"image","props":{}}]}'::jsonb)='수정된 본문 · 사진 2장';
  r:=public.travel_api('rate.consume',null,'{"key_hash":"test","action":"test","window_seconds":60,"max":1}'); assert (r->>'allowed')::boolean;
  r:=public.travel_api('rate.consume',null,'{"key_hash":"test","action":"test","window_seconds":60,"max":1}'); assert not (r->>'allowed')::boolean;
  raise notice 'API integration assertions passed';

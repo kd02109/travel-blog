@@ -90,17 +90,17 @@ await api.request("like.set", { id: MOCK_POST_IDS[0], liked: true });
 
 ## 구현한 동작
 
-| 영역      | action 및 동작                                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 공개      | `site.get`, `posts.list`, `post.get`, `comments.list`; 실제처럼 배열 응답, 필터·페이지·비공개 차단                       |
-| 사용자    | `visitor.create`, `me`, `profile.save`; 명시적 테스트 Bearer/방문자 토큰                                                 |
-| 글        | `admin.posts`, `admin.post.create/get/save/publish/status`, `admin.revisions`, `admin.revision.restore`                  |
-| 저장·발행 | 새 글 lock_version=0, 수정마다 증가, stale version 409, 초안과 게시본 분리, 비공개·휴지통 공개 차단                      |
-| 댓글      | `comment.create/edit/delete/report`, `admin.comments`, `admin.comment.moderate`, `admin.reports`, `admin.report.resolve` |
-| 좋아요    | `like.set`; 같은 사용자 반복 요청 멱등 처리; PDF는 댓글·좋아요 403, 목록 수치는 null                                     |
-| 홈 설정   | `admin.settings.get/save/apply`; 저장 후에도 공개 홈 유지, apply에서 반영                                                |
-| 권한      | `admin.members`, `admin.member.set`, `admin.audit`; owner/editor/reader 구분, 마지막 owner 보호                          |
-| 미디어    | `asset.access`; 공개 연결된 fixture 또는 관리자 접근, 로컬 예시 URL·metadata·PDF preview ID                              |
+| 영역      | action 및 동작                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 공개      | `site.get`, `posts.list`, `post.get`, `comments.list`; 실제처럼 배열 응답, 필터·페이지·비공개 차단                           |
+| 사용자    | `visitor.create`, `me`, `profile.save`; 명시적 테스트 Bearer/방문자 토큰                                                     |
+| 글        | `admin.posts`, `admin.post.create/get/published/save/publish/status`, `admin.revisions`, `admin.revision.get/restore/delete` |
+| 저장·발행 | 새 글 lock_version=0, 수정마다 증가, stale version 409, 초안과 게시본 분리, 비공개·휴지통 공개 차단                          |
+| 댓글      | `comment.create/edit/delete/report`, `admin.comments`, `admin.comment.moderate`, `admin.reports`, `admin.report.resolve`     |
+| 좋아요    | `like.set`; 같은 사용자 반복 요청 멱등 처리; PDF는 댓글·좋아요 403, 목록 수치는 null                                         |
+| 홈 설정   | `admin.settings.get/save/apply`; 저장 후에도 공개 홈 유지, apply에서 반영                                                    |
+| 권한      | `admin.members`, `admin.member.set`, `admin.audit`; owner/editor/reader 구분, 마지막 owner 보호                              |
+| 미디어    | `asset.access`; 공개 연결된 fixture 또는 관리자 접근, 로컬 예시 URL·metadata·PDF preview ID                                  |
 
 공개 목록에 본문·초안이 섞이지 않고, 공개 댓글에 비밀번호·내부 actor 정보가 나오지 않습니다. Edge의 순수 `validateAction`, `cleanInput`, `renderBlocks`를 직접 재사용합니다. Deno 코드의 tuple 한 곳에 `as const`를 추가해 기존 동작을 유지하면서 모노레포의 엄격한 TypeScript 검사도 통과시켰습니다.
 

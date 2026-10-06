@@ -19,12 +19,17 @@ it("validates public/member/admin reads including nullable profile and audit fie
     ["me", {}],
     ["admin.posts", site],
     ["admin.post.get", { id: MOCK_POST_IDS[0] }],
+    ["admin.post.published", { id: MOCK_POST_IDS[0] }],
     ["admin.members", site],
     ["admin.settings.get", site],
     ["admin.comments", site],
     ["admin.reports", site],
     ["admin.audit", site],
     ["admin.revisions", { id: MOCK_POST_IDS[0] }],
+    [
+      "admin.revision.get",
+      { id: MOCK_POST_IDS[0], revision_id: mockId(10, 1) },
+    ],
     ["asset.access", { id: mockId(4, 1) }],
     ["asset.status", { id: mockId(4, 1), ...site }],
   ];

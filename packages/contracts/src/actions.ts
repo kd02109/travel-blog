@@ -72,6 +72,18 @@ const draft = z.object({
   deleted_at: timestamp.nullable(),
   updated_at: timestamp,
 });
+const revisionReason = z.enum(["checkpoint", "published", "before_restore"]);
+const revisionSummary = z.object({
+  id: uuid,
+  created_at: timestamp,
+  created_by: uuid,
+  schema_version: version,
+  reason: revisionReason,
+  post_version: version.nullable(),
+  title: z.string(),
+  excerpt: z.string(),
+  is_published: z.boolean(),
+});
 const adminCard = z.object({
   id: uuid,
   kind,
@@ -104,6 +116,8 @@ const comment = z.object({
   updated_at: timestamp,
   display_name: z.string(),
   is_staff: z.boolean(),
+  can_manage: z.boolean(),
+  is_guest: z.boolean(),
 });
 const member = z.object({
   site_id: uuid,
@@ -216,6 +230,17 @@ export const actionContracts = {
     z.array(adminCard),
   ),
   "admin.post.get": contract(z.strictObject(resource), draft),
+  "admin.post.published": contract(
+    z.strictObject(resource),
+    z
+      .object({
+        revision_id: uuid,
+        snapshot: content,
+        published_at: timestamp,
+        updated_at: timestamp,
+      })
+      .nullable(),
+  ),
   "admin.post.create": contract(
     z.strictObject({ ...scoped, kind, content: content.default({}) }),
     draft,
@@ -238,18 +263,19 @@ export const actionContracts = {
   ),
   "admin.revisions": contract(
     z.strictObject({ ...resource, ...page }),
-    z.array(
-      z.object({
-        id: uuid,
-        created_at: timestamp,
-        created_by: uuid,
-        schema_version: version,
-      }),
-    ),
+    z.array(revisionSummary),
+  ),
+  "admin.revision.get": contract(
+    z.strictObject({ ...resource, revision_id: uuid }),
+    revisionSummary.extend({ snapshot: content }),
   ),
   "admin.revision.restore": contract(
     z.strictObject({ ...versioned, revision_id: uuid }),
     draft,
+  ),
+  "admin.revision.delete": contract(
+    z.strictObject({ ...versioned, revision_id: uuid }),
+    z.object({ deleted: z.literal(true) }),
   ),
   "admin.members": contract(z.strictObject(scoped), z.array(member)),
   "admin.member.set": contract(
