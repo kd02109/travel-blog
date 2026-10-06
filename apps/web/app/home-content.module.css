@@ -46,3 +46,27 @@
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
+
+.singlePostList {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .singlePostList > li > a[data-has-image="true"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    min-height: 350px;
+  }
+
+  .singlePostList > li > a[data-has-image="true"] > div:first-child {
+    height: clamp(350px, 35vw, 430px);
+    max-height: 430px;
+    aspect-ratio: auto;
+    overflow: hidden;
+  }
+
+  .singlePostList > li > a[data-has-image="true"] > span:last-child {
+    padding: clamp(1.5rem, 4vw, 3.5rem);
+  }
+}

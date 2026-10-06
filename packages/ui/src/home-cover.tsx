@@ -226,11 +226,11 @@ export function HomeCover({
       <section
         data-home-template={template}
         aria-labelledby={headingId}
-        className={`bg-background text-foreground relative isolate grid overflow-hidden ${desktop ? "min-h-[540px] grid-cols-[1.05fr_0.9fr] items-center gap-10 px-14 py-10" : "min-h-[min(68vh,640px)] gap-6 px-6 py-10 sm:px-10 lg:grid-cols-[1.05fr_0.9fr] lg:items-center lg:gap-12 lg:px-[clamp(3rem,7vw,8rem)] lg:py-12"}`}
+        className={`bg-background text-foreground relative isolate grid overflow-hidden ${desktop ? "min-h-[540px] grid-cols-[1.05fr_0.9fr] items-center gap-10 px-14 py-10" : "min-h-[min(68vh,640px)] content-center gap-3 px-5 py-5 sm:gap-4 sm:px-10 sm:py-8 lg:grid-cols-[1.05fr_0.9fr] lg:items-center lg:gap-12 lg:px-[clamp(3rem,7vw,8rem)] lg:py-12"}`}
       >
         <div className="relative z-10 flex min-w-0 flex-col items-start">
           <div className="flex w-full items-center gap-5 text-xs font-semibold tracking-[0.22em]">
-            <span>01 / TRAVEL JOURNAL</span>
+            <span className="truncate">{siteName} / TRAVEL JOURNAL</span>
             <span
               className="bg-border h-px min-w-10 flex-1"
               aria-hidden="true"
@@ -238,20 +238,28 @@ export function HomeCover({
           </div>
           <Heading
             id={headingId}
-            className={`mt-10 max-w-[12ch] font-serif leading-[1.18] break-keep ${desktop ? "text-[clamp(3rem,5vw,4.75rem)]" : "text-[clamp(2.6rem,6vw,5.25rem)]"}`}
+            className={`mt-4 max-w-[12ch] font-serif leading-[1.18] break-keep sm:mt-6 lg:mt-10 ${desktop ? "text-[clamp(3rem,5vw,4.75rem)]" : "text-[clamp(2rem,5vw,5.25rem)]"}`}
           >
             {headline}
           </Heading>
-          <p className="text-muted-foreground mt-7 max-w-md text-base leading-relaxed">
+          <p className="text-muted-foreground mt-3 max-w-md text-sm leading-relaxed sm:mt-5 sm:text-base lg:mt-7">
             {summary}
           </p>
-          {action}
+          <div className="[&_a]:mt-4 sm:[&_a]:mt-5 lg:[&_a]:mt-7">{action}</div>
         </div>
         <HomeCoverACarousel
           scenes={scenes}
           interactive={!desktop}
           desktop={desktop}
         />
+        {!desktop && (
+          <span
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute bottom-1.5 left-5 text-[10px] tracking-[0.12em] sm:bottom-4 sm:left-10"
+          >
+            스크롤해 여행 보기 ↓
+          </span>
+        )}
       </section>
     );
   }
@@ -269,7 +277,7 @@ export function HomeCover({
         className={`relative isolate flex items-center overflow-hidden bg-[#173c42] text-white ${desktop ? "min-h-[540px]" : "min-h-[min(68vh,640px)]"}`}
       >
         <div
-          className="absolute inset-0 grid grid-rows-2 gap-1.5"
+          className={`absolute inset-0 grid gap-1.5 ${scenes.length === 1 ? "grid-rows-1" : "grid-rows-2"}`}
           aria-hidden="true"
         >
           <div
@@ -284,22 +292,20 @@ export function HomeCover({
               />
             ))}
           </div>
-          <div
-            className={`grid min-h-0 gap-1.5 ${lower.length > 1 ? "grid-cols-[0.85fr_1.65fr]" : "grid-cols-1"}`}
-          >
-            {lower.length ? (
-              lower.map((scene, index) => (
+          {lower.length > 0 && (
+            <div
+              className={`grid min-h-0 gap-1.5 ${lower.length > 1 ? "grid-cols-[0.85fr_1.65fr]" : "grid-cols-1"}`}
+            >
+              {lower.map((scene, index) => (
                 <PhotoSlot
                   key={index}
                   image={scene}
                   sample={samples[lowerStart + index]}
                   className="h-full min-w-0"
                 />
-              ))
-            ) : (
-              <PhotoSlot className="h-full" />
-            )}
-          </div>
+              ))}
+            </div>
+          )}
           <div className="absolute inset-0 bg-[#102d32]/25" />
         </div>
         <div className="relative z-10 w-full bg-[#173c42]/95 px-6 py-8 sm:px-10 lg:px-[clamp(3rem,8vw,9rem)] lg:py-10">

@@ -27,8 +27,8 @@ export function HomeCoverACarousel({
   const [reducedMotion, setReducedMotion] = useState(false);
   const [visible, setVisible] = useState(true);
   const [pageVisible, setPageVisible] = useState(true);
-  const [pointerOverPhoto, setPointerOverPhoto] = useState(false);
-  const [controlFocused, setControlFocused] = useState(false);
+  const [pointerOverCarousel, setPointerOverCarousel] = useState(false);
+  const [focusWithinCarousel, setFocusWithinCarousel] = useState(false);
   const [announcement, setAnnouncement] = useState("");
   const activeIndex = count ? index % count : 0;
   const nextIndex = count ? (activeIndex + 1) % count : 0;
@@ -39,8 +39,8 @@ export function HomeCoverACarousel({
     !reducedMotion &&
     visible &&
     pageVisible &&
-    !pointerOverPhoto &&
-    !controlFocused;
+    !pointerOverCarousel &&
+    !focusWithinCarousel;
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -101,24 +101,18 @@ export function HomeCoverACarousel({
       aria-roledescription="캐러셀"
       aria-label="여행 사진"
       className="relative m-0 ml-auto w-full min-w-0"
-      onFocusCapture={(event) =>
-        setControlFocused(
-          (event.target as HTMLElement).dataset.carouselPlay !== "true",
-        )
-      }
+      onPointerEnter={() => setPointerOverCarousel(true)}
+      onPointerLeave={() => setPointerOverCarousel(false)}
+      onFocusCapture={() => setFocusWithinCarousel(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-          setControlFocused(false);
+          setFocusWithinCarousel(false);
       }}
     >
       <div
-        className={`${desktop ? "h-[450px]" : "h-[min(36vh,300px)] min-h-72 sm:h-[460px] lg:h-[min(70vh,660px)]"} relative w-full`}
+        className={`${desktop ? "h-[450px]" : "h-[clamp(170px,29dvh,240px)] sm:h-[min(42dvh,360px)] lg:h-[min(70vh,660px)]"} relative w-full`}
       >
-        <div
-          className="bg-muted absolute inset-[0_11%_16%_5%] overflow-hidden max-sm:inset-[0_13%_17%_0]"
-          onPointerEnter={() => setPointerOverPhoto(true)}
-          onPointerLeave={() => setPointerOverPhoto(false)}
-        >
+        <div className="bg-muted absolute inset-[0_11%_22%_5%] overflow-hidden max-sm:inset-[0_0_24%_0] sm:inset-[0_11%_16%_5%]">
           {scenes.map((scene, position) => (
             <div
               key={position}
@@ -143,7 +137,7 @@ export function HomeCoverACarousel({
             {interactive ? (
               <button
                 type="button"
-                className="bg-surface absolute right-0 bottom-[10%] z-20 h-[31%] w-[35%] cursor-pointer border-[7px] border-[var(--surface)] shadow-[0_8px_24px_rgb(23_60_66_/_17%)]"
+                className="bg-surface absolute right-0 bottom-[10%] z-20 hidden h-[31%] w-[35%] cursor-pointer border-[7px] border-[var(--surface)] shadow-[0_8px_24px_rgb(23_60_66_/_17%)] sm:block"
                 aria-label={`다음 사진 보기: ${scenes[nextIndex]?.label}`}
                 onClick={() => move(1)}
               >
@@ -162,7 +156,7 @@ export function HomeCoverACarousel({
               </button>
             ) : (
               <div
-                className="bg-surface absolute right-0 bottom-[10%] z-20 h-[31%] w-[35%] border-[7px] border-[var(--surface)] shadow-[0_8px_24px_rgb(23_60_66_/_17%)]"
+                className="bg-surface absolute right-0 bottom-[10%] z-20 hidden h-[31%] w-[35%] border-[7px] border-[var(--surface)] shadow-[0_8px_24px_rgb(23_60_66_/_17%)] sm:block"
                 aria-hidden="true"
               >
                 <div className="relative h-full w-full overflow-hidden">
@@ -204,7 +198,7 @@ export function HomeCoverACarousel({
                 type="button"
                 aria-label="이전 사진"
                 onClick={() => move(-1)}
-                className="border-border bg-surface text-foreground hover:bg-muted grid size-10 place-items-center border transition-colors"
+                className="border-border bg-surface text-foreground hover:bg-muted grid size-11 place-items-center border transition-colors"
               >
                 <ChevronLeft size={19} aria-hidden="true" />
               </button>
@@ -212,20 +206,19 @@ export function HomeCoverACarousel({
                 type="button"
                 aria-label="다음 사진"
                 onClick={() => move(1)}
-                className="border-border bg-surface text-foreground hover:bg-muted grid size-10 place-items-center border transition-colors"
+                className="border-border bg-surface text-foreground hover:bg-muted grid size-11 place-items-center border transition-colors"
               >
                 <ChevronRight size={19} aria-hidden="true" />
               </button>
               {!reducedMotion && (
                 <button
                   type="button"
-                  data-carousel-play="true"
                   aria-label={
                     paused ? "자동 전환 다시 재생" : "자동 전환 일시정지"
                   }
                   aria-pressed={paused}
                   onClick={() => setPaused((current) => !current)}
-                  className="border-border bg-surface text-foreground hover:bg-muted min-h-10 min-w-16 border px-2 text-xs font-semibold whitespace-nowrap transition-colors"
+                  className="border-border bg-surface text-foreground hover:bg-muted min-h-11 min-w-16 border px-2 text-xs font-semibold whitespace-nowrap transition-colors"
                 >
                   {paused ? "재생" : "일시정지"}
                 </button>
