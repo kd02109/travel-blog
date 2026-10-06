@@ -131,9 +131,8 @@
 
 @layer utilities {
   :is(input, textarea, select):focus-visible {
-    outline: 0;
-    outline-offset: 0;
-    box-shadow: none;
+    outline: 3px solid var(--ring);
+    outline-offset: 2px;
     background-color: var(--muted);
   }
 }
