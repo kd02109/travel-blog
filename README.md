@@ -89,6 +89,8 @@ pnpm exec vitest run --coverage
 pnpm format
 ```
 
+개발 서버나 브라우저 테스트가 포트를 열었다면 작업을 마칠 때 해당 서버와 자식 프로세스를 종료하고, 사용한 포트가 작업 전 상태로 돌아왔는지 확인합니다. 로컬 Supabase를 이번 작업에서 시작했다면 `pnpm db:stop`도 실행합니다. 다른 작업이 이미 사용 중이던 포트는 보존합니다. 자세한 마무리 절차는 [AGENTS.md](AGENTS.md)를 따릅니다.
+
 GitHub Actions도 frozen 설치 → check → build → Chromium E2E를 실행합니다. Supabase SQL/Edge/worker 테스트는 별도 환경이 필요하므로 프런트엔드 CI와 분리되어 있습니다.
 
 ```sh
