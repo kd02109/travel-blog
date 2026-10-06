@@ -8,9 +8,11 @@ export type PublicPostCard = ActionOutput<"posts.list">[number];
 export function PostCard({
   post,
   siteId,
+  featured = false,
 }: {
   post: PublicPostCard;
   siteId: string;
+  featured?: boolean;
 }) {
   const pdf = post.category_code === "itinerary-pdf";
   const hasImage = Boolean((pdf && post.pdf_asset_id) || post.cover_asset_id);
@@ -41,10 +43,14 @@ export function PostCard({
       <Link
         href={`/posts/${encodeURIComponent(post.slug)}`}
         data-has-image={hasImage}
+        data-featured={featured}
         className={`group rounded-panel border-border hover:border-primary flex h-full min-h-72 flex-col overflow-hidden border transition-colors focus-visible:relative ${hasImage ? "bg-surface" : "bg-[var(--muted)]"}`}
       >
         {hasImage && (
-          <div className="aspect-[3/2] w-full overflow-hidden bg-[linear-gradient(150deg,#d8e2d8,#b9d1cf_45%,#f4eee2)]">
+          <div
+            data-card-media
+            className="aspect-[3/2] w-full overflow-hidden bg-[linear-gradient(150deg,#d8e2d8,#b9d1cf_45%,#f4eee2)]"
+          >
             {pdf && post.pdf_asset_id ? (
               <PdfCover
                 assetId={post.pdf_asset_id}
@@ -64,6 +70,7 @@ export function PostCard({
           </div>
         )}
         <span
+          data-card-copy
           className={`flex flex-1 flex-col items-start ${hasImage ? "p-5" : "p-7"}`}
         >
           {!pdf && (
@@ -75,6 +82,7 @@ export function PostCard({
             </span>
           )}
           <span
+            data-card-title
             className={`font-serif leading-relaxed group-hover:underline ${hasImage ? "mt-3 text-xl" : "mt-8 text-2xl"}`}
           >
             {post.title}
@@ -85,7 +93,7 @@ export function PostCard({
             </span>
           )}
           <time
-            className="text-muted-foreground mt-auto pt-4 text-sm"
+            className={`text-muted-foreground pt-4 text-sm ${featured ? "mt-3" : "mt-auto"}`}
             dateTime={post.published_at}
           >
             {new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(
@@ -97,7 +105,16 @@ export function PostCard({
               ♡ {post.like_count ?? 0} · 댓글 {post.comment_count ?? 0}
             </span>
           )}
-          {!hasImage && (
+          {featured && (
+            <span
+              data-card-cta
+              className="mt-auto pt-7 text-sm font-semibold underline underline-offset-4"
+            >
+              {pdf ? "일정표 보기" : "자세히 읽기"}{" "}
+              <span aria-hidden="true">↗</span>
+            </span>
+          )}
+          {!hasImage && !featured && (
             <span aria-hidden="true" className="mt-6 self-end text-xl">
               ↗
             </span>

@@ -77,6 +77,7 @@ export function Catalog({
     },
   );
   const loadError = site.error ?? posts.error;
+  const visiblePosts = posts.data?.slice(0, 12) ?? [];
   const showInitialError =
     Boolean(initialError) &&
     (!site.data || !posts.data) &&
@@ -114,17 +115,21 @@ export function Catalog({
   return (
     <main className="mx-auto w-full max-w-[var(--content-max)] px-5 py-10 md:px-8 md:py-14 xl:px-16">
       <header>
-        <p className="text-muted-foreground text-sm">OUR TRAVEL JOURNAL</p>
-        <h1 className="mt-2 font-serif text-3xl sm:text-4xl">여행 기록</h1>
-        <nav aria-label="여행 기록 분류" className="mt-7 flex flex-wrap gap-2">
+        <p className={styles.eyebrow}>OUR TRAVEL JOURNAL</p>
+        <h1 className={styles.pageTitle}>여행 기록</h1>
+        <p className={styles.intro}>
+          걸었던 길과 머문 장소를 천천히 다시 읽습니다.
+        </p>
+        <nav aria-label="여행 기록 분류" className={styles.categoryNav}>
           {([{ code: "all", label: "모든 여행" }, ...CATEGORIES] as const).map(
             (item) => (
               <button
                 key={item.code}
                 type="button"
                 aria-pressed={category === item.code}
+                data-selected={category === item.code}
                 onClick={() => selectCategory(item.code)}
-                className={`rounded-control focus-visible:outline-ring border-border bg-surface text-foreground hover:bg-muted inline-flex min-h-11 items-center border px-4 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${category === item.code ? "font-semibold" : "font-normal"}`}
+                className={styles.categoryButton}
               >
                 {item.label}
               </button>
@@ -132,7 +137,7 @@ export function Catalog({
           )}
         </nav>
       </header>
-      <div className="mt-8 space-y-6">
+      <div className={styles.catalogContent}>
         {(loadError || showInitialError) && (
           <ApiErrorState
             error={loadError ?? initialError}
@@ -147,39 +152,60 @@ export function Catalog({
           (site.isPending || posts.isPending) && (
             <LoadingState label="여행 기록을 불러오고 있어요…" />
           )}
-        {posts.data && posts.data.length > 0 && (
-          <ul
-            className={
-              posts.data.length === 1
-                ? styles.singlePostList
-                : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-            }
-          >
-            {posts.data.slice(0, 12).map((post) => (
-              <PostCard key={post.post_id} post={post} siteId={siteId} />
-            ))}
-          </ul>
+        {visiblePosts.length > 0 && (
+          <section aria-label="여행 기록 목록">
+            <p className={styles.listNote} aria-live="polite">
+              {page > 1 ? `${page}번째 페이지` : "최근 기록"} ·{" "}
+              {visiblePosts.length}편
+            </p>
+            <ul
+              className={
+                visiblePosts.length === 1
+                  ? styles.singlePostList
+                  : styles.postList
+              }
+            >
+              {visiblePosts.map((post) => (
+                <PostCard
+                  key={post.post_id}
+                  post={post}
+                  siteId={siteId}
+                  featured={visiblePosts.length === 1}
+                />
+              ))}
+            </ul>
+          </section>
         )}
         {posts.data?.length === 0 && !posts.error && (
           <CatalogEmpty
             title={
-              category !== "all"
-                ? "이 분류에는 아직 글이 없어요"
-                : "아직 여행 기록이 없어요"
+              page > 1
+                ? "이 페이지에는 기록이 없어요"
+                : category !== "all"
+                  ? "이 길의 첫 기록을 준비하고 있어요"
+                  : "아직 여행 기록이 없어요"
             }
             description={
-              category !== "all"
-                ? "다른 분류를 선택하거나 모든 여행을 살펴보세요."
-                : "새로운 여행 이야기가 올라오면 이곳에서 읽을 수 있어요."
+              page > 1
+                ? "첫 페이지로 돌아가 다른 여행 기록을 살펴보세요."
+                : category !== "all"
+                  ? "다른 여행을 먼저 읽거나, 조금 뒤에 다시 들러 주세요."
+                  : "새로운 여행 이야기가 올라오면 이곳에서 읽을 수 있어요."
             }
             action={
-              category !== "all" ? (
-                <Button variant="outline" onClick={() => selectCategory("all")}>
-                  모든 여행 보기
+              page > 1 ? (
+                <Button onClick={() => move(1)}>
+                  첫 페이지 보기 <span aria-hidden="true">↗</span>
+                </Button>
+              ) : category !== "all" ? (
+                <Button onClick={() => selectCategory("all")}>
+                  모든 여행 보기 <span aria-hidden="true">↗</span>
                 </Button>
               ) : (
-                <Button asChild variant="outline">
-                  <Link href="/">홈으로 돌아가기</Link>
+                <Button asChild>
+                  <Link href="/">
+                    홈으로 돌아가기 <span aria-hidden="true">↗</span>
+                  </Link>
                 </Button>
               )
             }
