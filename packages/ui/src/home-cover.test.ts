@@ -123,3 +123,38 @@ test("A with one photo does not show carousel navigation", () => {
   expect(markup).not.toContain("다음 사진 보기");
   expect(markup).not.toContain("자동 전환 일시정지");
 });
+
+test("A carousel controls provide at least a 44px touch target", () => {
+  const markup = renderToStaticMarkup(
+    createElement(HomeCover, {
+      template: "A",
+      siteName: "여행 블로그",
+      image: createElement("img", { src: "/first.jpg", alt: "첫 사진" }),
+      secondaryImages: [
+        createElement("img", { src: "/second.jpg", alt: "다음 사진" }),
+      ],
+      action: createElement("a", { href: "/posts" }, "여행 읽기"),
+    }),
+  );
+
+  expect(markup).toMatch(/aria-label="이전 사진"[^>]*class="[^"]*size-11/);
+  expect(markup).toMatch(/aria-label="다음 사진"[^>]*class="[^"]*size-11/);
+  expect(markup).toMatch(
+    /aria-label="자동 전환 일시정지"[^>]*class="[^"]*min-h-11/,
+  );
+});
+
+test("B uses one image across the cover when only one is configured", () => {
+  const markup = renderToStaticMarkup(
+    createElement(HomeCover, {
+      template: "B",
+      siteName: "여행 블로그",
+      image: createElement("img", { src: "/only.jpg", alt: "여행 사진" }),
+      action: createElement("a", { href: "/posts" }, "여행 읽기"),
+    }),
+  );
+
+  expect(markup.match(/src="\/only\.jpg"/g)).toHaveLength(1);
+  expect(markup).toContain("grid-rows-1");
+  expect(markup).not.toContain("linear-gradient(145deg");
+});

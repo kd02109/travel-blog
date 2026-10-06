@@ -17,6 +17,7 @@ import {
 } from "@repo/ui/home-cover";
 import { AnalyticsConsent } from "./analytics-consent";
 import { PostCard } from "./post-card";
+import { CatalogEmpty } from "./posts/catalog-empty";
 import { PrivateImage } from "./posts/post-media";
 import styles from "./home-content.module.css";
 
@@ -51,10 +52,20 @@ export function HomeContent({
     const observer = new ResizeObserver(syncTopOffset);
     if (header) observer.observe(header);
     window.addEventListener("resize", syncTopOffset);
-    document.documentElement.classList.add("travel-home-snap");
+    const snapPreference = window.matchMedia(
+      "(min-width: 1024px) and (min-height: 700px)",
+    );
+    const syncSnap = () =>
+      document.documentElement.classList.toggle(
+        "travel-home-snap",
+        snapPreference.matches,
+      );
+    syncSnap();
+    snapPreference.addEventListener("change", syncSnap);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", syncTopOffset);
+      snapPreference.removeEventListener("change", syncSnap);
       document.documentElement.classList.remove("travel-home-snap");
     };
   }, []);
@@ -137,7 +148,7 @@ export function HomeContent({
           assetId={assetId}
           siteId={siteId}
           title={`우리의 여행 사진 ${position}`}
-          eager={template === "A" || position === 1}
+          eager={position === 1}
           className="h-full max-h-none min-h-64 w-full rounded-none object-cover"
         />
       </div>
@@ -147,7 +158,7 @@ export function HomeContent({
         alt={sample.alt}
         fill
         sizes="(max-width: 768px) 100vw, 70vw"
-        loading={template === "A" || position === 1 ? "eager" : "lazy"}
+        loading={position === 1 ? "eager" : "lazy"}
         className="object-cover"
       />
     ) : undefined;
@@ -244,17 +255,21 @@ export function HomeContent({
             >
               함께한 여행의 장면
             </h2>
-            <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {CATEGORIES.map((category) => (
-                <li key={category.code}>
+            <ul className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+              {CATEGORIES.map((category, index) => (
+                <li
+                  key={category.code}
+                  className="last:col-span-2 lg:last:col-span-1"
+                >
                   <Link
                     href={`/posts?category=${category.code}`}
-                    className="group rounded-panel border-border bg-surface hover:border-primary hover:bg-muted/50 flex min-h-36 flex-col justify-between border p-5 transition-colors focus-visible:relative sm:p-6"
+                    className="group rounded-panel border-border bg-surface hover:border-primary hover:bg-muted/50 flex min-h-28 flex-col justify-between border p-4 transition-colors focus-visible:relative sm:min-h-32 sm:p-5"
                   >
-                    <span className="text-muted-foreground text-sm">
-                      TRAVEL JOURNAL
+                    <span className="text-muted-foreground text-xs tracking-[0.12em] tabular-nums">
+                      {String(index + 1).padStart(2, "0")} /{" "}
+                      {String(CATEGORIES.length).padStart(2, "0")}
                     </span>
-                    <span className="mt-5 flex items-center justify-between gap-3 font-serif text-xl sm:text-2xl">
+                    <span className="mt-4 flex items-end justify-between gap-1 font-serif text-lg sm:text-xl xl:text-[1.4rem]">
                       <span>{category.label}</span>
                       <span
                         aria-hidden="true"
@@ -319,15 +334,32 @@ export function HomeContent({
               </div>
             ) : null}
             {posts.data?.length ? (
-              <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              <ul
+                className={
+                  posts.data.length === 1
+                    ? `${styles.singlePostList} mt-6`
+                    : "mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
+                }
+              >
                 {posts.data.map((post) => (
                   <PostCard key={post.post_id} post={post} siteId={siteId} />
                 ))}
               </ul>
             ) : posts.data && !posts.error ? (
-              <p className="rounded-panel mt-5 border p-8 text-center">
-                아직 공개된 여행 기록이 없습니다.
-              </p>
+              <div className="mt-6">
+                <CatalogEmpty
+                  title="첫 여행 기록을 준비하고 있어요"
+                  description="기록이 올라오는 동안, 우리가 여행에서 간직하는 장면을 먼저 만나 보세요."
+                  action={
+                    <Link
+                      href="/about"
+                      className="rounded-control border-border hover:bg-muted inline-flex min-h-11 items-center border px-5 font-medium transition-colors"
+                    >
+                      우리의 기록 보기 ↗
+                    </Link>
+                  }
+                />
+              </div>
             ) : null}
           </section>
           <div className="mt-12">
