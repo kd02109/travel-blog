@@ -74,6 +74,7 @@ export const memberActions = new Set([
   "asset.status",
   "asset.cancel",
   "asset.list",
+  "asset.delete",
 ]);
 export function validateAction(action: unknown): string {
   if (

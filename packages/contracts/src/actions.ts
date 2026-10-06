@@ -30,9 +30,12 @@ const assetListItem = z.object({
   id: uuid,
   created_at: timestamp,
   metadata: json,
-  thumbnail_url: z.url(),
-  original_url: z.url(),
+  thumbnail_url: z.url().nullable(),
+  original_url: z.url().nullable(),
   usage: z.array(assetUsage),
+  can_delete: z.boolean(),
+  delete_available_at: timestamp.nullable(),
+  deletion_pending: z.boolean(),
 });
 export const categorySchema = z.enum(CATEGORY_CODES);
 export const siteSchema = z.object({
@@ -393,6 +396,10 @@ export const actionContracts = {
     }),
   ),
   "asset.cancel": contract(z.strictObject(resource), saved),
+  "asset.delete": contract(
+    z.strictObject({ id: uuid, site_id: uuid }),
+    z.object({ deleted: z.literal(true) }),
+  ),
   "asset.list": contract(
     z.strictObject({ ...scoped, ...page }),
     z.object({

@@ -226,6 +226,24 @@ export function createMockEngine(options: MockOptions = {}) {
       (a) => a.id === assetId && a.kind === kind && a.state === "ready",
     );
   }
+  function assetReferenced(assetId: string) {
+    const containsId = (value: unknown) =>
+      JSON.stringify(value).includes(assetId);
+    return (
+      state.assets.some((asset) => asset.preview_asset_id === assetId) ||
+      state.posts.some((post) => containsId(post.draft_content)) ||
+      state.revisions.some((revision) => containsId(revision.snapshot)) ||
+      state.publications.some((publication) => containsId(publication)) ||
+      containsId(state.draftSettings) ||
+      containsId(state.publishedSettings)
+    );
+  }
+  function deleteAvailableAt(asset: Asset) {
+    const availableAt = Date.parse(asset.created_at) + 125 * 60 * 1000;
+    return availableAt > Date.parse(now())
+      ? new Date(availableAt).toISOString()
+      : null;
+  }
   function validateSettings(input: unknown): Settings {
     const value = object(input);
     if (
@@ -602,6 +620,21 @@ export function createMockEngine(options: MockOptions = {}) {
         preview_asset_id: asset.preview_asset_id,
       };
     }
+    if (action === "asset.delete") {
+      checkSite(input.site_id, true);
+      const actor = staff(person, ["admin", "owner"]);
+      const index = state.assets.findIndex((asset) => asset.id === input.id);
+      const asset = state.assets[index];
+      if (!asset) throw new ApiError(404, "not_found");
+      if (asset.kind !== "image" || asset.state !== "ready")
+        throw new ApiError(409, "asset_not_deletable");
+      if (deleteAvailableAt(asset))
+        throw new ApiError(409, "asset_upload_token_active");
+      if (assetReferenced(asset.id)) throw new ApiError(409, "asset_in_use");
+      state.assets.splice(index, 1);
+      audit(actor, action, asset.id);
+      return { deleted: true };
+    }
     if (action === "asset.list") {
       const actor = staff(person);
       checkSite(input.site_id, true);
@@ -678,6 +711,9 @@ export function createMockEngine(options: MockOptions = {}) {
             ...(usedAsCover.has(asset.id) ? ["post-cover"] : []),
             ...(usedInBody.has(asset.id) ? ["post-body"] : []),
           ],
+          can_delete: !assetReferenced(asset.id) && !deleteAvailableAt(asset),
+          delete_available_at: deleteAvailableAt(asset),
+          deletion_pending: false,
         })),
         next_offset: page.length === limit ? offset + limit : null,
         expires_in: 300,

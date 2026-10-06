@@ -642,6 +642,8 @@ export function HomeDesignEditor({
         <MediaUpload
           siteId={siteId}
           kindFilter="image"
+          canDelete={owner}
+          protectedAssetIds={selectedImageIds}
           onImageReady={addHomeImage}
           onProcessingChange={setProcessingImages}
           onSetCoverImage={addHomeImage}

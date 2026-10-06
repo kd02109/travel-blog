@@ -215,6 +215,7 @@ const samples = {
   "asset.complete": { id, state: "processing" },
   "asset.status": { id, state: "processing" },
   "asset.cancel": { saved: true },
+  "asset.delete": { deleted: true },
   "asset.list": {
     items: [
       {
@@ -224,6 +225,9 @@ const samples = {
         thumbnail_url: "https://example.com/thumbnail",
         original_url: "https://example.com/original",
         usage: ["home", "post-cover"],
+        can_delete: false,
+        delete_available_at: null,
+        deletion_pending: false,
       },
     ],
     next_offset: null,
@@ -288,6 +292,30 @@ describe("deployed action boundaries", () => {
     ).toEqual({ id, state: "processing" });
     expect(() =>
       parseActionOutput("asset.status", { id, state: "other" }),
+    ).toThrow();
+  });
+  it("requires a site-scoped delete request and an explicit deletion result", () => {
+    expect(
+      actionContracts["asset.delete"].input.parse({ id, site_id: id }),
+    ).toEqual({
+      id,
+      site_id: id,
+    });
+    expect(
+      actionContracts["asset.delete"].input.safeParse({ id }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["asset.delete"].input.safeParse({
+        id,
+        site_id: id,
+        force: true,
+      }).success,
+    ).toBe(false);
+    expect(() =>
+      parseActionOutput("asset.list", {
+        ...samples["asset.list"],
+        items: [{ ...samples["asset.list"].items[0], can_delete: undefined }],
+      }),
     ).toThrow();
   });
   for (const action of Object.keys(samples) as ApiAction[]) {
