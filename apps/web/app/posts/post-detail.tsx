@@ -14,6 +14,7 @@ import { LoadingState } from "@repo/ui/skeleton";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
 import { CommentSection } from "./comment-section";
+import styles from "./post-detail.module.css";
 export function PostDetail({
   slug,
   initialSite,
@@ -197,6 +198,17 @@ export function PostDetail({
     );
   const article = post.data.category_code !== "itinerary-pdf";
   const metadata = post.data.metadata as Record<string, unknown>;
+  const categoryLabel =
+    CATEGORIES.find((item) => item.code === post.data.category_code)?.label ??
+    "여행 기록";
+  const region =
+    typeof metadata.region === "string" ? metadata.region.trim() : "";
+  const summary =
+    typeof metadata.description === "string" ? metadata.description.trim() : "";
+  const coverCaption =
+    typeof metadata.cover_caption === "string"
+      ? metadata.cover_caption.trim()
+      : "";
   const formatDay = (value: unknown) =>
     typeof value === "string"
       ? new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(
@@ -205,7 +217,6 @@ export function PostDetail({
       : "";
   const visitInfo = article
     ? [
-        typeof metadata.region === "string" ? `지역 ${metadata.region}` : "",
         post.data.category_code === "day-walk"
           ? `다녀온 날 ${formatDay(metadata.visited_on)}`
           : "",
@@ -223,80 +234,82 @@ export function PostDetail({
         .join(" · ")
     : "";
   return (
-    <main className="mx-auto w-full max-w-[var(--article-max)] space-y-7 px-5 py-10 md:px-8 md:py-16">
+    <main className={styles.page}>
       <Link
-        className="inline-flex min-h-12 items-center underline underline-offset-4"
+        className={styles.back}
         href={`/posts?category=${post.data.category_code}`}
       >
-        ←{" "}
-        {CATEGORIES.find((item) => item.code === post.data?.category_code)
-          ?.label ?? "여행 기록"}{" "}
-        목록
+        ← {categoryLabel} 목록
       </Link>
       {readError && (
-        <ApiErrorState
-          error={readError}
-          title="여행 기록을 새로 확인하지 못했어요"
-          onRetry={retryPost}
-          isRetrying={site.isFetching || post.isFetching}
-        />
+        <div className={styles.status}>
+          <ApiErrorState
+            error={readError}
+            title="여행 기록을 새로 확인하지 못했어요"
+            onRetry={retryPost}
+            isRetrying={site.isFetching || post.isFetching}
+          />
+        </div>
       )}
-      <header className="space-y-4">
-        <p className="text-muted-foreground">
-          {
-            CATEGORIES.find((item) => item.code === post.data?.category_code)
-              ?.label
-          }{" "}
-          · 게시일{" "}
-          {new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(
-            new Date(post.data.published_at),
-          )}
-        </p>
-        <h1 className="font-serif text-3xl leading-relaxed sm:text-4xl">
-          {post.data.title}
-        </h1>
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-3">
-            {article && (
+      <article className={styles.article}>
+        <header className={styles.head}>
+          <p className={styles.eyebrow}>
+            <span>{categoryLabel}</span>
+            {region && <span>{region}</span>}
+          </p>
+          <h1 className={styles.title}>{post.data.title}</h1>
+          {summary && <p className={styles.summary}>{summary}</p>}
+          <div className={styles.metaBar}>
+            <p className={styles.meta}>
+              <span>
+                <time dateTime={post.data.published_at}>
+                  {new Intl.DateTimeFormat("ko-KR", {
+                    dateStyle: "long",
+                  }).format(new Date(post.data.published_at))}
+                </time>
+              </span>
+              {visitInfo && <span>{visitInfo}</span>}
+            </p>
+            <div className={styles.actions}>
+              {article && (
+                <button
+                  type="button"
+                  onClick={() => void toggleLike()}
+                  disabled={
+                    setLike.isPending ||
+                    likeState.isLoading ||
+                    (!likeState.data && !optimisticLike)
+                  }
+                  aria-label={
+                    (optimisticLike ?? likeState.data)?.liked
+                      ? "좋아요 취소"
+                      : "좋아요"
+                  }
+                  aria-pressed={
+                    (optimisticLike ?? likeState.data)?.liked ?? false
+                  }
+                  className={styles.action}
+                >
+                  <span className={styles.heart} aria-hidden="true">
+                    {(optimisticLike ?? likeState.data)?.liked ? "♥" : "♡"}
+                  </span>
+                  좋아요{" "}
+                  {(optimisticLike ?? likeState.data)?.count ??
+                    post.data.like_count ??
+                    0}
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => void toggleLike()}
-                disabled={
-                  setLike.isPending ||
-                  likeState.isLoading ||
-                  (!likeState.data && !optimisticLike)
-                }
-                aria-label={
-                  (optimisticLike ?? likeState.data)?.liked
-                    ? "좋아요 취소"
-                    : "좋아요"
-                }
-                aria-pressed={
-                  (optimisticLike ?? likeState.data)?.liked ?? false
-                }
-                className="rounded-control inline-flex min-h-11 min-w-11 items-center gap-2 px-2 text-base transition-transform hover:opacity-75 active:scale-95 disabled:opacity-60"
+                onClick={() => void sharePost()}
+                className={styles.action}
               >
-                {(optimisticLike ?? likeState.data)?.liked ? (
-                  <span aria-hidden="true">♥</span>
-                ) : (
-                  <span aria-hidden="true">♡</span>
-                )}
-                좋아요 ·{" "}
-                {(optimisticLike ?? likeState.data)?.count ??
-                  post.data.like_count ??
-                  0}
+                ↗ 공유하기
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => void sharePost()}
-              className="rounded-control inline-flex min-h-11 items-center px-2 text-base transition-opacity hover:opacity-75"
-            >
-              공유하기 ↗
-            </button>
+            </div>
           </div>
-          {article && (
-            <>
+          {article && (likeState.error || setLike.error) && (
+            <div className={styles.status}>
               {likeState.error && (
                 <ApiErrorState
                   error={likeState.error}
@@ -313,80 +326,75 @@ export function PostDetail({
                   isRetrying={setLike.isPending}
                 />
               )}
-            </>
+            </div>
           )}
-        </div>
-        {article && (
-          <>
-            <p className="text-muted-foreground">{visitInfo}</p>
-            <p className="flex flex-wrap gap-3">
-              {post.data.tags.map((tag) => (
-                <span key={tag} className="text-muted-foreground text-sm">
-                  #{tag}
-                </span>
-              ))}
-            </p>
-          </>
+        </header>
+        {post.data.cover_asset_id && (
+          <figure className={styles.cover}>
+            <PrivateImage
+              assetId={post.data.cover_asset_id}
+              siteId={siteId}
+              title={coverCaption || `${post.data.title} 대표 사진`}
+              className="absolute inset-0 h-full w-full object-cover"
+              reserveSpace
+            />
+            {coverCaption && <figcaption>{coverCaption}</figcaption>}
+          </figure>
         )}
-      </header>
-      {post.data.cover_asset_id && (
-        <PrivateImage
-          assetId={post.data.cover_asset_id}
-          siteId={siteId}
-          title={`${post.data.title} 대표 사진`}
-          reserveSpace
-        />
-      )}
-      {post.data.pdf_asset_id && (
-        <PrivatePdf
-          assetId={post.data.pdf_asset_id}
-          siteId={siteId}
-          title={post.data.title}
-        />
-      )}
-      {articleHtml && (
-        <section className="space-y-6">
-          {contents.length > 1 && (
-            <nav
-              aria-label="이 글의 목차"
-              className="rounded-panel bg-surface border p-5"
-            >
-              <h2 className="font-serif text-xl">이 글의 목차</h2>
-              <ol className="mt-3 list-decimal space-y-2 pl-5">
-                {contents.map((item) => (
-                  <li key={item.id}>
-                    <a
-                      className="underline underline-offset-4"
-                      href={`#${item.id}`}
-                    >
-                      {item.title}
-                    </a>
-                  </li>
-                ))}
-              </ol>
-            </nav>
-          )}
-          <div
-            ref={articleBody}
-            className="space-y-6 text-lg leading-[1.9] [&_a]:underline [&_figure]:my-8 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:leading-relaxed [&_h3]:font-serif [&_h3]:text-xl [&_p]:my-5"
-          >
-            <PostAssetFigures html={articleHtml} siteId={siteId} />
+        {post.data.pdf_asset_id && (
+          <div className={styles.reading}>
+            <PrivatePdf
+              assetId={post.data.pdf_asset_id}
+              siteId={siteId}
+              title={post.data.title}
+            />
           </div>
-        </section>
-      )}
+        )}
+        {articleHtml && (
+          <section className={styles.reading} aria-label="여행 이야기">
+            {contents.length > 1 && (
+              <nav aria-label="이 글의 목차" className={styles.toc}>
+                <h2>이 글의 목차</h2>
+                <ol>
+                  {contents.map((item) => (
+                    <li key={item.id}>
+                      <a href={`#${item.id}`}>{item.title}</a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            )}
+            <div ref={articleBody} className={styles.body}>
+              <PostAssetFigures html={articleHtml} siteId={siteId} />
+            </div>
+          </section>
+        )}
+        {article && post.data.tags.length > 0 && (
+          <div className={styles.tags} aria-label="글 태그">
+            {post.data.tags.map((tag) => (
+              <span key={tag}>#{tag}</span>
+            ))}
+          </div>
+        )}
+      </article>
       {post.data.category_code !== "itinerary-pdf" && related.error && (
-        <ApiErrorState
-          error={related.error}
-          title="같은 분류의 여행을 확인하지 못했어요"
-          onRetry={() => void related.refetch()}
-          isRetrying={related.isFetching}
-        />
+        <div className={styles.afterArticle}>
+          <ApiErrorState
+            error={related.error}
+            title="같은 분류의 여행을 확인하지 못했어요"
+            onRetry={() => void related.refetch()}
+            isRetrying={related.isFetching}
+          />
+        </div>
       )}
       {post.data.category_code !== "itinerary-pdf" &&
         related.data &&
         related.data.filter((item) => item.post_id !== post.data?.post_id)
           .length > 0 && (
-          <section aria-labelledby="related-heading">
+          <section
+            aria-labelledby="related-heading"
+            className={styles.afterArticle}
+          >
             <h2 id="related-heading" className="font-serif text-2xl">
               같은 분류의 여행
             </h2>
@@ -401,14 +409,16 @@ export function PostDetail({
           </section>
         )}
       {post.data.category_code !== "itinerary-pdf" && (
-        <CommentSection
-          key={post.data.post_id}
-          siteId={siteId}
-          postId={post.data.post_id}
-          slug={slug}
-          commentsEnabled={post.data.comments_enabled}
-          commentCount={post.data.comment_count}
-        />
+        <div className={styles.comments}>
+          <CommentSection
+            key={post.data.post_id}
+            siteId={siteId}
+            postId={post.data.post_id}
+            slug={slug}
+            commentsEnabled={post.data.comments_enabled}
+            commentCount={post.data.comment_count}
+          />
+        </div>
       )}
       <Dialog
         open={shareOpen}
