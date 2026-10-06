@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
@@ -107,6 +106,14 @@ export function CommentSection({
     }
   }
 
+  function openLogin() {
+    window.dispatchEvent(
+      new CustomEvent("travel-open-login", {
+        detail: { next: `/posts/${slug}#comments` },
+      }),
+    );
+  }
+
   async function submit(
     event: React.FormEvent<HTMLFormElement>,
     parentId: string | null = null,
@@ -138,7 +145,7 @@ export function CommentSection({
         password: signedIn ? undefined : String(form.get("password") ?? ""),
         request_key: crypto.randomUUID(),
       });
-      setNotice("댓글을 등록했습니다.");
+      setNotice("");
       setReplyTo(null);
       target.reset();
       sessionStorage.removeItem(`travel-comment-draft:${postId}`);
@@ -307,12 +314,13 @@ export function CommentSection({
                 신고
               </Button>
             ) : (
-              <Link
+              <button
+                type="button"
                 className="inline-flex min-h-10 items-center px-3 underline"
-                href={`/login?next=${encodeURIComponent(`/posts/${slug}#comments`)}`}
+                onClick={openLogin}
               >
                 로그인 후 신고
-              </Link>
+              </button>
             )}
           </div>
         )}
@@ -427,13 +435,16 @@ export function CommentSection({
             관리 비밀번호는 저장되지 않아 다시 입력해야 합니다.
           </p>
           {!signedIn && (
-            <Link
-              href={`/login?next=${encodeURIComponent(`/posts/${slug}#comments`)}`}
-              onClick={saveDraftBeforeLogin}
+            <button
+              type="button"
+              onClick={() => {
+                saveDraftBeforeLogin();
+                openLogin();
+              }}
               className="inline-flex min-h-11 items-center underline underline-offset-4"
             >
               카카오 로그인 후 댓글 남기기
-            </Link>
+            </button>
           )}
           <Button
             type="submit"

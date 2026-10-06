@@ -41,7 +41,7 @@ export function AccountSettings({
   async function requestDeletion() {
     if (
       !window.confirm(
-        "계정 삭제 요청을 제출할까요? 관리자가 댓글을 익명 처리한 뒤 계정을 삭제합니다.",
+        "계정 삭제를 요청할까요? 삭제 후에는 로그인하거나 기존 댓글을 수정할 수 없습니다.",
       )
     )
       return;
@@ -121,10 +121,10 @@ export function AccountSettings({
           <section className="rounded-panel border-destructive/40 space-y-3 border p-5">
             <h2 className="font-semibold">계정 삭제 요청</h2>
             <p className="text-muted-foreground">
-              요청을 접수하면 관리자가 기존 댓글의 계정 연결과 비회원 수정
-              자격을 제거한 뒤 Supabase Auth 계정을 삭제합니다. 댓글 본문은 공개
-              대화 기록으로 남고 작성자는 익명 독자로 표시됩니다. 처리 전까지
-              계정을 계속 사용할 수 있습니다.
+              요청을 접수하면 관리자가 확인한 뒤 계정을 삭제합니다. 작성한
+              댓글은 계속 공개되지만 이름은 &quot;삭제된 사용자&quot;로
+              표시됩니다. 삭제 후에는 로그인하거나 기존 댓글을 수정할 수
+              없습니다. 처리가 끝나기 전까지는 계정을 계속 사용할 수 있습니다.
             </p>
             <Button
               type="button"

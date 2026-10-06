@@ -232,7 +232,12 @@ try {
       redirect: "manual",
     });
     assert.equal(response.status, 303);
-    assert.match(response.headers.get("location"), /status=signed_out$/);
+    assert.equal(
+      response.headers.get("location"),
+      port === 3100
+        ? `http://localhost:${port}/`
+        : `http://localhost:${port}/login?status=signed_out`,
+    );
     assert(
       response.headers.getSetCookie().some((value) => /Max-Age=0/i.test(value)),
       "session cookie cleared",

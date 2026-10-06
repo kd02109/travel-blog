@@ -1,2 +1,31 @@
 @import "@repo/ui/styles.css";
 @source "./**/*.{ts,tsx}";
+
+.travel-login-dialog::backdrop {
+  background: rgb(12 31 34 / 55%);
+  backdrop-filter: blur(2px);
+}
+
+header[data-home-header="true"]:not([data-home-header-visible="true"]) {
+  pointer-events: none;
+}
+
+html.travel-home-snap {
+  scroll-snap-type: y mandatory;
+}
+
+html.travel-home-snap footer {
+  scroll-snap-align: end;
+}
+
+@media (max-height: 620px) {
+  html.travel-home-snap {
+    scroll-snap-type: y proximity;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.travel-home-snap {
+    scroll-snap-type: none;
+  }
+}

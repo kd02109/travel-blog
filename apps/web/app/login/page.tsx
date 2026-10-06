@@ -1,35 +1,29 @@
-import { authMessages } from "@repo/database/auth-flow";
-import Link from "next/link";
-import { LoginForm } from "./login-form";
+import { safeReturnPath } from "@repo/database/auth-flow";
+import { redirect } from "next/navigation";
+
+/** Keep old login links and OAuth error redirects working without a login page. */
 export default async function Login({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string; status?: string; next?: string }>;
 }) {
   const params = await searchParams;
-  const key = params.error ?? params.status;
-  const message = key
-    ? Object.hasOwn(authMessages, key)
-      ? authMessages[key]
-      : authMessages.oauth
-    : undefined;
-  return (
-    <main className="mx-auto max-w-xl px-6 py-20">
-      <h1 className="mb-6 text-3xl">로그인</h1>
-      {message && (
-        <p role={params.error ? "alert" : "status"} className="mb-6">
-          {message}
-        </p>
-      )}
-      <LoginForm next={params.next} />
-      <form action="/auth/signout" method="post" className="mt-6">
-        <button className="underline" type="submit">
-          현재 계정 로그아웃
-        </button>
-      </form>
-      <Link className="mt-6 block underline" href="/">
-        홈으로 돌아가기
-      </Link>
-    </main>
+  if (params.status === "signed_out" && !params.error) redirect("/");
+  const next = safeReturnPath(params.next);
+  const destination = new URL(next, "http://travel.local");
+  const authConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   );
+  // Keep login feedback visible even when the API is not configured.
+  const target = !authConfigured
+    ? new URL("/notice", "http://travel.local")
+    : destination.pathname === "/account"
+      ? new URL("/", "http://travel.local")
+      : destination;
+  target.searchParams.set("login", "1");
+  if (next !== "/") target.searchParams.set("next", next);
+  if (params.error) target.searchParams.set("error", params.error);
+  if (params.status) target.searchParams.set("status", params.status);
+  redirect(`${target.pathname}${target.search}${target.hash}`);
 }

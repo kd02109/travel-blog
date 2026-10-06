@@ -25,7 +25,8 @@
     "@sentry/nextjs": "10.75.0",
     "@repo/analytics": "workspace:*",
     "@repo/mock-api": "workspace:*",
-    "@repo/contracts": "workspace:*"
+    "@repo/contracts": "workspace:*",
+    "motion": "^14.0.0"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
