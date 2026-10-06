@@ -4,12 +4,11 @@ import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { errorMessage } from "@repo/api-client";
+import { ApiErrorState } from "@repo/api-client/feedback";
 import { pageOffset } from "@repo/api-client/query";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { Button } from "@repo/ui/button";
 import { Pagination } from "@repo/ui/pagination";
-import { ErrorState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
 import { PostCard } from "../post-card";
 import { CatalogEmpty } from "./catalog-empty";
@@ -76,6 +75,17 @@ export function Catalog({
       staleTime: 0,
     },
   );
+  const loadError = site.error ?? posts.error;
+  const showInitialError =
+    Boolean(initialError) &&
+    (!site.data || !posts.data) &&
+    !site.isFetching &&
+    !posts.isFetching &&
+    !loadError;
+  const retryContent = () => {
+    if (!site.data || site.error) void site.refetch();
+    if (site.data && (posts.error || !posts.data)) void posts.refetch();
+  };
   function move(next: number) {
     setPage(next);
     const query = new URLSearchParams();
@@ -120,27 +130,20 @@ export function Catalog({
         </nav>
       </header>
       <div className="mt-8 space-y-6">
-        {initialError && !site.data && (
-          <ErrorState
-            title="공개 기록에 연결하지 못했어요"
-            description={initialError}
-            onRetry={() => {
-              void site.refetch();
-            }}
+        {(loadError || showInitialError) && (
+          <ApiErrorState
+            error={loadError ?? initialError}
+            title="공개 기록을 확인하지 못했어요"
+            description={loadError ? undefined : initialError}
+            onRetry={retryContent}
+            isRetrying={site.isFetching || posts.isFetching}
           />
         )}
-        {(site.error || posts.error) && (
-          <ErrorState
-            description={errorMessage(site.error ?? posts.error)}
-            onRetry={() => {
-              void site.refetch();
-              void posts.refetch();
-            }}
-          />
-        )}
-        {!site.error && !posts.error && (site.isPending || posts.isPending) && (
-          <LoadingState label="여행 기록을 불러오고 있어요…" />
-        )}
+        {!loadError &&
+          !showInitialError &&
+          (site.isPending || posts.isPending) && (
+            <LoadingState label="여행 기록을 불러오고 있어요…" />
+          )}
         {posts.data && posts.data.length > 0 && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {posts.data.slice(0, 12).map((post) => (
@@ -148,7 +151,7 @@ export function Catalog({
             ))}
           </ul>
         )}
-        {posts.data?.length === 0 && (
+        {posts.data?.length === 0 && !posts.error && (
           <CatalogEmpty
             title={
               category !== "all"

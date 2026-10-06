@@ -5,9 +5,8 @@ import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, SITE_NAME } from "@repo/constants";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState } from "@repo/api-client/feedback";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { errorMessage } from "@repo/api-client";
-import { ErrorState } from "@repo/ui/feedback";
 
 const recordDescriptions: Record<(typeof CATEGORIES)[number]["code"], string> =
   {
@@ -23,8 +22,10 @@ const recordDescriptions: Record<(typeof CATEGORIES)[number]["code"], string> =
 
 export function AboutContent({
   initialSite,
+  initialError,
 }: {
   initialSite?: ActionOutput<"site.get">;
+  initialError?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const site = useTravelQuery(
@@ -43,6 +44,8 @@ export function AboutContent({
     typeof settings?.description === "string" && settings.description
       ? settings.description
       : "천천히 머물고, 오래 기억하는 여행";
+  const showInitialError =
+    Boolean(initialError) && !site.data && !site.isFetching && !site.error;
 
   return (
     <main className="mx-auto w-full max-w-[var(--content-max)] px-5 py-12 md:px-8 md:py-16 xl:px-16">
@@ -51,11 +54,18 @@ export function AboutContent({
         우리의 기록
       </h1>
 
-      {site.error && (
+      {(site.error || showInitialError) && (
         <div className="mt-8 max-w-[var(--article-max)]">
-          <ErrorState
-            description={errorMessage(site.error)}
+          <ApiErrorState
+            error={site.error ?? initialError}
+            title={
+              site.data
+                ? "우리의 기록을 새로 확인하지 못했어요"
+                : "사이트 정보를 불러오지 못했어요"
+            }
+            description={site.error ? undefined : initialError}
             onRetry={() => void site.refetch()}
+            isRetrying={site.isFetching}
           />
         </div>
       )}

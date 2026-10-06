@@ -11,10 +11,12 @@ import {
 import { TravelApiError, parseRetryAfter } from "./errors";
 export {
   TravelApiError,
+  describeApiError,
   errorMessage,
   shouldRetryQuery,
   parseRetryAfter,
 } from "./errors";
+export type { ApiErrorDescription, ApiErrorOperation } from "./errors";
 export function createTravelApi(options: {
   baseURL: string;
   getAccessToken?: () => Promise<string | undefined>;

@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { errorMessage, TravelApiError } from "@repo/api-client";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { Button } from "@repo/ui/button";
 
 export function AccountDeletionInbox({ siteId }: { siteId: string }) {
@@ -28,9 +28,11 @@ export function AccountDeletionInbox({ siteId }: { siteId: string }) {
     scope,
   );
   const [feedback, setFeedback] = useState("");
+  const [mutationError, setMutationError] = useState<unknown>(null);
 
   async function run(id: string, mode: "anonymize" | "complete") {
     setFeedback("");
+    setMutationError(null);
     try {
       if (mode === "anonymize") {
         const result = await anonymize.submit({ site_id: siteId, id });
@@ -42,11 +44,7 @@ export function AccountDeletionInbox({ siteId }: { siteId: string }) {
         setFeedback("삭제 요청을 완료 처리했습니다.");
       }
     } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "요청을 처리하지 못했습니다.",
-      );
+      setMutationError(error);
     }
   }
 
@@ -87,21 +85,18 @@ export function AccountDeletionInbox({ siteId }: { siteId: string }) {
           {feedback}
         </p>
       )}
-      {me.isPending || list.isPending ? (
+      {mutationError !== null && <ApiMutationError error={mutationError} />}
+      {me.isPending || (me.isSuccess && list.isPending) ? (
         <p role="status">요청을 불러오고 있어요…</p>
       ) : me.isError || list.isError ? (
-        <section role="alert" className="rounded-panel space-y-3 border p-5">
-          <p>{errorMessage(me.error ?? list.error)}</p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              void me.refetch();
-              void list.refetch();
-            }}
-          >
-            다시 불러오기
-          </Button>
-        </section>
+        <ApiErrorState
+          error={me.error ?? list.error}
+          onRetry={() => {
+            void me.refetch();
+            void list.refetch();
+          }}
+          isRetrying={me.isFetching || list.isFetching}
+        />
       ) : list.data?.length ? (
         <ul className="space-y-4">
           {list.data.map((item) => (

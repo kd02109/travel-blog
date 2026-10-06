@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
-import { TravelApiError, errorMessage } from "@repo/api-client";
+import { TravelApiError } from "@repo/api-client";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import type { ActionInput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
@@ -106,6 +107,7 @@ export function HomeDesignEditor({
   const [processingImages, setProcessingImages] = useState(false);
   const [applyDialog, setApplyDialog] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [operationError, setOperationError] = useState<unknown>(null);
   const current = settings.data?.published as
     Record<string, unknown> | undefined;
   const draftSettings =
@@ -140,6 +142,7 @@ export function HomeDesignEditor({
     }));
     setDirty(true);
     setFeedback("");
+    setOperationError(null);
   }
 
   function updateHomeImages(ids: string[]) {
@@ -150,6 +153,7 @@ export function HomeDesignEditor({
     }));
     setDirty(true);
     setFeedback("");
+    setOperationError(null);
   }
 
   function addHomeImage(assetId: string) {
@@ -163,6 +167,7 @@ export function HomeDesignEditor({
     });
     setDirty(true);
     setFeedback("");
+    setOperationError(null);
   }
 
   async function save() {
@@ -178,10 +183,21 @@ export function HomeDesignEditor({
     return saved.version;
   }
 
+  async function handleSettingsError(error: unknown) {
+    setOperationError(error);
+    if (error instanceof TravelApiError && error.status === 409) {
+      // Keep the local choices, but use the newest server version on retry.
+      setVersion(undefined);
+      setDirty(true);
+      await settings.refetch();
+    }
+  }
+
   async function apply() {
     if (!draftSettings) return;
     setBusy(true);
     setFeedback("");
+    setOperationError(null);
     try {
       let nextVersion = currentVersion;
       if (dirty) nextVersion = (await save()) ?? nextVersion;
@@ -195,13 +211,8 @@ export function HomeDesignEditor({
       setFeedback("선택한 홈 디자인을 공개 사이트에 적용했습니다.");
       await settings.refetch();
     } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "적용하지 못했습니다. 초안은 화면에 보존되어 있습니다.",
-      );
-      if (error instanceof TravelApiError && error.status === 409)
-        void settings.refetch();
+      setApplyDialog(false);
+      await handleSettingsError(error);
     } finally {
       setBusy(false);
     }
@@ -215,11 +226,12 @@ export function HomeDesignEditor({
     );
   if (me.isError)
     return (
-      <main className="mx-auto max-w-6xl px-5 py-12" role="alert">
-        {errorMessage(me.error)}{" "}
-        <Button variant="outline" onClick={() => void me.refetch()}>
-          다시 확인
-        </Button>
+      <main className="mx-auto max-w-6xl px-5 py-12">
+        <ApiErrorState
+          error={me.error}
+          onRetry={() => void me.refetch()}
+          isRetrying={me.isFetching}
+        />
       </main>
     );
   if (!owner)
@@ -233,11 +245,12 @@ export function HomeDesignEditor({
     );
   if (settings.isError)
     return (
-      <main className="mx-auto max-w-6xl space-y-3 px-5 py-12" role="alert">
-        <p>{errorMessage(settings.error)}</p>
-        <Button variant="outline" onClick={() => void settings.refetch()}>
-          다시 불러오기
-        </Button>
+      <main className="mx-auto max-w-6xl space-y-3 px-5 py-12">
+        <ApiErrorState
+          error={settings.error}
+          onRetry={() => void settings.refetch()}
+          isRetrying={settings.isFetching}
+        />
       </main>
     );
   if (settings.isPending || !draftSettings)
@@ -295,9 +308,7 @@ export function HomeDesignEditor({
     () => selectedImageIds.length === 0,
   );
   const featuredTitle = featuredId
-    ? (featuredInRecent?.title ??
-      featuredDetail.data?.title ??
-      (featuredDetail.isPending ? undefined : recentPosts.data?.[0]?.title))
+    ? (featuredInRecent?.title ?? featuredDetail.data?.title)
     : recentPosts.data?.[0]?.title;
   const previewAction = (
     <span className={homeCoverActionClassName}>
@@ -322,6 +333,17 @@ export function HomeDesignEditor({
         <p role="status" aria-live="polite">
           {feedback}
         </p>
+      )}
+      {operationError !== null && (
+        <div className="space-y-2">
+          <ApiMutationError error={operationError} />
+          {dirty && (
+            <p className="text-muted-foreground text-sm">
+              저장되지 않은 선택은 현재 화면에만 남아 있습니다. 다시 시도하기
+              전에는 새로고침하지 마세요.
+            </p>
+          )}
+        </div>
       )}
 
       <section aria-labelledby="templates-heading">
@@ -445,6 +467,30 @@ export function HomeDesignEditor({
         </label>
       </div>
 
+      {publishedPosts.isError && (
+        <ApiErrorState
+          error={publishedPosts.error}
+          title="공개 글 목록을 확인하지 못했어요"
+          onRetry={() => void publishedPosts.refetch()}
+          isRetrying={publishedPosts.isFetching}
+        />
+      )}
+      {recentPosts.isError && (
+        <ApiErrorState
+          error={recentPosts.error}
+          title="최근 공개 글을 확인하지 못했어요"
+          onRetry={() => void recentPosts.refetch()}
+          isRetrying={recentPosts.isFetching}
+        />
+      )}
+      {featuredDetail.isError && (
+        <ApiErrorState
+          error={featuredDetail.error}
+          title="선택한 대표 글을 확인하지 못했어요"
+          onRetry={() => void featuredDetail.refetch()}
+          isRetrying={featuredDetail.isFetching}
+        />
+      )}
       <label className="block max-w-2xl space-y-2">
         대표 여행 글
         <Select
@@ -592,15 +638,11 @@ export function HomeDesignEditor({
           disabled={busy || processingImages || !dirty}
           onClick={() => {
             setBusy(true);
+            setFeedback("");
+            setOperationError(null);
             void save()
               .then(() => setFeedback("홈 디자인 초안을 저장했습니다."))
-              .catch((error: unknown) =>
-                setFeedback(
-                  error instanceof TravelApiError
-                    ? errorMessage(error)
-                    : "초안을 저장하지 못했습니다.",
-                ),
-              )
+              .catch((error: unknown) => handleSettingsError(error))
               .finally(() => setBusy(false));
           }}
         >

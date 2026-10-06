@@ -2,13 +2,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
-import { errorMessage, TravelApiError } from "@repo/api-client";
+import { TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { PostCard } from "../post-card";
 import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
-import { ErrorState, EmptyState } from "@repo/ui/feedback";
+import { EmptyState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
@@ -48,7 +49,6 @@ export function PostDetail({
     liked: boolean;
     count: number;
   } | null>(null);
-  const [likeMessage, setLikeMessage] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
@@ -84,6 +84,11 @@ export function PostDetail({
       staleTime: 0,
     },
   );
+  const readError = site.error ?? post.error;
+  const retryPost = () => {
+    if (!site.data || site.error) void site.refetch();
+    if (site.data && (post.error || !post.data)) void post.refetch();
+  };
 
   useEffect(() => {
     const root = articleBody.current;
@@ -104,16 +109,15 @@ export function PostDetail({
       count: Math.max(0, current.count + (current.liked ? -1 : 1)),
     };
     setOptimisticLike(next);
-    setLikeMessage("");
+    setLike.reset();
     try {
       const result = await setLike.submit({
         id: post.data.post_id,
         liked: next.liked,
       });
       setOptimisticLike(result);
-    } catch (error) {
+    } catch {
       setOptimisticLike(null);
-      setLikeMessage(errorMessage(error));
     }
   }
   async function sharePost() {
@@ -151,42 +155,32 @@ export function PostDetail({
       setCopyMessage("주소를 선택해 복사해 주세요.");
     }
   }
-  if (initialError && !site.data && !post.data)
+  if (
+    (post.error instanceof TravelApiError && post.error.status === 404) ||
+    (site.error instanceof TravelApiError && site.error.status === 404)
+  )
     return (
       <main className="mx-auto w-full max-w-3xl px-5 py-12">
-        <ErrorState
-          title="여행 기록에 연결하지 못했어요"
-          description={initialError}
-          onRetry={() => {
-            void site.refetch();
-            void post.refetch();
-          }}
+        <EmptyState
+          title="이 여행 기록을 찾을 수 없어요"
+          description="주소가 바뀌었거나 공개되지 않은 글입니다."
+          action={
+            <Button asChild variant="outline">
+              <Link href="/posts">공개 글 목록으로</Link>
+            </Button>
+          }
         />
       </main>
     );
-  if (site.error || post.error) {
-    if (post.error instanceof TravelApiError && post.error.status === 404)
-      return (
-        <main className="mx-auto w-full max-w-3xl px-5 py-12">
-          <EmptyState
-            title="이 여행 기록을 찾을 수 없어요"
-            description="주소가 바뀌었거나 공개되지 않은 글입니다."
-            action={
-              <Button asChild variant="outline">
-                <Link href="/posts">공개 글 목록으로</Link>
-              </Button>
-            }
-          />
-        </main>
-      );
+  if (!post.data && (readError || initialError)) {
     return (
       <main className="mx-auto w-full max-w-3xl px-5 py-12">
-        <ErrorState
-          description={errorMessage(site.error ?? post.error)}
-          onRetry={() => {
-            void site.refetch();
-            void post.refetch();
-          }}
+        <ApiErrorState
+          error={readError ?? initialError}
+          title="여행 기록에 연결하지 못했어요"
+          description={readError ? undefined : initialError}
+          onRetry={retryPost}
+          isRetrying={site.isFetching || post.isFetching}
         />
       </main>
     );
@@ -235,6 +229,14 @@ export function PostDetail({
           ?.label ?? "여행 기록"}{" "}
         목록
       </Link>
+      {readError && (
+        <ApiErrorState
+          error={readError}
+          title="여행 기록을 새로 확인하지 못했어요"
+          onRetry={retryPost}
+          isRetrying={site.isFetching || post.isFetching}
+        />
+      )}
       <header className="space-y-4">
         <p className="text-muted-foreground">
           {
@@ -292,21 +294,20 @@ export function PostDetail({
           {article && (
             <>
               {likeState.error && (
-                <p className="text-muted-foreground text-sm">
-                  좋아요 상태를 확인하지 못했습니다.{" "}
-                  <button
-                    type="button"
-                    className="underline"
-                    onClick={() => void likeState.refetch()}
-                  >
-                    다시 시도
-                  </button>
-                </p>
+                <ApiErrorState
+                  error={likeState.error}
+                  title="좋아요 상태를 확인하지 못했어요"
+                  onRetry={() => void likeState.refetch()}
+                  isRetrying={likeState.isFetching}
+                />
               )}
-              {likeMessage && (
-                <p role="alert" className="text-muted-foreground text-sm">
-                  {likeMessage}
-                </p>
+              {setLike.error && (
+                <ApiMutationError
+                  error={setLike.error}
+                  title="좋아요를 저장하지 못했어요"
+                  onRetry={() => void toggleLike()}
+                  isRetrying={setLike.isPending}
+                />
               )}
             </>
           )}
@@ -367,6 +368,14 @@ export function PostDetail({
             <PostAssetFigures html={post.data.body_html} siteId={siteId} />
           </div>
         </section>
+      )}
+      {post.data.category_code !== "itinerary-pdf" && related.error && (
+        <ApiErrorState
+          error={related.error}
+          title="같은 분류의 여행을 확인하지 못했어요"
+          onRetry={() => void related.refetch()}
+          isRetrying={related.isFetching}
+        />
       )}
       {post.data.category_code !== "itinerary-pdf" &&
         related.data &&
