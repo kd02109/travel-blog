@@ -9,7 +9,13 @@ import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import type { ActionInput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
-import { Select } from "@repo/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/select";
 import { Dialog } from "@repo/ui/dialog";
 import {
   HomeCover,
@@ -21,6 +27,8 @@ import {
 import { MediaUpload } from "../media-upload";
 import { PrivateAssetView } from "../asset-view";
 import { HomeCoverThumbnail } from "./home-cover-thumbnail";
+
+const latestFeaturedPostValue = "__latest_featured_post__";
 
 type SiteSettings = ActionInput<"admin.settings.save">["settings"];
 const maxHomeImages = 4;
@@ -496,28 +504,38 @@ export function HomeDesignEditor({
         <Select
           value={
             typeof draftSettings.featured_post_id === "string"
-              ? draftSettings.featured_post_id
-              : ""
+              ? draftSettings.featured_post_id || latestFeaturedPostValue
+              : latestFeaturedPostValue
           }
-          onChange={(event) =>
-            update("featured_post_id", event.currentTarget.value || null)
+          onValueChange={(value) =>
+            update(
+              "featured_post_id",
+              value === latestFeaturedPostValue ? null : value,
+            )
           }
         >
-          <option value="">최근 공개 글 사용</option>
-          {featuredId && !featuredInAdmin && (
-            <option value={featuredId}>
-              {featuredInRecent?.title ??
-                featuredDetail.data?.title ??
-                (featuredDetail.isError
-                  ? "선택한 글을 찾을 수 없음"
-                  : "선택한 글 불러오는 중…")}
-            </option>
-          )}
-          {(publishedPosts.data ?? []).map((post) => (
-            <option value={post.id} key={post.id}>
-              {post.title || "제목 없는 글"}
-            </option>
-          ))}
+          <SelectTrigger aria-label="대표 여행 글 선택">
+            <SelectValue placeholder="최근 공개 글 사용" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={latestFeaturedPostValue}>
+              최근 공개 글 사용
+            </SelectItem>
+            {featuredId && !featuredInAdmin && (
+              <SelectItem value={featuredId}>
+                {featuredInRecent?.title ??
+                  featuredDetail.data?.title ??
+                  (featuredDetail.isError
+                    ? "선택한 글을 찾을 수 없음"
+                    : "선택한 글 불러오는 중…")}
+              </SelectItem>
+            )}
+            {(publishedPosts.data ?? []).map((post) => (
+              <SelectItem value={post.id} key={post.id}>
+                {post.title || "제목 없는 글"}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       </label>
 

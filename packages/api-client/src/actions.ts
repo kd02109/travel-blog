@@ -7,6 +7,7 @@ export const readActions = [
   "like.get",
   "asset.access",
   "asset.status",
+  "asset.list",
   "me",
   "admin.posts",
   "admin.post.get",

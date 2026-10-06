@@ -28,7 +28,7 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 
 프로필 아바타 필드는 DB에 준비했지만 업로드/아바타 변경 action은 아직 제공하지 않는다. 기본 별명으로 시작할 수 있다.
 
-관리자 media flow는 `asset.create`로 20MB 이하 signed upload URL을 받고 Storage에 직접 업로드한 뒤 `asset.complete`를 한 번 호출한다. 이후 처리 상태는 읽기 전용 `asset.status`로 확인한다. `asset.complete`는 `failed` 파일에 다시 호출하면 처리 큐에 재등록된다. `asset.cancel`은 아직 업로드/처리 중인 원격 작업을 중단하고 asset을 `failed` 상태로 표시한다. 관리자/owner만 사용할 수 있다. `asset.access` URL은 300초 유효하며 private bucket에서만 발급된다.
+관리자 media flow는 `asset.create`로 20MB 이하 signed upload URL을 받고 Storage에 직접 업로드한 뒤 `asset.complete`를 한 번 호출한다. 이후 처리 상태는 읽기 전용 `asset.status`로 확인한다. `asset.list`는 현재 사이트의 `ready` 이미지와 사용 위치를 페이지 단위로 반환하며, 카드 썸네일과 원본에 사용할 300초 signed URL도 함께 반환한다. `asset.complete`는 `failed` 파일에 다시 호출하면 처리 큐에 재등록된다. `asset.cancel`은 아직 업로드/처리 중인 원격 작업을 중단하고 asset을 `failed` 상태로 표시한다. 관리자/owner만 사용할 수 있다. `asset.access`와 `asset.list` URL은 300초 유효하며 private bucket에서만 발급된다.
 
 구버전 Edge Function이 `asset.status`를 지원하지 않으면 관리자 화면의 처리 상태 확인이 보류된다. 새 함수를 배포하고 화면을 새로고침하면 읽기 전용 조회를 사용한다.
 
@@ -150,6 +150,7 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 | `asset.complete` | `id`, 선택 `site_id` | 업로드 검증 후 processing |
 | `asset.status` | `id`, 선택 `site_id` | 관리자 권한 확인 후 현재 처리 상태 |
 | `asset.cancel` | `id`, 선택 `site_id` | 처리 중인 원격 job 취소, asset을 failed로 표시 |
+| `asset.list` | `site_id`, 선택 `limit`, `offset` | 현재 사이트의 ready 이미지, 썸네일/원본 signed URL, 사용 위치, 다음 offset |
 | `asset.access` | `id`, 선택 `site_id` | 현재 공개 승인 또는 관리자 권한 확인 후 5분 URL |
 
 asset.create/complete는 editor 이상이다. upload_url에는 파일을 **PUT**으로 올리고 해당 MIME의 Content-Type을 지정한다. Supabase SDK를 쓰면 Storage의 uploadToSignedUrl(bucket,path,token,file)를 사용할 수 있다. 파일을 전송한 뒤 asset.complete를 호출한다. 파일당 20MiB 제한, JPEG/PNG/WebP/PDF를 받는다. ready 처리는 신뢰된 TypeScript/Node.js worker만 할 수 있다. 클라이언트가 state=ready 또는 임의 preview를 제출해서 발행할 수 없다.

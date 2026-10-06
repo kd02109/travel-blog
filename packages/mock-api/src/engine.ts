@@ -602,6 +602,87 @@ export function createMockEngine(options: MockOptions = {}) {
         preview_asset_id: asset.preview_asset_id,
       };
     }
+    if (action === "asset.list") {
+      const actor = staff(person);
+      checkSite(input.site_id, true);
+      void actor;
+      const limit = Math.max(
+        1,
+        Math.min(50, input.limit === undefined ? 12 : Number(input.limit)),
+      );
+      const offset = Math.max(
+        0,
+        Math.min(100000, input.offset === undefined ? 0 : Number(input.offset)),
+      );
+      const usedInHome = new Set(
+        [
+          state.draftSettings.hero_asset_id,
+          state.draftSettings.hero_asset_ids,
+          state.publishedSettings.hero_asset_id,
+          state.publishedSettings.hero_asset_ids,
+        ].flatMap((value) =>
+          Array.isArray(value) ? value : value ? [value] : [],
+        ),
+      );
+      const usedAsCover = new Set(
+        state.publications.flatMap((publication) =>
+          publication.cover_asset_id ? [publication.cover_asset_id] : [],
+        ),
+      );
+      const usedInBody = new Set<string>();
+      for (const post of state.posts) {
+        const blocks = post.draft_content.blocks ?? [];
+        const visit = (value: unknown) => {
+          if (!value || typeof value !== "object") return;
+          const item = value as {
+            type?: unknown;
+            props?: unknown;
+            children?: unknown;
+          };
+          if (
+            item.type === "image" &&
+            item.props &&
+            typeof item.props === "object"
+          ) {
+            const assetId = (item.props as { asset_id?: unknown }).asset_id;
+            if (typeof assetId === "string") usedInBody.add(assetId);
+          }
+          if (Array.isArray(item.children)) item.children.forEach(visit);
+        };
+        blocks.forEach(visit);
+      }
+      const images = state.assets
+        .filter((asset) => asset.kind === "image" && asset.state === "ready")
+        .sort(
+          (left, right) =>
+            (right.created_at ?? MOCK_NOW).localeCompare(
+              left.created_at ?? MOCK_NOW,
+            ) || left.id.localeCompare(right.id),
+        );
+      const page = images.slice(offset, offset + limit);
+      return {
+        items: page.map((asset) => ({
+          id: asset.id,
+          created_at: asset.created_at ?? MOCK_NOW,
+          metadata: asset.metadata,
+          thumbnail_url: new URL(
+            asset.url,
+            options.origin ?? "http://localhost:3000",
+          ).href,
+          original_url: new URL(
+            asset.url,
+            options.origin ?? "http://localhost:3000",
+          ).href,
+          usage: [
+            ...(usedInHome.has(asset.id) ? ["home"] : []),
+            ...(usedAsCover.has(asset.id) ? ["post-cover"] : []),
+            ...(usedInBody.has(asset.id) ? ["post-body"] : []),
+          ],
+        })),
+        next_offset: page.length === limit ? offset + limit : null,
+        expires_in: 300,
+      };
+    }
     if (action === "asset.status") {
       const asset = state.assets.find((a) => a.id === input.id);
       if (!asset) throw new ApiError(404, "not_found");
