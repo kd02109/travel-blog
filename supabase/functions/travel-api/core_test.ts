@@ -87,13 +87,14 @@ Deno.test("renderer pairs adjacent images with safe layout attributes", () => {
   const first = "00000000-0000-0000-0000-000000000001";
   const second = "00000000-0000-0000-0000-000000000002";
   const output = renderBlocks([
-    { type: "image", props: { asset_id: first, caption: "첫 사진", width: "small", align: "left", layout: "pair" } },
+    { type: "image", props: { asset_id: first, caption: "첫 사진", width: "small", align: "left", layout: "pair", width_pct: 65, position_pct: 25 } },
     { type: "image", props: { asset_id: second, caption: "둘째 사진", width: "medium", align: "right", layout: "pair" } },
     { type: "image", props: { asset_id: first, caption: "다시", width: '" onmouseover="x', align: "invalid", layout: "pair" } },
   ]);
   assert(output.html.includes('<div data-image-pair>'));
   assert((output.html.match(/<div data-image-pair>/g) ?? []).length === 1);
   assert(output.html.includes('data-image-width="small" data-image-align="left" data-image-layout="pair"'));
+  assert(output.html.includes('data-image-layout="pair" data-image-custom="true" data-image-width-pct="65"'));
   assert(output.html.includes('data-image-width="medium" data-image-align="right" data-image-layout="pair"'));
   assert(!output.html.includes("onmouseover"));
   assert(output.assetIds.length === 2);

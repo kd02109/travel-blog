@@ -137,13 +137,22 @@ describe("draft and published content", () => {
       props: { asset_id, ...props },
     });
     const rendered = renderBlocks([
-      image(mockId(4, 1), { layout: "pair", width: "small", align: "left" }),
+      image(mockId(4, 1), {
+        layout: "pair",
+        width: "small",
+        align: "left",
+        width_pct: 65,
+        position_pct: 25,
+      }),
       image(mockId(4, 2), { layout: "pair", width: "medium", align: "right" }),
       image(mockId(4, 3), { layout: "pair", width: '" onload="x' }),
     ]);
     expect(rendered.html.match(/<div data-image-pair>/g)).toHaveLength(1);
     expect(rendered.html).toContain('data-image-width="small"');
     expect(rendered.html).toContain('data-image-align="right"');
+    expect(rendered.html).toContain(
+      'data-image-layout="pair" data-image-custom="true" data-image-width-pct="65"',
+    );
     expect(rendered.html).not.toContain("onload");
     expect(rendered.assetIds).toHaveLength(3);
   });
@@ -160,7 +169,10 @@ describe("draft and published content", () => {
     expect(rendered.html).toContain(
       'style="--image-width:62%;--image-offset:15.2%"',
     );
-    expect(rendered.html.match(/data-image-custom="true"/g)).toHaveLength(1);
+    expect(rendered.html).toContain(
+      'style="--image-width:40%;--image-offset:48%"',
+    );
+    expect(rendered.html.match(/data-image-custom="true"/g)).toHaveLength(2);
     expect(rendered.html).not.toContain("color:red");
   });
   it("summarizes image-only checkpoints by photo count", () => {

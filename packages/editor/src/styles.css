@@ -69,6 +69,10 @@
 }
 
 .writer-image[data-image-layout="pair"] {
+  min-width: min(100%, 96px);
+}
+
+.writer-image[data-image-layout="pair"]:not([style]) {
   width: 100%;
   left: 0;
   transform: none;

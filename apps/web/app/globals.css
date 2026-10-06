@@ -76,6 +76,12 @@ html.travel-home-snap footer {
   margin: 0;
 }
 
+.post-body-media [data-image-pair] > figure[data-image-custom="true"] {
+  width: var(--image-width);
+  margin-inline: 0;
+  margin-inline-start: var(--image-offset);
+}
+
 .post-body-media figure[data-asset-id] > img {
   display: block;
   width: auto;
@@ -112,7 +118,8 @@ html.travel-home-snap footer {
 }
 
 @media (max-width: 640px) {
-  .post-body-media figure[data-image-custom="true"] {
+  .post-body-media
+    figure[data-image-custom="true"]:not([data-image-layout="pair"]) {
     width: 100%;
     margin-inline: 0;
   }
