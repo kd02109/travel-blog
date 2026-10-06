@@ -987,18 +987,20 @@ export function MediaUpload({
           if (!open) setPreviewSelection(undefined);
         }}
         title={previewAsset ? libraryAssetName(previewAsset) : "원본 미리보기"}
-        description="Storage에서 새로 발급한 원본 URL을 사용합니다."
-        className="w-[min(94vw,56rem)]"
+        description="저장된 사진을 크게 확인할 수 있습니다."
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(94vw,56rem)] overflow-y-auto"
       >
         {previewAsset && (
           <div className="space-y-4">
-            <PrivateAssetView
-              assetId={previewAsset.id}
-              siteId={siteId}
-              kind="image"
-              title={libraryAssetName(previewAsset)}
-              className="mx-auto h-auto max-h-[65vh] w-full max-w-full rounded object-contain"
-            />
+            <div className="flex h-[min(60dvh,38rem)] items-center justify-center">
+              <PrivateAssetView
+                assetId={previewAsset.id}
+                siteId={siteId}
+                kind="image"
+                title={libraryAssetName(previewAsset)}
+                className="h-full w-full rounded object-contain object-center"
+              />
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
               <span className="text-muted-foreground">
                 {formatAssetDate(previewAsset.created_at)} ·{" "}
