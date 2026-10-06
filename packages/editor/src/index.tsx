@@ -22,6 +22,7 @@ import {
   FormattingToolbarController,
   getFormattingToolbarItems,
 } from "@blocknote/react";
+import { imagePairState } from "./image-layout";
 
 const ACCEPTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
@@ -84,33 +85,149 @@ const blockStyleIcons = {
 } as const;
 
 const ImagePreviewContext = createContext<
-  ((assetId: string) => ReactNode) | undefined
+  | {
+      renderPreview?: (assetId: string) => ReactNode;
+      editable: boolean;
+      documentVersion: number;
+    }
+  | undefined
 >(undefined);
 
 function AssetImage({
   assetId,
   caption,
+  width,
+  align,
+  layout,
   onCaptionChange,
+  onWidthChange,
+  onAlignChange,
+  onPairToggle,
+  getPairState,
 }: {
   assetId: string;
   caption: string;
+  width: "small" | "medium" | "large";
+  align: "left" | "center" | "right";
+  layout: "single" | "pair";
   onCaptionChange: (caption: string) => void;
+  onWidthChange: (width: "small" | "medium" | "large") => void;
+  onAlignChange: (align: "left" | "center" | "right") => void;
+  onPairToggle: () => void;
+  getPairState: () => { canPair: boolean; paired: boolean };
 }) {
-  const renderPreview = useContext(ImagePreviewContext);
+  const { renderPreview, editable = true } =
+    useContext(ImagePreviewContext) ?? {};
+  const { canPair, paired } = getPairState();
+  const hasPairSetting = paired || layout === "pair";
+  const widths = [
+    ["small", "작게"],
+    ["medium", "보통"],
+    ["large", "넓게"],
+  ] as const;
+  const alignments = [
+    ["left", "왼쪽"],
+    ["center", "가운데"],
+    ["right", "오른쪽"],
+  ] as const;
   return (
-    <figure className="mx-auto my-4 max-w-2xl rounded-md border bg-stone-50 p-3">
-      {renderPreview?.(assetId) ?? (
-        <p className="text-muted-foreground text-sm">사진을 불러오는 중…</p>
+    <figure
+      className="writer-image"
+      data-image-width={width}
+      data-image-align={align}
+      data-image-layout={paired ? "pair" : "single"}
+    >
+      {editable && (
+        <div className="writer-image-toolbar" aria-label="사진 배치 설정">
+          <div
+            className="writer-image-toolbar-group"
+            role="group"
+            aria-label="사진 크기"
+          >
+            <span>크기</span>
+            {widths.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-label={`사진 크기 ${label}`}
+                aria-pressed={width === value}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onWidthChange(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div
+            className="writer-image-toolbar-group"
+            role="group"
+            aria-label="사진 정렬"
+          >
+            <span>정렬</span>
+            {alignments.map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-label={`사진 정렬 ${label}`}
+                aria-pressed={align === value}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onAlignChange(value);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            className="writer-image-pair-button"
+            type="button"
+            aria-label={
+              hasPairSetting
+                ? "사진 나란히 배치 해제"
+                : "다음 사진과 나란히 배치"
+            }
+            aria-pressed={hasPairSetting}
+            title={
+              canPair || hasPairSetting
+                ? undefined
+                : "바로 다음 블록에 사진을 넣으면 묶을 수 있습니다"
+            }
+            disabled={!canPair && !hasPairSetting}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPairToggle();
+            }}
+          >
+            {hasPairSetting ? "나란히 해제" : "다음 사진과 나란히"}
+          </button>
+        </div>
       )}
+      <div className="writer-image-media">
+        {renderPreview?.(assetId) ?? (
+          <p className="text-muted-foreground text-sm">사진을 불러오는 중…</p>
+        )}
+      </div>
       <figcaption>
-        <input
-          className="mt-2 w-full rounded border bg-white px-3 py-2"
-          aria-label="사진 설명"
-          placeholder="사진 설명을 적어 주세요"
-          value={caption}
-          onChange={(event) => onCaptionChange(event.currentTarget.value)}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
+        {editable ? (
+          <label>
+            <span>사진 설명</span>
+            <input
+              aria-label="사진 설명"
+              placeholder="사진 설명을 적어 주세요"
+              value={caption}
+              onChange={(event) => onCaptionChange(event.currentTarget.value)}
+              onKeyDown={(event) => event.stopPropagation()}
+            />
+          </label>
+        ) : caption ? (
+          caption
+        ) : null}
       </figcaption>
     </figure>
   );
@@ -122,19 +239,70 @@ const assetImage = createReactBlockSpec(
     propSchema: {
       asset_id: { default: "" },
       caption: { default: "" },
+      width: {
+        default: "large" as const,
+        values: ["small", "medium", "large"] as const,
+      },
+      align: {
+        default: "center" as const,
+        values: ["left", "center", "right"] as const,
+      },
+      layout: {
+        default: "single" as const,
+        values: ["single", "pair"] as const,
+      },
     },
     content: "none",
   },
   {
-    render: ({ block, editor }) => (
-      <AssetImage
-        assetId={block.props.asset_id}
-        caption={block.props.caption}
-        onCaptionChange={(caption) =>
-          editor.updateBlock(block, { props: { caption } })
-        }
-      />
-    ),
+    render: ({ block, editor }) => {
+      return (
+        <AssetImage
+          assetId={block.props.asset_id}
+          caption={block.props.caption}
+          width={block.props.width}
+          align={block.props.align}
+          layout={block.props.layout}
+          getPairState={() => {
+            const state = imagePairState(editor.document, block.id);
+            return {
+              paired: state.partnerIndex >= 0,
+              canPair: state.canPair,
+            };
+          }}
+          onCaptionChange={(caption) =>
+            editor.updateBlock(block, { props: { caption } })
+          }
+          onWidthChange={(width) =>
+            editor.updateBlock(block, { props: { width } })
+          }
+          onAlignChange={(align) =>
+            editor.updateBlock(block, { props: { align } })
+          }
+          onPairToggle={() => {
+            const blocks = editor.document;
+            const { partnerIndex, canPair, next } = imagePairState(
+              blocks,
+              block.id,
+            );
+            if (partnerIndex >= 0) {
+              editor.updateBlock(block, { props: { layout: "single" } });
+              editor.updateBlock(blocks[partnerIndex]!, {
+                props: { layout: "single" },
+              });
+            } else if (
+              blocks.find((item) => item.id === block.id)?.props.layout ===
+              "pair"
+            ) {
+              editor.updateBlock(block, { props: { layout: "single" } });
+            } else if (canPair) {
+              editor.updateBlock(block, { props: { layout: "pair" } });
+              editor.updateBlock(next!, { props: { layout: "pair" } });
+            }
+          }}
+        />
+      );
+    },
   },
 );
 // Only text blocks supported by the existing travel-api renderer. Media requires asset IDs.
@@ -169,6 +337,7 @@ export function WriterEditor({
 }) {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(0);
+  const [documentVersion, setDocumentVersion] = useState(0);
   const editor = useCreateBlockNote({
     schema,
     dictionary: ko,
@@ -181,6 +350,7 @@ export function WriterEditor({
     editor,
   );
   useEffect(() => {
+    if (!editable) return;
     onReady?.((assetId, caption = "") => {
       const last = editor.document.at(-1);
       if (last)
@@ -190,7 +360,7 @@ export function WriterEditor({
           "after",
         );
     });
-  }, [editor, onReady]);
+  }, [editable, editor, onReady]);
   const handleDrop = useCallback(
     async (event: DragEvent<HTMLDivElement>) => {
       const files = Array.from(event.dataTransfer.files);
@@ -274,116 +444,125 @@ export function WriterEditor({
   ] as const;
 
   return (
-    <ImagePreviewContext.Provider value={imageRenderer}>
+    <ImagePreviewContext.Provider
+      value={{ renderPreview: imageRenderer, editable, documentVersion }}
+    >
       <div
-        className="space-y-2"
+        className="writer-editor space-y-2"
         onDragEnter={(event) => {
+          if (!editable) return;
           if (event.dataTransfer.types.includes("Files")) {
             event.preventDefault();
             setDragging(true);
           }
         }}
         onDragOver={(event) => {
+          if (!editable) return;
           if (event.dataTransfer.types.includes("Files"))
             event.preventDefault();
         }}
         onDragLeave={(event) => {
+          if (!editable) return;
           if (
             event.currentTarget === event.target ||
             !event.currentTarget.contains(event.relatedTarget as Node | null)
           )
             setDragging(false);
         }}
-        onDropCapture={(event) => void handleDrop(event)}
+        onDropCapture={editable ? (event) => void handleDrop(event) : undefined}
       >
-        <div
-          className="flex flex-wrap items-center gap-2 rounded-md border bg-stone-50 p-2"
-          role="toolbar"
-          aria-label="본문 서식"
-        >
+        {editable && (
           <div
-            className="flex flex-wrap items-center gap-1"
-            role="group"
-            aria-label="문단과 블록 스타일"
+            className="flex flex-wrap items-center gap-2 rounded-md border bg-stone-50 p-2"
+            role="toolbar"
+            aria-label="본문 서식"
           >
-            {blockStyleOptions.map(([style, label]) => {
-              const selected = currentBlockStyle === style;
-              return (
-                <button
-                  key={style}
-                  type="button"
-                  className={`h-9 w-9 rounded border p-2 text-stone-700 transition-colors ${selected ? "bg-emerald-100" : "bg-white hover:bg-stone-100"}`}
-                  aria-label={label}
-                  aria-pressed={selected}
-                  title={label}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => {
-                    const current = editor.getTextCursorPosition().block;
-                    if (style === "paragraph")
-                      editor.updateBlock(current, { type: "paragraph" });
-                    else if (
-                      style === "heading1" ||
-                      style === "heading2" ||
-                      style === "heading3"
-                    )
-                      editor.updateBlock(current, {
-                        type: "heading",
-                        props: { level: Number(style.slice(-1)) as 1 | 2 | 3 },
-                      });
-                    else editor.updateBlock(current, { type: style });
-                  }}
-                >
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                    className="h-5 w-5"
-                  >
-                    {blockStyleIcons[style]}
-                  </svg>
-                </button>
-              );
-            })}
-          </div>
-          {(
-            [
-              ["bold", "굵게"],
-              ["italic", "기울임"],
-              ["underline", "밑줄"],
-              ["strike", "취소선"],
-            ] as const
-          ).map(([style, label]) => (
-            <button
-              key={style}
-              type="button"
-              className={`h-9 w-10 rounded border p-2 text-stone-700 transition-colors ${editor.getActiveStyles()[style] ? "bg-emerald-100" : "bg-white hover:bg-stone-100"}`}
-              aria-label={label}
-              aria-pressed={Boolean(editor.getActiveStyles()[style])}
-              title={label}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => editor.toggleStyles({ [style]: true })}
+            <div
+              className="flex flex-wrap items-center gap-1"
+              role="group"
+              aria-label="문단과 블록 스타일"
             >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="h-5 w-5"
+              {blockStyleOptions.map(([style, label]) => {
+                const selected = currentBlockStyle === style;
+                return (
+                  <button
+                    key={style}
+                    type="button"
+                    className={`h-9 w-9 rounded border p-2 text-stone-700 transition-colors ${selected ? "bg-emerald-100" : "bg-white hover:bg-stone-100"}`}
+                    aria-label={label}
+                    aria-pressed={selected}
+                    title={label}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      const current = editor.getTextCursorPosition().block;
+                      if (style === "paragraph")
+                        editor.updateBlock(current, { type: "paragraph" });
+                      else if (
+                        style === "heading1" ||
+                        style === "heading2" ||
+                        style === "heading3"
+                      )
+                        editor.updateBlock(current, {
+                          type: "heading",
+                          props: {
+                            level: Number(style.slice(-1)) as 1 | 2 | 3,
+                          },
+                        });
+                      else editor.updateBlock(current, { type: style });
+                    }}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      className="h-5 w-5"
+                    >
+                      {blockStyleIcons[style]}
+                    </svg>
+                  </button>
+                );
+              })}
+            </div>
+            {(
+              [
+                ["bold", "굵게"],
+                ["italic", "기울임"],
+                ["underline", "밑줄"],
+                ["strike", "취소선"],
+              ] as const
+            ).map(([style, label]) => (
+              <button
+                key={style}
+                type="button"
+                className={`h-9 w-10 rounded border p-2 text-stone-700 transition-colors ${editor.getActiveStyles()[style] ? "bg-emerald-100" : "bg-white hover:bg-stone-100"}`}
+                aria-label={label}
+                aria-pressed={Boolean(editor.getActiveStyles()[style])}
+                title={label}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => editor.toggleStyles({ [style]: true })}
               >
-                {inlineStyleIcons[style]}
-              </svg>
-            </button>
-          ))}
-          {uploading > 0 && (
-            <span role="status" className="text-muted-foreground text-sm">
-              이미지 업로드 중… ({uploading})
-            </span>
-          )}
-          {dragging && (
-            <span className="text-sm font-medium text-emerald-800">
-              여기에 놓아 본문에 추가
-            </span>
-          )}
-        </div>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="h-5 w-5"
+                >
+                  {inlineStyleIcons[style]}
+                </svg>
+              </button>
+            ))}
+            {uploading > 0 && (
+              <span role="status" className="text-muted-foreground text-sm">
+                이미지 업로드 중… ({uploading})
+              </span>
+            )}
+            {dragging && (
+              <span className="text-sm font-medium text-emerald-800">
+                여기에 놓아 본문에 추가
+              </span>
+            )}
+          </div>
+        )}
         <div
           className={
             dragging
@@ -395,12 +574,17 @@ export function WriterEditor({
             editor={editor}
             editable={editable}
             theme="light"
-            onChange={() => onChange?.(editor.document)}
+            onChange={() => {
+              setDocumentVersion((version) => version + 1);
+              onChange?.(editor.document);
+            }}
             formattingToolbar={false}
           >
-            <FormattingToolbarController
-              formattingToolbar={formattingToolbar}
-            />
+            {editable && (
+              <FormattingToolbarController
+                formattingToolbar={formattingToolbar}
+              />
+            )}
           </BlockNoteView>
         </div>
       </div>

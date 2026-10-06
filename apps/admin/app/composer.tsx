@@ -1,6 +1,13 @@
 "use client";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import type { EditorDocument } from "@repo/editor";
 import { CATEGORIES } from "@repo/constants";
@@ -14,11 +21,102 @@ import { validateDraftMetadata } from "@repo/contracts";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { MediaUpload, uploadEditorImage } from "./media-upload";
 import { PrivateAssetView } from "./asset-view";
+import { hasUnpublishedChanges } from "../lib/post-publication";
 const Editor = dynamic(
   () => import("@repo/editor").then((module) => module.WriterEditor),
   { ssr: false, loading: () => <p>편집기를 준비하고 있어요…</p> },
 );
 type PostDraft = ActionOutput<"admin.post.get">;
+const EMPTY_ID = "00000000-0000-4000-8000-000000000000";
+function snapshotText(snapshot: Record<string, unknown>, key: string): string {
+  return typeof snapshot[key] === "string" ? snapshot[key] : "";
+}
+function SnapshotView({
+  snapshot,
+  kind,
+  siteId,
+  revisionId,
+  renderImage,
+}: {
+  snapshot: Record<string, unknown>;
+  kind: "article" | "pdf";
+  siteId: string;
+  revisionId: string;
+  renderImage: (assetId: string) => ReactNode;
+}) {
+  const title = snapshotText(snapshot, "title") || "제목 없음";
+  const category = CATEGORIES.find(
+    (item) => item.code === snapshot.category_code,
+  );
+  const metadata =
+    snapshot.metadata &&
+    typeof snapshot.metadata === "object" &&
+    !Array.isArray(snapshot.metadata)
+      ? (snapshot.metadata as Record<string, unknown>)
+      : {};
+  const tags = Array.isArray(snapshot.tags)
+    ? snapshot.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+  const coverId = snapshotText(snapshot, "cover_asset_id");
+  const pdfId = snapshotText(snapshot, "pdf_asset_id");
+  return (
+    <article className="space-y-5 rounded-lg border bg-white p-5 md:p-7">
+      <div className="space-y-2 border-b pb-4">
+        <p className="text-muted-foreground text-sm">
+          {category?.label ?? "분류 없음"}
+          {typeof metadata.region === "string" ? ` · ${metadata.region}` : ""}
+        </p>
+        <h3 className="font-editorial text-2xl font-semibold">{title}</h3>
+        {snapshotText(snapshot, "slug") && (
+          <p className="text-muted-foreground text-xs">
+            주소: /posts/{snapshotText(snapshot, "slug")}
+          </p>
+        )}
+      </div>
+      {coverId && siteId && (
+        <PrivateAssetView
+          assetId={coverId}
+          siteId={siteId}
+          kind="image"
+          title={`${title} 대표 사진`}
+        />
+      )}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tags.map((tag) => (
+            <span
+              className="rounded-full bg-stone-100 px-3 py-1 text-sm"
+              key={tag}
+            >
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+      {kind === "pdf" ? (
+        pdfId && siteId ? (
+          <PrivateAssetView
+            assetId={pdfId}
+            siteId={siteId}
+            kind="pdf"
+            title={title}
+          />
+        ) : (
+          <p className="text-muted-foreground text-sm">PDF 파일이 없습니다.</p>
+        )
+      ) : Array.isArray(snapshot.blocks) ? (
+        <Editor
+          key={`snapshot-${revisionId}`}
+          initialContent={snapshot.blocks as unknown as EditorDocument}
+          editable={false}
+          renderImage={renderImage}
+        />
+      ) : (
+        <p className="text-muted-foreground text-sm">본문이 없습니다.</p>
+      )}
+    </article>
+  );
+}
 function blockHasContent(value: unknown): boolean {
   if (typeof value === "string") return value.trim().length > 0;
   if (Array.isArray(value)) return value.some(blockHasContent);
@@ -28,16 +126,6 @@ function blockHasContent(value: unknown): boolean {
       ? blockHasContent(child)
       : key !== "id" && key !== "type" && blockHasContent(child),
   );
-}
-function blockText(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (Array.isArray(value)) return value.map(blockText).join("");
-  if (!value || typeof value !== "object") return "";
-  const record = value as Record<string, unknown>;
-  if (typeof record.text === "string") return record.text;
-  return typeof record.content === "string" || Array.isArray(record.content)
-    ? blockText(record.content)
-    : "";
 }
 export function Composer({ postId }: { postId?: string }) {
   const router = useRouter();
@@ -69,6 +157,11 @@ export function Composer({ postId }: { postId?: string }) {
     "admin.revision.restore",
     mutationScope,
   );
+  const deleteRevision = useTravelMutation(
+    api,
+    "admin.revision.delete",
+    mutationScope,
+  );
   const [insertImage, setInsertImage] =
     useState<(assetId: string, caption?: string) => void>();
   const [coverAssetId, setCoverAssetId] = useState("");
@@ -86,6 +179,7 @@ export function Composer({ postId }: { postId?: string }) {
   const [document, setDocument] = useState<EditorDocument>([
     { type: "paragraph", content: "여행의 첫 장면을 적어 보세요." },
   ]);
+  const [editorEpoch, setEditorEpoch] = useState(0);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -96,18 +190,34 @@ export function Composer({ postId }: { postId?: string }) {
   const [autoSaveBlocked, setAutoSaveBlocked] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState("");
   const [latestDraft, setLatestDraft] = useState<PostDraft>();
+  const [selectedRevisionId, setSelectedRevisionId] = useState<string>();
+  const [revisionOffset, setRevisionOffset] = useState(0);
   const savingRef = useRef(false);
   const editVersionRef = useRef(0);
+  const published = useTravelQuery(
+    api,
+    "admin.post.published",
+    { id: postId ?? EMPTY_ID },
+    mutationScope,
+    { enabled: !!postId && !!siteId && post?.status === "published" },
+  );
   const revisions = useTravelQuery(
     api,
     "admin.revisions",
     {
-      id: postId ?? "00000000-0000-4000-8000-000000000000",
+      id: postId ?? EMPTY_ID,
       limit: 20,
-      offset: 0,
+      offset: revisionOffset,
     },
     mutationScope,
     { enabled: !!postId },
+  );
+  const revisionDetail = useTravelQuery(
+    api,
+    "admin.revision.get",
+    { id: postId ?? EMPTY_ID, revision_id: selectedRevisionId ?? EMPTY_ID },
+    mutationScope,
+    { enabled: !!postId && !!selectedRevisionId },
   );
 
   function applyDraft(draft: PostDraft) {
@@ -142,6 +252,7 @@ export function Composer({ postId }: { postId?: string }) {
     );
     if (Array.isArray(content.blocks))
       setDocument(content.blocks as EditorDocument);
+    setEditorEpoch((current) => current + 1);
     setCoverAssetId(
       typeof content.cover_asset_id === "string" ? content.cover_asset_id : "",
     );
@@ -217,106 +328,116 @@ export function Composer({ postId }: { postId?: string }) {
     [siteId],
   );
 
-  const saveDraft = useCallback(async () => {
-    if (!post || savingRef.current) return false;
-    if (post.kind === "article") {
-      const validationError = validateDraftMetadata(
-        category as Exclude<
-          (typeof CATEGORIES)[number]["code"],
-          "itinerary-pdf"
-        >,
-        metadata,
-      );
-      if (validationError) {
-        setMetadataError(validationError);
+  const saveDraft = useCallback(
+    async (checkpoint = false) => {
+      if (!post || savingRef.current) return false;
+      if (post.kind === "article") {
+        const validationError = validateDraftMetadata(
+          category as Exclude<
+            (typeof CATEGORIES)[number]["code"],
+            "itinerary-pdf"
+          >,
+          metadata,
+        );
+        if (validationError) {
+          setMetadataError(validationError);
+          setSaveError(
+            validationError === "invalid_date"
+              ? "날짜를 다시 확인해 주세요."
+              : validationError === "invalid_dates"
+                ? "종료일은 시작일 이후로 선택해 주세요."
+                : "카페 또는 음식점 중 하나를 선택해 주세요.",
+          );
+          setAutoSaveBlocked(true);
+          return false;
+        }
+      }
+      savingRef.current = true;
+      const editVersionAtStart = editVersionRef.current;
+      setSaving(true);
+      setSaveError("");
+      setMetadataError("");
+      try {
+        const content = (
+          dirty
+            ? JSON.parse(
+                JSON.stringify({
+                  ...post.draft_content,
+                  title: title.trim(),
+                  slug: slug.trim(),
+                  tags,
+                  category_code:
+                    post.kind === "pdf" ? "itinerary-pdf" : category,
+                  ...(post.kind === "article" ? { metadata } : {}),
+                  ...(post.kind === "article"
+                    ? { blocks: document, cover_asset_id: coverAssetId || null }
+                    : { pdf_asset_id: pdfAssetId || null }),
+                }),
+              )
+            : post.draft_content
+        ) as ActionInput<"admin.post.save">["content"];
+        const saved = await submitSave({
+          id: post.id,
+          version: post.lock_version,
+          content,
+          checkpoint,
+        });
+        setPost(saved);
+        if (
+          post.kind === "article" &&
+          saved.draft_content.metadata &&
+          typeof saved.draft_content.metadata === "object" &&
+          !Array.isArray(saved.draft_content.metadata)
+        ) {
+          setMetadata(saved.draft_content.metadata as Record<string, unknown>);
+        }
+        setLastSavedAt(saved.updated_at);
+        // Keep changes made during this request dirty for the next idle save.
+        setDirty(editVersionRef.current !== editVersionAtStart);
+        setAutoSaveBlocked(false);
+        setSaveError("");
+        return true;
+      } catch (error) {
         setSaveError(
-          validationError === "invalid_date"
-            ? "날짜를 다시 확인해 주세요."
-            : validationError === "invalid_dates"
-              ? "종료일은 시작일 이후로 선택해 주세요."
-              : "카페 또는 음식점 중 하나를 선택해 주세요.",
+          error instanceof TravelApiError
+            ? errorMessage(error)
+            : "저장하지 못했습니다. 입력 내용은 화면에 남아 있습니다.",
         );
         setAutoSaveBlocked(true);
-        return false;
-      }
-    }
-    savingRef.current = true;
-    const editVersionAtStart = editVersionRef.current;
-    setSaving(true);
-    setSaveError("");
-    setMetadataError("");
-    try {
-      const content = JSON.parse(
-        JSON.stringify({
-          ...post.draft_content,
-          title: title.trim(),
-          slug: slug.trim(),
-          tags,
-          category_code: post.kind === "pdf" ? "itinerary-pdf" : category,
-          ...(post.kind === "article" ? { metadata } : {}),
-          ...(post.kind === "article"
-            ? { blocks: document, cover_asset_id: coverAssetId || null }
-            : { pdf_asset_id: pdfAssetId || null }),
-        }),
-      ) as ActionInput<"admin.post.save">["content"];
-      const saved = await submitSave({
-        id: post.id,
-        version: post.lock_version,
-        content,
-      });
-      setPost(saved);
-      if (
-        post.kind === "article" &&
-        saved.draft_content.metadata &&
-        typeof saved.draft_content.metadata === "object" &&
-        !Array.isArray(saved.draft_content.metadata)
-      ) {
-        setMetadata(saved.draft_content.metadata as Record<string, unknown>);
-      }
-      setLastSavedAt(saved.updated_at);
-      // Keep changes made during this request dirty for the next idle save.
-      setDirty(editVersionRef.current !== editVersionAtStart);
-      setAutoSaveBlocked(false);
-      setSaveError("");
-      return true;
-    } catch (error) {
-      setSaveError(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "저장하지 못했습니다. 입력 내용은 화면에 남아 있습니다.",
-      );
-      setAutoSaveBlocked(true);
-      if (error instanceof TravelApiError && error.status === 409) {
-        setSaveError(
-          "다른 탭이나 기기에서 글이 변경됐습니다. 내 입력은 유지되어 있습니다.",
-        );
-        void api
-          .call("admin.post.get", { id: post.id })
-          .then(setLatestDraft)
-          .catch(() =>
-            setSaveError(
-              "최신본을 불러오지 못했습니다. 내 입력은 그대로 보존했습니다.",
-            ),
+        if (error instanceof TravelApiError && error.status === 409) {
+          setSaveError(
+            "다른 탭이나 기기에서 글이 변경됐습니다. 내 입력은 유지되어 있습니다.",
           );
+          void api
+            .call("admin.post.get", { id: post.id })
+            .then(setLatestDraft)
+            .catch(() =>
+              setSaveError(
+                "최신본을 불러오지 못했습니다. 내 입력은 그대로 보존했습니다.",
+              ),
+            );
+        }
+        return false;
+      } finally {
+        savingRef.current = false;
+        setSaving(false);
       }
-      return false;
-    } finally {
-      savingRef.current = false;
-      setSaving(false);
-    }
-  }, [
-    api,
-    category,
-    coverAssetId,
-    document,
-    metadata,
-    pdfAssetId,
-    post,
-    slug,
-    submitSave,
-    tags,
-    title,
-  ]);
+    },
+    [
+      api,
+      category,
+      coverAssetId,
+      dirty,
+      document,
+      metadata,
+      pdfAssetId,
+      post,
+      slug,
+      submitSave,
+      tags,
+      title,
+    ],
+  );
 
   const publishChecks = post
     ? post.kind === "article"
@@ -357,15 +478,27 @@ export function Composer({ postId }: { postId?: string }) {
       return;
     setBusy(true);
     try {
+      let version = post.lock_version;
+      if (dirty) {
+        if (!(await saveDraft()))
+          throw new Error(
+            "저장되지 않은 입력을 먼저 저장해야 복원할 수 있습니다. 입력은 그대로 남아 있습니다.",
+          );
+        const latest = await api.call("admin.post.get", { id: post.id });
+        version = latest.lock_version;
+      }
       applyDraft(
         await restoreRevision.submit({
           id: post.id,
-          version: post.lock_version,
+          version,
           revision_id: revisionId,
         }),
       );
       setDirty(false);
       setLatestDraft(undefined);
+      setSelectedRevisionId(undefined);
+      setRevisionOffset(0);
+      void revisions.refetch();
       setMessage("선택한 수정 이력을 복원했습니다.");
     } catch (error) {
       setSaveError(
@@ -373,7 +506,46 @@ export function Composer({ postId }: { postId?: string }) {
           ? "복원 중 글이 변경됐습니다. 최신본을 다시 불러와 주세요."
           : error instanceof TravelApiError
             ? errorMessage(error)
-            : "수정 이력을 복원하지 못했습니다.",
+            : error instanceof Error
+              ? error.message
+              : "수정 이력을 복원하지 못했습니다.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function permanentlyDeleteRevision(revisionId: string) {
+    if (
+      !post ||
+      !window.confirm(
+        "이 수정 이력을 완전히 삭제할까요? 삭제한 이력은 복구할 수 없습니다.",
+      )
+    )
+      return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await deleteRevision.submit({
+        id: post.id,
+        version: post.lock_version,
+        revision_id: revisionId,
+      });
+      if (selectedRevisionId === revisionId) setSelectedRevisionId(undefined);
+      const refreshed = await revisions.refetch();
+      if (!refreshed.data?.length && revisionOffset > 0)
+        setRevisionOffset(Math.max(0, revisionOffset - 20));
+      setMessage("수정 이력을 완전히 삭제했습니다.");
+    } catch (error) {
+      setMessage(
+        error instanceof TravelApiError &&
+          error.code === "published_revision_protected"
+          ? "게시본에 연결된 이력은 삭제할 수 없습니다. 새 공개본으로 업데이트한 뒤 다시 시도해 주세요."
+          : error instanceof TravelApiError && error.status === 409
+            ? "그 사이 글이 변경됐습니다. 새로고침한 뒤 다시 시도해 주세요."
+            : error instanceof TravelApiError
+              ? errorMessage(error)
+              : "수정 이력을 삭제하지 못했습니다.",
       );
     } finally {
       setBusy(false);
@@ -390,7 +562,12 @@ export function Composer({ postId }: { postId?: string }) {
       setPreview(true);
       return;
     }
-    if (!window.confirm(`“${title || "제목 없는 글"}”을(를) 공개 발행할까요?`))
+    const updating = post.status === "published";
+    if (
+      !window.confirm(
+        `“${title || "제목 없는 글"}”의 ${updating ? "현재 공개본을 수정 초안으로 업데이트" : "글을 공개 발행"}할까요?`,
+      )
+    )
       return;
     setBusy(true);
     setMessage("");
@@ -414,7 +591,14 @@ export function Composer({ postId }: { postId?: string }) {
         lock_version: latest.lock_version + 1,
       });
       setDirty(false);
-      setMessage("글을 공개 발행했습니다.");
+      void published.refetch();
+      setRevisionOffset(0);
+      void revisions.refetch();
+      setMessage(
+        updating
+          ? "수정한 내용을 공개본에 반영했습니다."
+          : "글을 공개 발행했습니다.",
+      );
     } catch (error) {
       setMessage(
         error instanceof TravelApiError
@@ -608,11 +792,19 @@ export function Composer({ postId }: { postId?: string }) {
         {message || "글을 불러오고 있어요…"}
       </main>
     );
+  const hasUnpublishedDraft =
+    post.status === "published" &&
+    (dirty ||
+      (published.isSuccess &&
+        (!published.data ||
+          hasUnpublishedChanges(post.draft_content, published.data.snapshot))));
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12 md:px-8">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-muted-foreground">초안 편집</p>
+          <p className="text-muted-foreground">
+            {post.status === "published" ? "공개 글 수정" : "초안 편집"}
+          </p>
           <h1 className="font-editorial mt-2 text-3xl font-semibold">
             {post.kind === "pdf" ? "PDF 일정표" : "여행 기록"}
           </h1>
@@ -639,17 +831,35 @@ export function Composer({ postId }: { postId?: string }) {
               비공개
             </Button>
           )}
-          {post.status !== "published" && post.status !== "trashed" && (
-            <Button disabled={busy} onClick={() => void publish()}>
-              발행
+          {post.status !== "trashed" && (
+            <Button
+              disabled={
+                busy ||
+                saving ||
+                (post.status === "published" &&
+                  (!published.isSuccess || !hasUnpublishedDraft))
+              }
+              onClick={() => void publish()}
+            >
+              {post.status === "published" ? "공개본 업데이트" : "발행"}
             </Button>
           )}
           <Button
             variant="outline"
-            disabled={busy || saving || !dirty}
-            onClick={() => void saveDraft()}
+            disabled={busy || saving}
+            onClick={() =>
+              void saveDraft(true).then((saved) => {
+                if (saved) {
+                  setMessage(
+                    "초안을 저장했습니다. 변경된 내용은 수정 이력에 기록됩니다.",
+                  );
+                  setRevisionOffset(0);
+                  void revisions.refetch();
+                }
+              })
+            }
           >
-            {saving || busy ? "저장 중…" : "초안 저장"}
+            {saving || busy ? "저장 중…" : "초안 저장 · 이력 남기기"}
           </Button>
         </div>
       </header>
@@ -668,6 +878,60 @@ export function Composer({ postId }: { postId?: string }) {
                 ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}`
                 : "저장된 변경 사항 없음"}
       </p>
+      {post.status === "published" && (
+        <aside
+          className="rounded-panel space-y-3 border border-emerald-200 bg-emerald-50 p-5"
+          aria-label="공개본과 수정 초안 상태"
+        >
+          <h2 className="font-semibold">현재 공개본과 수정 초안</h2>
+          <p className="text-sm leading-relaxed">
+            방문자는 아래의 현재 공개본을 보고 있습니다. 이 화면에서 수정하거나
+            초안을 저장해도 공개 글은 바뀌지 않습니다. 수정이 끝나면
+            <strong> 공개본 업데이트</strong>를 눌러 변경 사항을 공개하세요.
+          </p>
+          <p className="text-sm font-medium">
+            {published.isPending
+              ? "공개본을 확인하고 있습니다…"
+              : published.isError
+                ? "공개본을 불러오지 못했습니다. 새로고침해 주세요."
+                : published.data === null
+                  ? "현재 공개본을 찾지 못했습니다."
+                  : hasUnpublishedDraft
+                    ? "공개본에 반영되지 않은 수정 초안이 있습니다."
+                    : "수정 초안과 공개본이 같습니다."}
+          </p>
+          {published.isError && (
+            <Button variant="outline" onClick={() => void published.refetch()}>
+              공개본 다시 확인
+            </Button>
+          )}
+        </aside>
+      )}
+      {post.status === "published" && published.data && (
+        <details
+          open
+          className="rounded-panel border p-4"
+          aria-label="현재 공개 중인 글"
+        >
+          <summary className="cursor-pointer font-semibold">
+            현재 공개 중인 글 ·{" "}
+            {new Date(published.data.updated_at).toLocaleString("ko-KR")}
+          </summary>
+          <p className="text-muted-foreground mt-2 mb-4 text-sm">
+            이 내용은 읽기 전용이며, 공개본 업데이트 전까지 방문자에게
+            표시됩니다.
+          </p>
+          <div className="max-h-[40rem] overflow-y-auto">
+            <SnapshotView
+              snapshot={published.data.snapshot}
+              kind={post.kind}
+              siteId={siteId}
+              revisionId={published.data.revision_id}
+              renderImage={renderEditorImage}
+            />
+          </div>
+        </details>
+      )}
       {latestDraft && (
         <aside
           className="rounded-panel space-y-3 border border-amber-500 p-4"
@@ -966,40 +1230,159 @@ export function Composer({ postId }: { postId?: string }) {
           {message}
         </p>
       )}
-      {post.kind === "article" && (
-        <section
-          className="rounded-panel space-y-3 border p-4"
-          aria-label="수정 이력"
-        >
+      <section
+        className="rounded-panel space-y-4 border p-4"
+        aria-label="수정 이력"
+      >
+        <div className="space-y-1">
           <h2 className="font-semibold">수정 이력</h2>
-          {revisions.data?.length ? (
-            <ul className="space-y-2">
-              {revisions.data.map((revision) => (
-                <li
-                  className="flex flex-wrap items-center justify-between gap-2"
-                  key={revision.id}
-                >
-                  <span>
-                    {new Date(revision.created_at).toLocaleString("ko-KR")}
+          <p className="text-muted-foreground text-sm">
+            직접 저장하거나 공개본을 업데이트할 때의 내용을 보관합니다. 자동
+            저장은 초안만 갱신합니다.
+          </p>
+        </div>
+        {revisions.data?.length ? (
+          <ul className="space-y-3">
+            {revisions.data.map((revision) => (
+              <li
+                className="space-y-3 rounded-lg border bg-white p-4"
+                key={revision.id}
+              >
+                <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                  <span className="rounded-full bg-stone-100 px-2.5 py-1">
+                    {revision.reason === "published"
+                      ? "공개본 업데이트"
+                      : revision.reason === "before_restore"
+                        ? "복원 전 초안"
+                        : "직접 저장"}
                   </span>
+                  {revision.is_published && (
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">
+                      {post.status === "published"
+                        ? "현재 공개본"
+                        : "마지막 게시본"}
+                    </span>
+                  )}
+                  {revision.post_version !== null && (
+                    <span className="text-muted-foreground">
+                      글 버전 {revision.post_version}
+                    </span>
+                  )}
+                  <time
+                    className="text-muted-foreground"
+                    dateTime={revision.created_at}
+                  >
+                    {new Date(revision.created_at).toLocaleString("ko-KR")}
+                  </time>
+                </div>
+                <div>
+                  <p className="font-medium">{revision.title || "제목 없음"}</p>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {revision.excerpt || "본문 미입력"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     disabled={busy}
+                    onClick={() =>
+                      setSelectedRevisionId(
+                        selectedRevisionId === revision.id
+                          ? undefined
+                          : revision.id,
+                      )
+                    }
+                  >
+                    {selectedRevisionId === revision.id
+                      ? "내용 닫기"
+                      : "내용 보기"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={busy || saving}
                     onClick={() => void restoreSnapshot(revision.id)}
                   >
                     이 이력 복원
                   </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              저장된 체크포인트 이력이 없습니다. 발행본은 수정 이력으로
-              보존됩니다.
+                  <Button
+                    variant="outline"
+                    disabled={busy || saving || revision.is_published}
+                    title={
+                      revision.is_published
+                        ? "게시본에 연결된 이력은 새 공개본으로 업데이트한 뒤 삭제할 수 있습니다."
+                        : undefined
+                    }
+                    onClick={() => void permanentlyDeleteRevision(revision.id)}
+                  >
+                    영구 삭제
+                  </Button>
+                </div>
+                {selectedRevisionId === revision.id && (
+                  <div
+                    className="space-y-2 border-t pt-4"
+                    aria-label="선택한 수정 이력 내용"
+                  >
+                    {revisionDetail.isPending ? (
+                      <p role="status">이력 내용을 불러오는 중…</p>
+                    ) : revisionDetail.isError || !revisionDetail.data ? (
+                      <p role="alert">이력 내용을 불러오지 못했습니다.</p>
+                    ) : (
+                      <SnapshotView
+                        snapshot={revisionDetail.data.snapshot}
+                        kind={post.kind}
+                        siteId={siteId}
+                        revisionId={revision.id}
+                        renderImage={renderEditorImage}
+                      />
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : revisions.isPending ? (
+          <p role="status" className="text-muted-foreground text-sm">
+            이력을 불러오는 중…
+          </p>
+        ) : revisions.isError ? (
+          <div className="space-y-2">
+            <p role="alert" className="text-sm">
+              수정 이력을 불러오지 못했습니다.
             </p>
-          )}
-        </section>
-      )}
+            <Button variant="outline" onClick={() => void revisions.refetch()}>
+              다시 불러오기
+            </Button>
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            저장된 수정 이력이 없습니다. 초안을 직접 저장하면 이력이 남습니다.
+          </p>
+        )}
+        {(revisionOffset > 0 || (revisions.data?.length ?? 0) === 20) && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={revisionOffset === 0 || busy}
+              onClick={() => {
+                setSelectedRevisionId(undefined);
+                setRevisionOffset(Math.max(0, revisionOffset - 20));
+              }}
+            >
+              더 최신 이력
+            </Button>
+            <Button
+              variant="outline"
+              disabled={(revisions.data?.length ?? 0) < 20 || busy}
+              onClick={() => {
+                setSelectedRevisionId(undefined);
+                setRevisionOffset(revisionOffset + 20);
+              }}
+            >
+              이전 이력
+            </Button>
+          </div>
+        )}
+      </section>
       {post.kind === "article" && (
         <section
           className="rounded-panel space-y-3 border p-4"
@@ -1034,45 +1417,17 @@ export function Composer({ postId }: { postId?: string }) {
                   </span>
                 ))}
               </div>
-              <div className="space-y-4">
-                {document.map((block, index) => {
-                  const previewBlock = block as {
-                    type?: string;
-                    props?: Record<string, unknown>;
-                  };
-                  return previewBlock.type === "image" &&
-                    typeof previewBlock.props?.asset_id === "string" &&
-                    siteId ? (
-                    <PrivateAssetView
-                      key={block.id ?? index}
-                      assetId={previewBlock.props.asset_id}
-                      siteId={siteId}
-                      kind="image"
-                      title={
-                        typeof previewBlock.props.caption === "string"
-                          ? previewBlock.props.caption
-                          : "본문 사진"
-                      }
-                    />
-                  ) : previewBlock.type === "heading" ? (
-                    <h3
-                      className="font-editorial text-2xl font-semibold"
-                      key={block.id ?? index}
-                    >
-                      {blockText(block)}
-                    </h3>
-                  ) : (
-                    <p className="whitespace-pre-wrap" key={block.id ?? index}>
-                      {blockText(block)}
-                    </p>
-                  );
-                })}
-              </div>
+              <Editor
+                key={`${post.id}-preview`}
+                initialContent={document}
+                editable={false}
+                renderImage={renderEditorImage}
+              />
             </article>
           ) : (
             <>
               <Editor
-                key={`${post.id}-edit`}
+                key={`${post.id}-edit-${editorEpoch}`}
                 initialContent={document}
                 editable={!busy}
                 onChange={(nextDocument) => {

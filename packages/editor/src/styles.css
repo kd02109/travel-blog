@@ -7,3 +7,206 @@
   font-size: var(--text-article, 18px);
   line-height: 1.8;
 }
+
+.writer-editor
+  .bn-block-group:has(
+    > .bn-block-outer .writer-image[data-image-layout="pair"]
+  ) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1rem;
+}
+
+.writer-editor
+  .bn-block-group:has(> .bn-block-outer .writer-image[data-image-layout="pair"])
+  > .bn-block-outer {
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+
+.writer-editor
+  .bn-block-group:has(> .bn-block-outer .writer-image[data-image-layout="pair"])
+  > .bn-block-outer:has(.writer-image[data-image-layout="pair"]) {
+  grid-column: span 1;
+}
+
+.writer-editor .bn-block-content:has(> .writer-image),
+.writer-editor .bn-block-content:has(> .react-renderer .writer-image) {
+  min-width: 0;
+  width: 100%;
+}
+
+.writer-image {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin-block: 1rem;
+  overflow: hidden;
+  border: 1px solid #d6d8d2;
+  border-radius: 0.65rem;
+  background: #fff;
+}
+
+.writer-image[data-image-layout="single"][data-image-width="small"] {
+  width: min(100%, 320px);
+}
+
+.writer-image[data-image-layout="single"][data-image-width="medium"] {
+  width: min(100%, 520px);
+}
+
+.writer-image[data-image-layout="single"][data-image-align="left"] {
+  margin-inline: 0 auto;
+}
+
+.writer-image[data-image-layout="single"][data-image-align="center"] {
+  margin-inline: auto;
+}
+
+.writer-image[data-image-layout="single"][data-image-align="right"] {
+  margin-inline: auto 0;
+}
+
+.writer-image-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e7e8e3;
+  background: #f8f9f6;
+  font-size: 0.75rem;
+  line-height: 1.2;
+}
+
+.writer-image-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.writer-image-toolbar-group > span {
+  margin-right: 0.15rem;
+  color: #575e57;
+  font-weight: 650;
+}
+
+.writer-image-toolbar button {
+  min-height: 2rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid #cbd1c8;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: #243b32;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.writer-image-toolbar button[aria-pressed="true"] {
+  border-color: #436c58;
+  background: #e4f1e8;
+  color: #194630;
+}
+
+.writer-image-toolbar button:hover:not(:disabled) {
+  border-color: #436c58;
+}
+
+.writer-image-toolbar button:focus-visible {
+  outline: 2px solid #27724d;
+  outline-offset: 2px;
+}
+
+.writer-image-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.writer-image-media {
+  display: flex;
+  min-height: 6rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background: #f2f3ef;
+}
+
+.writer-image-media img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: min(65vh, 700px);
+  margin: auto;
+  object-fit: contain;
+}
+
+.writer-image[data-image-width="small"] .writer-image-media img {
+  max-height: min(40vh, 320px);
+}
+
+.writer-image[data-image-width="medium"] .writer-image-media img {
+  max-height: min(55vh, 520px);
+}
+
+.writer-image[data-image-layout="pair"] .writer-image-media img {
+  max-height: min(45vh, 420px);
+}
+
+.writer-image figcaption {
+  padding: 0.65rem 0.8rem;
+  border-top: 1px solid #e1e4dc;
+  background: #f8f9f6;
+  color: #536057;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.writer-image figcaption:empty {
+  display: none;
+}
+
+.writer-image figcaption label {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+}
+
+.writer-image figcaption label span {
+  color: #45594b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+}
+
+.writer-image figcaption input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #d4d9d1;
+  border-radius: 0.3rem;
+  background: #fff;
+  color: #28352c;
+  font: inherit;
+  text-align: left;
+}
+
+@media (max-width: 640px) {
+  .writer-editor
+    .bn-block-group:has(
+      > .bn-block-outer .writer-image[data-image-layout="pair"]
+    ) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .writer-editor
+    .bn-block-group:has(
+      > .bn-block-outer .writer-image[data-image-layout="pair"]
+    )
+    > .bn-block-outer:has(.writer-image[data-image-layout="pair"]) {
+    grid-column: 1;
+  }
+}

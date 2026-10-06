@@ -35,6 +35,46 @@ test("preserves text and asset references in an existing draft", () => {
   const editor = vi.mocked(useCreateBlockNote).mock.results[0]!.value;
   expect(editor.document).toMatchObject([
     { type: "paragraph", content: [{ type: "text", text: "제주 여행 기록" }] },
-    { type: "image", props: { asset_id: "saved-asset", caption: "바다" } },
+    {
+      type: "image",
+      props: {
+        asset_id: "saved-asset",
+        caption: "바다",
+        width: "large",
+        align: "center",
+        layout: "single",
+      },
+    },
+  ]);
+});
+
+test("restores each image's size, alignment, and paired layout from a saved draft", () => {
+  const initialContent: EditorDocument = [
+    {
+      type: "image",
+      props: {
+        asset_id: "left-asset",
+        caption: "첫 사진",
+        width: "medium",
+        align: "left",
+        layout: "pair",
+      },
+    },
+    {
+      type: "image",
+      props: {
+        asset_id: "right-asset",
+        caption: "두 번째 사진",
+        width: "small",
+        align: "right",
+        layout: "pair",
+      },
+    },
+  ];
+  renderToStaticMarkup(createElement(WriterEditor, { initialContent }));
+  const editor = vi.mocked(useCreateBlockNote).mock.results[0]!.value;
+  expect(editor.document).toMatchObject([
+    { type: "image", props: initialContent[0]!.props },
+    { type: "image", props: initialContent[1]!.props },
   ]);
 });

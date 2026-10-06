@@ -19,7 +19,7 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 | `site.get` | `slug` 또는 `site_id`; 생략 시 parents-travel | 사이트 ID·이름·공개 홈 설정 |
 | `posts.list` | `site_id`, 선택 `category`, `tag`, `limit`, `offset` | 카드 목록·반응 수 |
 | `post.get` | `site_id` + `id` 또는 `slug` | 게시본·반응 수 |
-| `comments.list` | `id`=글 ID, 선택 `limit`, `offset` | 안전한 공개 댓글 목록 |
+| `comments.list` | `id`=글 ID, 선택 `limit`, `offset` | 안전한 공개 댓글 목록. 각 항목의 `can_manage`는 현재 로그인한 회원 작성자만 참이며, `is_guest`는 비회원 댓글 여부를 나타냅니다. |
 | `like.get` | `id`=글 ID | 현재 회원/탭 방문자의 선택 상태와 실제 집계. 비회원은 방문자 토큰 필요 |
 | `asset.access` | `id`=파일 ID, 선택 `site_id` | URL·유효기간·파일 metadata·PDF preview ID |
 | `visitor.create` | `{}` | 서명 방문자 토큰·만료 시각 |
@@ -60,13 +60,16 @@ const cards = await api("posts.list", { site_id: site.id, limit: 12 });
 | `admin.posts` | `site_id`, 선택 `limit`, `offset`, `category`, `status`, `search` | 분류·상태·제목/주소 검색이 적용된 글 목록과 `category_code` |
 | `admin.post.create` | `site_id`, `kind: article 또는 pdf`, 선택 `content` | 새 글과 lock_version |
 | `admin.post.get` | `id`, 선택 `site_id` | 편집본 |
-| `admin.post.save` | `id`, `version`, `content`, 선택 `checkpoint` | 갱신된 편집본 |
-| `admin.post.publish` | `id`, `version` | 게시 revision ID와 새 version |
+| `admin.post.published` | `id`, 선택 `site_id` | 현재 공개 중인 revision ID·원문 snapshot·발행 시각. 공개본이 없으면 null |
+| `admin.post.save` | `id`, `version`, `content`, 선택 `checkpoint` | 갱신된 편집본. `checkpoint: true`는 중복되지 않은 내용일 때 이력을 남김 |
+| `admin.post.publish` | `id`, `version` | 현재 편집본으로 공개본을 갱신하고 게시 revision ID·새 version 반환 |
 | `admin.post.status` | `id`, `version`, `status: private 또는 trashed` | 상태와 새 version |
-| `admin.revisions` | `id`=글 ID, 선택 `limit`, `offset` | 체크포인트 목록 |
+| `admin.revisions` | `id`=글 ID, 선택 `limit`, `offset` | 이력 종류·글 버전·제목·본문 발췌·현재 공개 여부를 포함한 목록 |
+| `admin.revision.get` | `id`=글 ID, `revision_id` | 해당 이력의 전체 snapshot과 메타데이터 |
 | `admin.revision.restore` | `id`=글 ID, `version`, `revision_id` | 복구된 초안 |
+| `admin.revision.delete` | `id`=글 ID, `version`, `revision_id` | `{deleted:true}`. 현재 공개본이 참조하는 이력은 409로 보호 |
 
-휴지통 복원은 `admin.post.status`의 private 상태를 사용한다. 공개하려면 별도로 publish한다. 조회한 lock_version을 다음 변경의 version으로 전달하며 409일 때 최신 내용을 다시 읽는다.
+공개된 글의 편집본을 저장해도 독자에게는 이전 공개본이 계속 보인다. 변경 내용을 공개하려면 `admin.post.publish`를 호출한다. 복원은 현재 초안이 달라졌을 때 복원 전 내용을 별도 이력으로 남긴다. 이력 삭제는 DB 행을 영구 제거하지만 현재 공개본이 참조하는 revision은 삭제할 수 없다. 조회한 lock_version을 다음 변경의 version으로 전달하며 409일 때 최신 내용을 다시 읽는다.
 
 일반 글 content 예시:
 

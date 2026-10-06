@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createMockEngine } from "./engine";
+import { renderBlocks } from "../../../supabase/functions/travel-api/core";
 import {
   createFixtures,
   mockId,
@@ -98,6 +99,220 @@ describe("reader account lifecycle", () => {
   });
 });
 describe("draft and published content", () => {
+  it("previews body changes instead of the repeated heading", () => {
+    const engine = createMockEngine();
+    const draft = call(engine, "admin.post.get", { id: first }, owner)
+      .body as Post;
+    call(
+      engine,
+      "admin.post.save",
+      {
+        id: first,
+        version: draft.lock_version,
+        content: {
+          ...draft.draft_content,
+          blocks: [
+            { type: "heading", content: [{ type: "text", text: "test 안녕" }] },
+            {
+              type: "paragraph",
+              content: [{ type: "text", text: "수정된 본문" }],
+            },
+            { type: "image", props: { asset_id: mockId(4, 1) } },
+            { type: "image", props: { asset_id: mockId(4, 2) } },
+          ],
+        },
+        checkpoint: true,
+      },
+      owner,
+    );
+    const revisions = call(engine, "admin.revisions", { id: first }, owner)
+      .body as { reason: string; excerpt: string }[];
+    expect(
+      revisions.find((revision) => revision.reason === "checkpoint")?.excerpt,
+    ).toBe("수정된 본문 · 사진 2장");
+  });
+  it("renders paired images with only allowlisted layout attributes", () => {
+    const image = (asset_id: string, props: Record<string, unknown>) => ({
+      type: "image",
+      props: { asset_id, ...props },
+    });
+    const rendered = renderBlocks([
+      image(mockId(4, 1), { layout: "pair", width: "small", align: "left" }),
+      image(mockId(4, 2), { layout: "pair", width: "medium", align: "right" }),
+      image(mockId(4, 3), { layout: "pair", width: '" onload="x' }),
+    ]);
+    expect(rendered.html.match(/<div data-image-pair>/g)).toHaveLength(1);
+    expect(rendered.html).toContain('data-image-width="small"');
+    expect(rendered.html).toContain('data-image-align="right"');
+    expect(rendered.html).not.toContain("onload");
+    expect(rendered.assetIds).toHaveLength(3);
+  });
+  it("summarizes image-only checkpoints by photo count", () => {
+    const engine = createMockEngine();
+    const draft = call(engine, "admin.post.get", { id: first }, owner)
+      .body as Post;
+    call(
+      engine,
+      "admin.post.save",
+      {
+        id: first,
+        version: draft.lock_version,
+        content: {
+          ...draft.draft_content,
+          blocks: [
+            { type: "image", props: { asset_id: mockId(4, 1) } },
+            { type: "image", props: { asset_id: mockId(4, 2) } },
+          ],
+        },
+        checkpoint: true,
+      },
+      owner,
+    );
+    const revisions = call(engine, "admin.revisions", { id: first }, owner)
+      .body as { reason: string; excerpt: string }[];
+    expect(
+      revisions.find((revision) => revision.reason === "checkpoint")?.excerpt,
+    ).toBe("사진 2장");
+  });
+  it("keeps the published snapshot until update and permanently removes only unreferenced history", () => {
+    const engine = createMockEngine();
+    const original = call(engine, "admin.post.published", { id: first }, owner)
+      .body as { revision_id: string; snapshot: { title: string } };
+    const draft = call(engine, "admin.post.get", { id: first }, owner)
+      .body as Post;
+    const changed = { ...draft.draft_content, title: "수정 초안" };
+    const saved = call(
+      engine,
+      "admin.post.save",
+      {
+        id: first,
+        version: draft.lock_version,
+        content: changed,
+        checkpoint: true,
+      },
+      owner,
+    ).body as Post;
+    expect(
+      call(engine, "post.get", { ...site, id: first }).body,
+    ).toHaveProperty("title", original.snapshot.title);
+    expect(
+      call(engine, "admin.post.published", { id: first }, owner).body,
+    ).toMatchObject({
+      revision_id: original.revision_id,
+      snapshot: original.snapshot,
+    });
+    const repeated = call(
+      engine,
+      "admin.post.save",
+      {
+        id: first,
+        version: saved.lock_version,
+        content: changed,
+        checkpoint: true,
+      },
+      owner,
+    ).body as Post;
+    const history = call(engine, "admin.revisions", { id: first }, owner)
+      .body as {
+      id: string;
+      reason: string;
+      title: string;
+      is_published: boolean;
+    }[];
+    expect(history).toHaveLength(2);
+    const checkpoint = history.find(
+      (revision) => revision.reason === "checkpoint",
+    )!;
+    expect(checkpoint).toMatchObject({
+      title: "수정 초안",
+      is_published: false,
+    });
+    expect(
+      call(
+        engine,
+        "admin.revision.get",
+        {
+          id: first,
+          revision_id: checkpoint.id,
+        },
+        owner,
+      ).body,
+    ).toHaveProperty("snapshot.title", "수정 초안");
+    expect(
+      call(
+        engine,
+        "admin.revision.delete",
+        {
+          id: first,
+          revision_id: original.revision_id,
+          version: repeated.lock_version,
+        },
+        owner,
+      ),
+    ).toMatchObject({
+      status: 409,
+      body: { error: "published_revision_protected" },
+    });
+    expect(
+      call(
+        engine,
+        "admin.revision.delete",
+        {
+          id: first,
+          revision_id: checkpoint.id,
+          version: repeated.lock_version - 1,
+        },
+        owner,
+      ),
+    ).toMatchObject({ status: 409, body: { error: "version_conflict" } });
+    expect(
+      call(
+        engine,
+        "admin.revision.delete",
+        {
+          id: first,
+          site_id: mockId(1, 2),
+          revision_id: checkpoint.id,
+          version: repeated.lock_version,
+        },
+        owner,
+      ),
+    ).toMatchObject({ status: 403, body: { error: "forbidden" } });
+    expect(
+      call(
+        engine,
+        "admin.post.publish",
+        {
+          id: first,
+          version: repeated.lock_version,
+        },
+        owner,
+      ).body,
+    ).toMatchObject({ revision_id: checkpoint.id });
+    expect(
+      call(engine, "post.get", { ...site, id: first }).body,
+    ).toHaveProperty("title", "수정 초안");
+    expect(
+      call(
+        engine,
+        "admin.revision.delete",
+        {
+          id: first,
+          revision_id: original.revision_id,
+          version: repeated.lock_version + 1,
+        },
+        owner,
+      ).body,
+    ).toEqual({ deleted: true });
+    expect(
+      engine
+        .snapshot()
+        .revisions.some((revision) => revision.id === original.revision_id),
+    ).toBe(false);
+    expect(
+      call(engine, "post.get", { ...site, id: first }).body,
+    ).toHaveProperty("title", "수정 초안");
+  });
   it("saves privately, rejects stale versions, publishes, then withdraws", () => {
     const engine = createMockEngine();
     const original = call(engine, "post.get", { ...site, id: first }).body;
@@ -257,6 +472,14 @@ describe("draft and published content", () => {
       lock_version: 4,
       draft_content: { title: "체크포인트" },
     });
+    expect(call(engine, "admin.revisions", { id: first }, owner).body).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: "before_restore",
+          title: "이후 편집",
+        }),
+      ]),
+    );
     expect(
       call(engine, "post.get", { ...site, id: first }).body,
     ).toHaveProperty("title", draft.draft_content.title);
@@ -413,6 +636,18 @@ describe("reactions and authorization", () => {
         headers,
       ).status,
     ).toBe(409);
+    expect(
+      call(engine, "comment.delete", { id: result.id, version: 2 }, reader)
+        .status,
+    ).toBe(403);
+    expect(
+      call(
+        engine,
+        "comment.delete",
+        { id: result.id, version: 2, password: input.password },
+        reader,
+      ).status,
+    ).toBe(200);
   });
   it("rejects a different member editing someone else's comment", () => {
     const engine = createMockEngine();
@@ -435,6 +670,26 @@ describe("reactions and authorization", () => {
         owner,
       ).status,
     ).toBe(403);
+    const commentId = (created.body as { id: string }).id;
+    const ownerView = call(engine, "comments.list", { id: first }, reader)
+      .body as { id: string; can_manage: boolean; is_guest: boolean }[];
+    expect(ownerView.find((item) => item.id === commentId)).toMatchObject({
+      can_manage: true,
+      is_guest: false,
+    });
+    const otherView = call(engine, "comments.list", { id: first }, owner)
+      .body as { id: string; can_manage: boolean; is_guest: boolean }[];
+    expect(otherView.find((item) => item.id === commentId)?.can_manage).toBe(
+      false,
+    );
+    expect(
+      call(engine, "comment.delete", { id: commentId, version: 1 }, owner)
+        .status,
+    ).toBe(403);
+    expect(
+      call(engine, "comment.delete", { id: commentId, version: 1 }, reader)
+        .status,
+    ).toBe(200);
   });
   it("does not expose a post after an administrator makes it private", () => {
     const engine = createMockEngine();

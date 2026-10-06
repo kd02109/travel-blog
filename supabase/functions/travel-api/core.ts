@@ -47,12 +47,15 @@ export const memberActions = new Set([
   "comment.report",
   "admin.posts",
   "admin.post.get",
+  "admin.post.published",
   "admin.post.create",
   "admin.post.save",
   "admin.post.publish",
   "admin.post.status",
   "admin.revisions",
+  "admin.revision.get",
   "admin.revision.restore",
+  "admin.revision.delete",
   "admin.members",
   "admin.member.set",
   "admin.settings.get",
@@ -184,11 +187,18 @@ export function renderBlocks(
     if (!Array.isArray(items) || depth > 8) {
       throw new ApiError(422, "invalid_blocks");
     }
-    return items.map((b) => {
+    let html = "";
+    let pairedImage = "";
+    const flushPair = () => {
+      html += pairedImage;
+      pairedImage = "";
+    };
+    for (const b of items) {
       if (!b || typeof b !== "object" || ++nodes > 2000) {
         throw new ApiError(422, "invalid_blocks");
       }
       let out = "";
+      let pair = false;
       const content = () => inline(b.content ?? []);
       switch (b.type) {
         case "paragraph":
@@ -223,7 +233,15 @@ export function renderBlocks(
             throw new ApiError(422, "image_asset_required");
           }
           ids.add(id);
-          out = `<figure data-asset-id="${id}"><figcaption>${
+          const width = ["small", "medium", "large"].includes(b.props?.width)
+            ? b.props.width
+            : "large";
+          const align = ["left", "center", "right"].includes(b.props?.align)
+            ? b.props.align
+            : "center";
+          const layout = b.props?.layout === "pair" ? "pair" : "single";
+          pair = layout === "pair";
+          out = `<figure data-asset-id="${id}" data-image-width="${width}" data-image-align="${align}" data-image-layout="${layout}"><figcaption>${
             escapeHtml(String(b.props?.caption ?? ""))
           }</figcaption></figure>`;
           break;
@@ -231,8 +249,21 @@ export function renderBlocks(
         default:
           throw new ApiError(422, "unsupported_block_type");
       }
-      return out + (b.children?.length ? render(b.children, depth + 1) : "");
-    }).join("");
+      out += b.children?.length ? render(b.children, depth + 1) : "";
+      if (pair) {
+        if (pairedImage) {
+          html += `<div data-image-pair>${pairedImage}${out}</div>`;
+          pairedImage = "";
+        } else {
+          pairedImage = out;
+        }
+      } else {
+        flushPair();
+        html += out;
+      }
+    }
+    flushPair();
+    return html;
   }
   return { html: render(blocks, 0), assetIds: [...ids] };
 }

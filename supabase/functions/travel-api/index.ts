@@ -260,7 +260,7 @@ Deno.serve(async (req: Request) => {
       if (action === "comment.edit") {
         input.body = text(input.body, 1, 1000).trim();
       }
-      if (!actor) {
+      if (!actor || input.password !== undefined) {
         // Comment-wide limit prevents a fresh visitor token from resetting guessing limits.
         await rate("credential:" + input.id, "verify", 5, 900);
         const credential = await rpc("comment.credential", null, {

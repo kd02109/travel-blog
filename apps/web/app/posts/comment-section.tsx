@@ -7,8 +7,23 @@ import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { errorMessage, TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
+import { Dialog } from "@repo/ui/dialog";
 
 type Comment = ActionOutput<"comments.list">[number];
+type CommentAction = "reply" | "edit" | "report" | "delete";
+
+const actionLabels: Record<CommentAction, string> = {
+  reply: "답글",
+  edit: "수정",
+  report: "신고",
+  delete: "삭제",
+};
+
+function commentActionError(error: unknown) {
+  return error instanceof TravelApiError && error.code === "invalid_password"
+    ? "비밀번호가 일치하지 않습니다. 다시 입력해 주세요."
+    : errorMessage(error);
+}
 
 export function CommentSection({
   siteId,
@@ -22,12 +37,19 @@ export function CommentSection({
   commentsEnabled: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
-  const scope = { siteId, actor: "public" };
-  const [signedIn, setSignedIn] = useState(false);
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const signedIn = Boolean(authUserId);
+  const scope = {
+    siteId,
+    actor: authUserId ? `reader:${authUserId}` : "public",
+  };
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [reporting, setReporting] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Comment | null>(null);
+  const deletePasswordInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLFormElement>(null);
   const [reportReason, setReportReason] = useState<
     "spam" | "abuse" | "personal_information" | "other"
@@ -59,12 +81,51 @@ export function CommentSection({
     const auth = createBrowserDatabase().auth;
     void auth
       .getSession()
-      .then(({ data }) => setSignedIn(Boolean(data.session)));
+      .then(({ data }) => setAuthUserId(data.session?.user.id ?? null));
     const { data: listener } = auth.onAuthStateChange((_event, session) =>
-      setSignedIn(Boolean(session)),
+      setAuthUserId(session?.user.id ?? null),
     );
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (
+        !(event.target instanceof Element) ||
+        event.target
+          .closest("[data-comment-menu]")
+          ?.getAttribute("data-comment-menu") !== menuOpen
+      )
+        setMenuOpen(null);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      const trigger = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-comment-menu] > button"),
+      ).find(
+        (button) =>
+          button.parentElement?.getAttribute("data-comment-menu") === menuOpen,
+      );
+      setMenuOpen(null);
+      trigger?.focus();
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    if (!deleteTarget?.is_guest) return;
+    const timer = window.setTimeout(
+      () => deletePasswordInput.current?.focus(),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [deleteTarget]);
 
   useEffect(() => {
     try {
@@ -166,7 +227,9 @@ export function CommentSection({
         id: item.id,
         version: item.version,
         body: String(form.get("body") ?? "").trim(),
-        password: signedIn ? undefined : String(form.get("password") ?? ""),
+        password: item.is_guest
+          ? String(form.get("password") ?? "")
+          : undefined,
       });
       setEditing(null);
       setNotice("댓글을 수정했습니다.");
@@ -176,17 +239,19 @@ export function CommentSection({
     }
   }
 
-  async function deleteComment(item: Comment) {
-    const secret = signedIn
-      ? undefined
-      : window.prompt("댓글을 작성할 때 입력한 비밀번호를 입력해 주세요.");
-    if (!signedIn && !secret) return;
+  async function submitDelete(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!deleteTarget) return;
+    const password = deleteTarget.is_guest
+      ? String(new FormData(event.currentTarget).get("password") ?? "")
+      : undefined;
     try {
       await remove.submit({
-        id: item.id,
-        version: item.version,
-        password: secret || undefined,
+        id: deleteTarget.id,
+        version: deleteTarget.version,
+        password,
       });
+      setDeleteTarget(null);
       setNotice("댓글을 삭제했습니다.");
       await comments.refetch();
     } catch {
@@ -208,29 +273,101 @@ export function CommentSection({
     }
   }
 
+  function chooseAction(action: CommentAction, item: Comment) {
+    setMenuOpen(null);
+    if (action === "reply") {
+      setEditing(null);
+      setReporting(null);
+      setReplyTo(replyTo === item.id ? null : item.id);
+    } else if (action === "edit") {
+      edit.reset();
+      setReplyTo(null);
+      setReporting(null);
+      setEditing(item.id);
+    } else if (action === "delete") {
+      remove.reset();
+      setDeleteTarget(item);
+    } else if (!signedIn) {
+      openLogin();
+    } else {
+      report.reset();
+      setReplyTo(null);
+      setEditing(null);
+      setReporting(reporting === item.id ? null : item.id);
+    }
+  }
+
   function renderComment(item: Comment, depth = 0): React.ReactNode {
     const children =
       comments.data?.filter((child) => child.parent_id === item.id) ?? [];
     const deleted = item.status === "deleted";
+    const canManage = item.can_manage || item.is_guest;
+    const actions: CommentAction[] = ["reply"];
+    if (canManage) actions.push("edit");
+    if (!item.can_manage) actions.push("report");
+    if (canManage) actions.push("delete");
     return (
       <li
         key={item.id}
         className="border-border space-y-3 border-b py-5"
         style={{ marginLeft: depth ? Math.min(depth, 2) * 16 : 0 }}
       >
-        <div className="flex flex-wrap items-baseline gap-x-3">
-          <strong>{item.display_name}</strong>
-          {item.is_staff && (
-            <span className="text-primary text-xs">운영자</span>
-          )}
-          <time
-            className="text-muted-foreground text-sm"
-            dateTime={item.created_at}
-          >
-            {new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium" }).format(
-              new Date(item.created_at),
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 pt-1">
+            <strong>{item.display_name}</strong>
+            {item.is_staff && (
+              <span className="text-primary text-xs">운영자</span>
             )}
-          </time>
+            <time
+              className="text-muted-foreground text-sm"
+              dateTime={item.created_at}
+            >
+              {new Intl.DateTimeFormat("ko-KR", {
+                dateStyle: "medium",
+              }).format(new Date(item.created_at))}
+            </time>
+          </div>
+          {!deleted && (
+            <div className="relative shrink-0" data-comment-menu={item.id}>
+              <button
+                type="button"
+                aria-label={`${item.display_name} 댓글 더보기`}
+                aria-expanded={menuOpen === item.id}
+                aria-controls={`comment-actions-${item.id}`}
+                onClick={() =>
+                  setMenuOpen(menuOpen === item.id ? null : item.id)
+                }
+                className="group inline-flex size-12 items-center justify-center rounded-full"
+              >
+                <span className="bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-foreground inline-flex size-8 items-center justify-center rounded-full transition-colors">
+                  <ActionIcon action="more" />
+                </span>
+              </button>
+              {menuOpen === item.id && (
+                <div
+                  id={`comment-actions-${item.id}`}
+                  aria-label={`${item.display_name} 댓글 작업`}
+                  className={`border-border bg-surface rounded-panel absolute top-full right-0 z-20 mt-2 border p-2 shadow-[0_12px_32px_rgb(23_60_66_/_16%)] ${actions.length > 2 ? "w-48" : "w-28"}`}
+                >
+                  <div
+                    className={`grid gap-1.5 ${actions.length > 2 ? "grid-cols-2" : "grid-cols-1"}`}
+                  >
+                    {actions.map((action) => (
+                      <button
+                        key={action}
+                        type="button"
+                        onClick={() => chooseAction(action, item)}
+                        className="border-border bg-background text-foreground hover:border-primary/30 hover:bg-muted rounded-control inline-flex min-h-12 items-center justify-between gap-1 border px-2 text-sm transition-colors"
+                      >
+                        <span>{actionLabels[action]}</span>
+                        <ActionIcon action={action} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {deleted ? (
           <p className="text-muted-foreground">삭제된 댓글입니다.</p>
@@ -250,7 +387,7 @@ export function CommentSection({
                 className="rounded-control bg-background mt-1 min-h-24 w-full border p-3"
               />
             </label>
-            {!signedIn && (
+            {item.is_guest && (
               <label className="block">
                 작성 시 비밀번호
                 <input
@@ -258,6 +395,7 @@ export function CommentSection({
                   type="password"
                   required
                   minLength={8}
+                  maxLength={128}
                   autoComplete="current-password"
                   className="rounded-control mt-1 min-h-11 border p-2"
                 />
@@ -275,54 +413,10 @@ export function CommentSection({
                 취소
               </Button>
             </div>
-            {edit.error && <p role="alert">{errorMessage(edit.error)}</p>}
+            {edit.error && <p role="alert">{commentActionError(edit.error)}</p>}
           </form>
         ) : (
           <p className="leading-relaxed whitespace-pre-wrap">{item.body}</p>
-        )}
-        {!deleted && (
-          <div className="flex flex-wrap gap-2 text-sm">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setReplyTo(replyTo === item.id ? null : item.id)}
-            >
-              답글
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setEditing(item.id)}
-            >
-              수정
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void deleteComment(item)}
-            >
-              삭제
-            </Button>
-            {signedIn ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() =>
-                  setReporting(reporting === item.id ? null : item.id)
-                }
-              >
-                신고
-              </Button>
-            ) : (
-              <button
-                type="button"
-                className="inline-flex min-h-10 items-center px-3 underline"
-                onClick={openLogin}
-              >
-                로그인 후 신고
-              </button>
-            )}
-          </div>
         )}
         {!deleted && reporting === item.id && (
           <form
@@ -359,10 +453,14 @@ export function CommentSection({
         )}
         {!deleted && replyTo === item.id && (
           <form
-            onSubmit={(event) => void submit(event, item.id)}
+            onSubmit={(event) => void submit(event, item.parent_id ?? item.id)}
             className="rounded-panel bg-surface space-y-3 p-4"
           >
-            <h3 className="font-medium">{item.display_name}님에게 답글</h3>
+            <h3 className="font-medium">
+              {item.parent_id
+                ? "이 대화에 답글"
+                : `${item.display_name}님에게 답글`}
+            </h3>
             <CommentFields
               signedIn={signedIn}
               profileName={me.data?.profile?.display_name}
@@ -394,6 +492,7 @@ export function CommentSection({
           ? ` · ${comments.data.length}`
           : ""}
       </h2>
+      {notice && <p role="status">{notice}</p>}
       {comments.error && (
         <div role="alert" className="space-y-2">
           <p>{errorMessage(comments.error)}</p>
@@ -467,14 +566,123 @@ export function CommentSection({
               표시 이름을 저장하지 못했습니다. 다시 시도해 주세요.
             </p>
           )}
-          {notice && <p role="status">{notice}</p>}
         </form>
       ) : (
         <p className="rounded-panel bg-surface text-muted-foreground p-4">
           이 글은 댓글을 닫았습니다. 이전 댓글은 계속 읽을 수 있습니다.
         </p>
       )}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="댓글 삭제"
+        description={
+          deleteTarget?.is_guest
+            ? "작성할 때 설정한 댓글 관리 비밀번호를 입력해 주세요."
+            : "이 댓글을 삭제할까요? 삭제한 내용은 복구할 수 없습니다."
+        }
+      >
+        <form
+          onSubmit={(event) => void submitDelete(event)}
+          className="space-y-5"
+        >
+          {deleteTarget?.is_guest && (
+            <label className="block font-medium">
+              댓글 관리 비밀번호
+              <input
+                ref={deletePasswordInput}
+                name="password"
+                type="password"
+                required
+                minLength={8}
+                maxLength={128}
+                autoComplete="current-password"
+                className="rounded-control bg-background mt-2 min-h-12 w-full border px-3"
+              />
+            </label>
+          )}
+          {remove.error && (
+            <p role="alert" className="text-destructive text-sm">
+              {commentActionError(remove.error)}
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+            >
+              취소
+            </Button>
+            <Button
+              type="submit"
+              variant="destructive"
+              disabled={remove.isPending}
+            >
+              {remove.isPending ? "삭제 중…" : "삭제"}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
     </section>
+  );
+}
+
+function ActionIcon({ action }: { action: CommentAction | "more" }) {
+  const iconClass = "text-muted-foreground size-4 shrink-0";
+  if (action === "more")
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="size-5"
+      >
+        <circle cx="5" cy="12" r="1.7" />
+        <circle cx="12" cy="12" r="1.7" />
+        <circle cx="19" cy="12" r="1.7" />
+      </svg>
+    );
+  const paths: Record<CommentAction, React.ReactNode> = {
+    reply: (
+      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 9 9 0 0 1-4-.9L3 21l1.9-5.5a9 9 0 0 1-.9-4A8.5 8.5 0 0 1 12.5 3 8.5 8.5 0 0 1 21 11.5Z" />
+    ),
+    edit: (
+      <>
+        <path d="M12 20h9" />
+        <path d="M4 16.5V20h3.5L18.8 8.7l-3.5-3.5L4 16.5Z" />
+        <path d="m13.7 6.8 3.5 3.5" />
+      </>
+    ),
+    report: (
+      <>
+        <path d="m10.3 4.3-8 14A1.8 1.8 0 0 0 3.9 21h16.2a1.8 1.8 0 0 0 1.6-2.7l-8-14a1.9 1.9 0 0 0-3.4 0Z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </>
+    ),
+    delete: (
+      <>
+        <path d="M3 6h18M8 6V4h8v2M5 6l1 14h12l1-14" />
+        <path d="M10 10v6M14 10v6" />
+      </>
+    ),
+  };
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={iconClass}
+    >
+      {paths[action]}
+    </svg>
   );
 }
 

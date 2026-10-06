@@ -28,6 +28,7 @@ export type Post = {
 };
 export type Publication = {
   post_id: string;
+  revision_id: string;
   site_id: string;
   title: string;
   slug: string;
@@ -89,6 +90,8 @@ export type Revision = {
   created_at: string;
   created_by: string;
   schema_version: number;
+  reason: "checkpoint" | "published" | "before_restore";
+  post_version: number | null;
 };
 export type MockState = {
   posts: Post[];

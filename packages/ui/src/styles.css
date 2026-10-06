@@ -129,6 +129,15 @@
   }
 }
 
+@layer utilities {
+  :is(input, textarea, select):focus-visible {
+    outline: 0;
+    outline-offset: 0;
+    box-shadow: none;
+    background-color: var(--muted);
+  }
+}
+
 @layer components {
   [data-home-a-carousel] .home-a-slide {
     opacity: 0;
