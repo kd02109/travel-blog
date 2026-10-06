@@ -53,6 +53,10 @@ export function PostDetail({
   const [shareUrl, setShareUrl] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const shareLink = useRef<HTMLInputElement>(null);
+  const articleHtml = useMemo(
+    () => (post.data?.body_html ?? "").replace(/<(\/?)h1(?=[\s>])/gi, "<$1h2"),
+    [post.data?.body_html],
+  );
   const likeState = useTravelQuery(
     api,
     "like.get",
@@ -100,7 +104,7 @@ export function PostDetail({
       return { id, title: heading.textContent?.trim() || `본문 ${index + 1}` };
     });
     setContents(next);
-  }, [post.data?.body_html, slug]);
+  }, [articleHtml, slug]);
   async function toggleLike() {
     const current = optimisticLike ?? likeState.data;
     if (!current || setLike.isPending || !post.data) return;
@@ -330,6 +334,7 @@ export function PostDetail({
           assetId={post.data.cover_asset_id}
           siteId={siteId}
           title={`${post.data.title} 대표 사진`}
+          reserveSpace
         />
       )}
       {post.data.pdf_asset_id && (
@@ -339,9 +344,9 @@ export function PostDetail({
           title={post.data.title}
         />
       )}
-      {post.data.body_html && (
+      {articleHtml && (
         <section className="space-y-6">
-          {contents.length > 0 && (
+          {contents.length > 1 && (
             <nav
               aria-label="이 글의 목차"
               className="rounded-panel bg-surface border p-5"
@@ -365,7 +370,7 @@ export function PostDetail({
             ref={articleBody}
             className="space-y-6 text-lg leading-[1.9] [&_a]:underline [&_figure]:my-8 [&_h2]:font-serif [&_h2]:text-2xl [&_h2]:leading-relaxed [&_h3]:font-serif [&_h3]:text-xl [&_p]:my-5"
           >
-            <PostAssetFigures html={post.data.body_html} siteId={siteId} />
+            <PostAssetFigures html={articleHtml} siteId={siteId} />
           </div>
         </section>
       )}
@@ -397,10 +402,12 @@ export function PostDetail({
         )}
       {post.data.category_code !== "itinerary-pdf" && (
         <CommentSection
+          key={post.data.post_id}
           siteId={siteId}
           postId={post.data.post_id}
           slug={slug}
           commentsEnabled={post.data.comments_enabled}
+          commentCount={post.data.comment_count}
         />
       )}
       <Dialog

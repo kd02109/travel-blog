@@ -12,6 +12,7 @@ import { Dialog } from "@repo/ui/dialog";
 
 type Comment = ActionOutput<"comments.list">[number];
 type CommentAction = "reply" | "edit" | "report" | "delete";
+const COMMENT_PAGE_SIZE = 50;
 
 const actionLabels: Record<CommentAction, string> = {
   reply: "답글",
@@ -25,14 +26,17 @@ export function CommentSection({
   postId,
   slug,
   commentsEnabled,
+  commentCount,
 }: {
   siteId: string;
   postId: string;
   slug: string;
   commentsEnabled: boolean;
+  commentCount: number | null;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [authUserId, setAuthUserId] = useState<string | null>(null);
+  const authUserIdRef = useRef<string | null>(null);
   const signedIn = Boolean(authUserId);
   const scope = {
     siteId,
@@ -47,6 +51,9 @@ export function CommentSection({
   const [reporting, setReporting] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Comment | null>(null);
+  const [extraPages, setExtraPages] = useState<Comment[][]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<unknown>(null);
   const deletePasswordInput = useRef<HTMLInputElement>(null);
   const composer = useRef<HTMLFormElement>(null);
   const [reportReason, setReportReason] = useState<
@@ -55,7 +62,7 @@ export function CommentSection({
   const comments = useTravelQuery(
     api,
     "comments.list",
-    { id: postId, limit: 50, offset: 0 },
+    { id: postId, limit: COMMENT_PAGE_SIZE, offset: 0 },
     scope,
     { staleTime: 0 },
   );
@@ -74,15 +81,85 @@ export function CommentSection({
     siteId,
     actor: "reader",
   });
+  const allComments = useMemo(() => {
+    const unique = new Map<string, Comment>();
+    for (const item of [...(comments.data ?? []), ...extraPages.flat()])
+      unique.set(item.id, item);
+    return [...unique.values()];
+  }, [comments.data, extraPages]);
+  const commentsByParent = useMemo(() => {
+    const knownIds = new Set(allComments.map((item) => item.id));
+    const groups = new Map<string | null, Comment[]>();
+    for (const item of allComments) {
+      const parent =
+        item.parent_id && knownIds.has(item.parent_id) ? item.parent_id : null;
+      const siblings = groups.get(parent) ?? [];
+      siblings.push(item);
+      groups.set(parent, siblings);
+    }
+    return groups;
+  }, [allComments]);
+  const lastPage = extraPages.at(-1) ?? comments.data;
+  const hasMore = lastPage?.length === COMMENT_PAGE_SIZE;
+
+  async function loadMore() {
+    if (!hasMore || loadingMore) return;
+    const expectedAuthUserId = authUserIdRef.current;
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const next = await api.call("comments.list", {
+        id: postId,
+        limit: COMMENT_PAGE_SIZE,
+        offset: COMMENT_PAGE_SIZE * (extraPages.length + 1),
+      });
+      if (authUserIdRef.current !== expectedAuthUserId) return;
+      setExtraPages((current) => [...current, next]);
+    } catch (error) {
+      if (authUserIdRef.current === expectedAuthUserId) setMoreError(error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  async function refreshComments() {
+    const loadedExtraPages = extraPages.length;
+    await comments.refetch();
+    if (!loadedExtraPages) return;
+    try {
+      const pages = await Promise.all(
+        Array.from({ length: loadedExtraPages }, (_, index) =>
+          api.call("comments.list", {
+            id: postId,
+            limit: COMMENT_PAGE_SIZE,
+            offset: COMMENT_PAGE_SIZE * (index + 1),
+          }),
+        ),
+      );
+      setExtraPages(pages);
+      setMoreError(null);
+    } catch (error) {
+      setMoreError(error);
+    }
+  }
 
   useEffect(() => {
     const auth = createBrowserDatabase().auth;
-    void auth
-      .getSession()
-      .then(({ data }) => setAuthUserId(data.session?.user.id ?? null));
-    const { data: listener } = auth.onAuthStateChange((_event, session) =>
-      setAuthUserId(session?.user.id ?? null),
-    );
+    let receivedAuthEvent = false;
+    const updateAuthUserId = (userId: string | null) => {
+      if (authUserIdRef.current === userId) return;
+      authUserIdRef.current = userId;
+      setAuthUserId(userId);
+      setExtraPages([]);
+      setMoreError(null);
+    };
+    void auth.getSession().then(({ data }) => {
+      if (!receivedAuthEvent) updateAuthUserId(data.session?.user.id ?? null);
+    });
+    const { data: listener } = auth.onAuthStateChange((_event, session) => {
+      receivedAuthEvent = true;
+      updateAuthUserId(session?.user.id ?? null);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -212,7 +289,7 @@ export function CommentSection({
       setReplyTo(null);
       target.reset();
       sessionStorage.removeItem(`travel-comment-draft:${postId}`);
-      await comments.refetch();
+      await refreshComments();
     } catch {
       setNotice("");
     }
@@ -235,7 +312,7 @@ export function CommentSection({
       });
       setEditing(null);
       setNotice("댓글을 수정했습니다.");
-      await comments.refetch();
+      await refreshComments();
     } catch {
       setNotice("");
     }
@@ -255,7 +332,7 @@ export function CommentSection({
       });
       setDeleteTarget(null);
       setNotice("댓글을 삭제했습니다.");
-      await comments.refetch();
+      await refreshComments();
     } catch {
       setNotice("");
     }
@@ -302,8 +379,7 @@ export function CommentSection({
   }
 
   function renderComment(item: Comment, depth = 0): React.ReactNode {
-    const children =
-      comments.data?.filter((child) => child.parent_id === item.id) ?? [];
+    const children = commentsByParent.get(item.id) ?? [];
     const deleted = item.status === "deleted";
     const canManage = item.can_manage || item.is_guest;
     const actions: CommentAction[] = ["reply"];
@@ -528,9 +604,7 @@ export function CommentSection({
     >
       <h2 id="comments-heading" className="font-serif text-2xl">
         댓글
-        {typeof comments.data?.length === "number"
-          ? ` · ${comments.data.length}`
-          : ""}
+        {typeof commentCount === "number" ? ` · ${commentCount}` : ""}
       </h2>
       {notice && <p role="status">{notice}</p>}
       {comments.error && (
@@ -549,11 +623,11 @@ export function CommentSection({
           isRetrying={me.isFetching}
         />
       )}
-      {comments.data?.length ? (
+      {allComments.length ? (
         <ul>
-          {comments.data
-            .filter((item) => !item.parent_id)
-            .map((item) => renderComment(item))}
+          {(commentsByParent.get(null) ?? []).map((item) =>
+            renderComment(item),
+          )}
         </ul>
       ) : (
         comments.isSuccess && (
@@ -561,6 +635,24 @@ export function CommentSection({
             아직 댓글이 없습니다. 첫 번째 이야기를 남겨 주세요.
           </p>
         )
+      )}
+      {moreError != null && (
+        <ApiErrorState
+          error={moreError}
+          title="추가 댓글을 불러오지 못했어요"
+          onRetry={() => void loadMore()}
+          isRetrying={loadingMore}
+        />
+      )}
+      {hasMore && moreError == null && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void loadMore()}
+          disabled={loadingMore}
+        >
+          {loadingMore ? "댓글을 불러오는 중…" : "댓글 더 보기"}
+        </Button>
       )}
       {commentsEnabled ? (
         <form
@@ -573,10 +665,12 @@ export function CommentSection({
             signedIn={signedIn}
             profileName={me.data?.profile?.display_name}
           />
-          <p className="text-muted-foreground text-sm">
-            카카오 로그인 전에 입력한 이름과 댓글은 이 탭에서 복원됩니다. 비회원
-            관리 비밀번호는 저장되지 않아 다시 입력해야 합니다.
-          </p>
+          {!signedIn && (
+            <p className="text-muted-foreground text-sm">
+              카카오 로그인 전에 입력한 이름과 댓글은 이 탭에서 복원됩니다.
+              비회원 관리 비밀번호는 저장되지 않아 다시 입력해야 합니다.
+            </p>
+          )}
           {!signedIn && (
             <button
               type="button"
@@ -759,7 +853,11 @@ function CommentFields({
   return (
     <>
       {signedIn ? (
-        !profileName && (
+        profileName ? (
+          <p className="text-muted-foreground text-sm">
+            작성자 <strong className="text-foreground">{profileName}</strong>
+          </p>
+        ) : (
           <label className="block">
             표시 이름
             <input
