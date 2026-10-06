@@ -1,0 +1,35 @@
+.previewDialog {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.previewDialog::backdrop {
+  background: rgb(12 29 32 / 72%);
+}
+
+.cover {
+  display: grid;
+  min-height: 100dvh;
+}
+
+.cover > :global([data-home-template]) {
+  min-height: 100dvh;
+  align-self: stretch;
+  border: 0;
+  border-radius: 0;
+}
+
+.cover > :global([data-home-template="D"]) > :first-child {
+  inset: 0;
+  border-radius: 0;
+}
