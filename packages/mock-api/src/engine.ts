@@ -168,6 +168,7 @@ export function createMockEngine(options: MockOptions = {}) {
             "title",
             "description",
             "hero_asset_id",
+            "hero_asset_ids",
             "featured_post_id",
           ].includes(k),
       )
@@ -183,6 +184,24 @@ export function createMockEngine(options: MockOptions = {}) {
       throw new ApiError(422, "invalid_text");
     if (value.hero_asset_id && !readyAsset(value.hero_asset_id, "image"))
       throw new ApiError(422, "invalid_asset");
+    if (value.hero_asset_ids !== undefined) {
+      if (
+        !Array.isArray(value.hero_asset_ids) ||
+        value.hero_asset_ids.length > 4 ||
+        value.hero_asset_ids.some((assetId) => typeof assetId !== "string") ||
+        new Set(value.hero_asset_ids).size !== value.hero_asset_ids.length
+      )
+        throw new ApiError(422, "invalid_settings");
+      for (const assetId of value.hero_asset_ids) {
+        if (!readyAsset(assetId, "image"))
+          throw new ApiError(422, "invalid_asset");
+      }
+      if (
+        value.hero_asset_ids.length > 0 &&
+        value.hero_asset_id !== value.hero_asset_ids[0]
+      )
+        throw new ApiError(422, "invalid_settings");
+    }
     if (value.featured_post_id && !publication(value.featured_post_id))
       throw new ApiError(422, "invalid_featured_post");
     return structuredClone(value) as Settings;
@@ -503,7 +522,9 @@ export function createMockEngine(options: MockOptions = {}) {
                   pdf.id === p.pdf_asset_id &&
                   pdf.preview_asset_id === asset.id,
               )),
-        ) || state.publishedSettings.hero_asset_id === asset.id;
+        ) ||
+        state.publishedSettings.hero_asset_id === asset.id ||
+        state.publishedSettings.hero_asset_ids?.includes(asset.id) === true;
       if (asset.state !== "ready" || !linked) staff(person);
       return {
         id: asset.id,
@@ -512,6 +533,13 @@ export function createMockEngine(options: MockOptions = {}) {
         metadata: asset.metadata,
         preview_asset_id: asset.preview_asset_id,
       };
+    }
+    if (action === "asset.status") {
+      const asset = state.assets.find((a) => a.id === input.id);
+      if (!asset) throw new ApiError(404, "not_found");
+      checkSite(input.site_id);
+      staff(person);
+      return { id: asset.id, state: asset.state };
     }
     // Binary uploads and workers are deliberately not fake-success endpoints.
     if (action === "asset.create" || action === "asset.complete") {

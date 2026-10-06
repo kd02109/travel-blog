@@ -182,6 +182,7 @@ const samples = {
     path: "original",
   },
   "asset.complete": { id, state: "processing" },
+  "asset.status": { id, state: "processing" },
   "asset.cancel": { saved: true },
   "asset.access": {
     id,
@@ -233,6 +234,16 @@ describe("deployed action boundaries", () => {
     );
     const actions = [...prefix.matchAll(/"([a-z.]+)"/g)].map((m) => m[1]);
     expect(Object.keys(actionContracts).sort()).toEqual(actions.sort());
+  });
+  it("accepts a scoped asset status lookup and rejects malformed results", () => {
+    const input = { id, site_id: id };
+    expect(actionContracts["asset.status"].input.parse(input)).toEqual(input);
+    expect(
+      parseActionOutput("asset.status", { id, state: "processing" }),
+    ).toEqual({ id, state: "processing" });
+    expect(() =>
+      parseActionOutput("asset.status", { id, state: "other" }),
+    ).toThrow();
   });
   for (const action of Object.keys(samples) as ApiAction[]) {
     it(`accepts ${action} response and rejects a missing/wrong payload`, () => {

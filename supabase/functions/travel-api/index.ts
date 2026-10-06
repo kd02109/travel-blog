@@ -339,6 +339,10 @@ Deno.serve(async (req: Request) => {
       const result = await rpc(action, actor, input);
       return respond({ id: result.id, state: result.state });
     }
+    if (action === "asset.status") {
+      const asset = await rpc("asset.internal", actor, input);
+      return respond({ id: asset.id, state: asset.state });
+    }
     if (action === "asset.cancel") {
       const asset = await rpc("asset.internal", actor, input);
       if (asset.state === "uploading" || asset.state === "processing") {
@@ -351,7 +355,15 @@ Deno.serve(async (req: Request) => {
       return respond({ saved: true });
     }
     if (action === "asset.access") {
-      const asset = await rpc(action, actor, input);
+      const { data: publishedHomeAsset, error: homeAssetError } = await client.rpc(
+        "travel_home_asset",
+        { p_site_id: input.site_id ?? null, p_asset_id: input.id },
+      );
+      // Preserve access to existing single-photo covers while the migration is
+      // rolling out; secondary photos become public once the RPC is installed.
+      if (homeAssetError && homeAssetError.code !== "PGRST202")
+        throw databaseError(homeAssetError);
+      const asset = publishedHomeAsset ?? await rpc(action, actor, input);
       if (asset.cleanup_state !== "active") {
         throw new ApiError(404, "asset_not_found");
       }
