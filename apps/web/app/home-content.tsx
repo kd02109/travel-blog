@@ -18,8 +18,73 @@ import {
 import { AnalyticsConsent } from "./analytics-consent";
 import { PostCard } from "./post-card";
 import { CatalogEmpty } from "./posts/catalog-empty";
-import { PrivateImage } from "./posts/post-media";
+import { PdfCover, PrivateImage } from "./posts/post-media";
 import styles from "./home-content.module.css";
+
+function LatestStory({
+  post,
+  siteId,
+}: {
+  post: ActionOutput<"posts.list">[number];
+  siteId: string;
+}) {
+  const category = CATEGORIES.find((item) => item.code === post.category_code);
+  const metadata =
+    post.metadata &&
+    typeof post.metadata === "object" &&
+    !Array.isArray(post.metadata)
+      ? (post.metadata as Record<string, unknown>)
+      : {};
+  const region = typeof metadata.region === "string" ? metadata.region : "";
+  const pdf = post.category_code === "itinerary-pdf";
+  const coverAssetId = pdf ? post.pdf_asset_id : post.cover_asset_id;
+
+  return (
+    <Link
+      href={`/posts/${encodeURIComponent(post.slug)}`}
+      className={styles.latestStory}
+    >
+      <div className={styles.latestMedia}>
+        {coverAssetId ? (
+          pdf ? (
+            <PdfCover
+              assetId={coverAssetId}
+              siteId={siteId}
+              title={post.title}
+              allowRetry={false}
+            />
+          ) : (
+            <PrivateImage
+              assetId={coverAssetId}
+              siteId={siteId}
+              title={`${post.title} 대표 사진`}
+              className="h-full max-h-none w-full rounded-none object-cover"
+              allowRetry={false}
+            />
+          )
+        ) : (
+          <span className={styles.latestNoImage} aria-hidden="true">
+            <span>TRAVEL JOURNAL</span>
+            <strong>01</strong>
+            <span>{category?.label}</span>
+          </span>
+        )}
+      </div>
+      <div className={styles.latestCopy}>
+        <span className={styles.latestEyebrow}>
+          {[category?.label, region].filter(Boolean).join(" · ")}
+        </span>
+        <strong className={styles.latestTitle}>{post.title}</strong>
+        <time dateTime={post.published_at} className={styles.latestDate}>
+          {new Intl.DateTimeFormat("ko-KR", { dateStyle: "long" }).format(
+            new Date(post.published_at),
+          )}
+        </time>
+        <span className={styles.latestAction}>기록 읽기 ↗</span>
+      </div>
+    </Link>
+  );
+}
 
 export function HomeContent({
   initialSite,
@@ -246,62 +311,36 @@ export function HomeContent({
       <div id="home-journal" className={styles.journalScreen}>
         <div className="mx-auto w-full max-w-[var(--content-max)] px-5 md:px-8 xl:px-16">
           <section aria-labelledby="category-heading">
-            <p className="text-muted-foreground text-sm font-medium tracking-wider">
-              OUR TRAVEL JOURNAL
-            </p>
-            <h2
-              id="category-heading"
-              className="mt-2 font-serif text-2xl sm:text-3xl"
-            >
-              함께한 여행의 장면
-            </h2>
-            <ul className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p className={styles.sectionEyebrow}>THE JOURNAL</p>
+                <h2 id="category-heading">어떤 장면을 펼쳐 볼까요</h2>
+              </div>
+              <Link href="/posts">전체 기록 보기 ↗</Link>
+            </div>
+            <ul className={styles.categoryLine} aria-label="여행 기록 분류">
               {CATEGORIES.map((category, index) => (
-                <li
-                  key={category.code}
-                  className="last:col-span-2 lg:last:col-span-1"
-                >
-                  <Link
-                    href={`/posts?category=${category.code}`}
-                    className="group rounded-panel border-border bg-surface hover:border-primary hover:bg-muted/50 flex min-h-28 flex-col justify-between border p-4 transition-colors focus-visible:relative sm:min-h-32 sm:p-5"
-                  >
-                    <span className="text-muted-foreground text-xs tracking-[0.12em] tabular-nums">
-                      {String(index + 1).padStart(2, "0")} /{" "}
-                      {String(CATEGORIES.length).padStart(2, "0")}
+                <li key={category.code}>
+                  <Link href={`/posts?category=${category.code}`}>
+                    <span className={styles.categoryNumber}>
+                      {String(index + 1).padStart(2, "0")}
                     </span>
-                    <span className="mt-4 flex items-end justify-between gap-1 font-serif text-lg sm:text-xl xl:text-[1.4rem]">
-                      <span>{category.label}</span>
-                      <span
-                        aria-hidden="true"
-                        className="text-primary transition-transform group-hover:translate-x-1"
-                      >
-                        ↗
-                      </span>
+                    <strong>{category.label}</strong>
+                    <span aria-hidden="true" className={styles.categoryArrow}>
+                      ↗
                     </span>
                   </Link>
                 </li>
               ))}
             </ul>
           </section>
-          <section className="mt-14" aria-labelledby="latest-heading">
-            <div className="flex flex-wrap items-end justify-between gap-3">
+          <section className="mt-12 lg:mt-16" aria-labelledby="latest-heading">
+            <div className={styles.sectionHeading}>
               <div>
-                <p className="text-muted-foreground text-sm tracking-wider">
-                  RECENT NOTES
-                </p>
-                <h2
-                  id="latest-heading"
-                  className="mt-2 font-serif text-2xl sm:text-3xl"
-                >
-                  새로 기록한 여행
-                </h2>
+                <p className={styles.sectionEyebrow}>LATEST NOTE</p>
+                <h2 id="latest-heading">새로 기록한 여행</h2>
               </div>
-              <Link
-                className="inline-flex min-h-12 items-center underline underline-offset-4"
-                href="/posts"
-              >
-                모두 보기
-              </Link>
+              <Link href="/posts">모두 보기</Link>
             </div>
             {posts.error ||
             (site.error && site.data) ||
@@ -334,17 +373,25 @@ export function HomeContent({
               </div>
             ) : null}
             {posts.data?.length ? (
-              <ul
-                className={
-                  posts.data.length === 1
-                    ? `${styles.singlePostList} mt-6`
-                    : "mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
-                }
-              >
-                {posts.data.map((post) => (
-                  <PostCard key={post.post_id} post={post} siteId={siteId} />
-                ))}
-              </ul>
+              <>
+                <div className="mt-6">
+                  <LatestStory post={posts.data[0]!} siteId={siteId} />
+                </div>
+                {posts.data.length > 1 && (
+                  <div className="mt-12">
+                    <h3 className="font-serif text-xl">이어서 읽을 기록</h3>
+                    <ul className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      {posts.data.slice(1).map((post) => (
+                        <PostCard
+                          key={post.post_id}
+                          post={post}
+                          siteId={siteId}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
             ) : posts.data && !posts.error ? (
               <div className="mt-6">
                 <CatalogEmpty

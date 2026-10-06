@@ -76,7 +76,7 @@ test("an unedited design shows the same fallback copy as the public home", () =>
   expect(markup).toContain("여행 블로그의 여행책을 한 장씩 펼쳐 보세요.");
 });
 
-test("every design shows four scenes and A previews its next scene", () => {
+test("every design shows four scenes and A keeps one image per carousel slide", () => {
   for (const template of templates) {
     const markup = renderToStaticMarkup(
       createElement(HomeCover, {
@@ -96,12 +96,12 @@ test("every design shows four scenes and A previews its next scene", () => {
     for (const number of [1, 2, 3, 4]) {
       expect(
         markup.match(new RegExp(`src="/scene-${number}\\.jpg"`, "g")),
-      ).toHaveLength(template === "A" && number === 2 ? 2 : 1);
+      ).toHaveLength(1);
     }
     if (template === "A") {
       expect(markup).toContain('data-home-a-carousel="true"');
-      expect(markup).toContain("다음 사진 보기");
-      expect(markup).toContain("01 / 04");
+      expect(markup).toContain("SCENE 01 / 04");
+      expect(markup).toContain('aria-label="다음 사진"');
     }
   }
 });

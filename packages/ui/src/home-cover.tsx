@@ -226,40 +226,39 @@ export function HomeCover({
       <section
         data-home-template={template}
         aria-labelledby={headingId}
-        className={`bg-background text-foreground relative isolate grid overflow-hidden ${desktop ? "min-h-[540px] grid-cols-[1.05fr_0.9fr] items-center gap-10 px-14 py-10" : "min-h-[min(68vh,640px)] content-center gap-3 px-5 py-5 sm:gap-4 sm:px-10 sm:py-8 lg:grid-cols-[1.05fr_0.9fr] lg:items-center lg:gap-12 lg:px-[clamp(3rem,7vw,8rem)] lg:py-12"}`}
+        className={`bg-background text-foreground relative isolate grid overflow-hidden ${desktop ? "min-h-[540px] grid-cols-[52%_48%] grid-rows-[minmax(0,1fr)_auto]" : "min-h-[min(68vh,640px)] grid-rows-[auto_minmax(260px,1fr)_auto] lg:grid-cols-[52%_48%] lg:grid-rows-[minmax(0,1fr)_auto]"}`}
       >
-        <div className="relative z-10 flex min-w-0 flex-col items-start">
-          <div className="flex w-full items-center gap-5 text-xs font-semibold tracking-[0.22em]">
-            <span className="truncate">{siteName} / TRAVEL JOURNAL</span>
-            <span
-              className="bg-border h-px min-w-10 flex-1"
-              aria-hidden="true"
-            />
-          </div>
+        <div
+          className={`relative z-10 flex min-w-0 flex-col items-start justify-center ${desktop ? "px-14 py-12" : "px-6 pt-10 pb-8 sm:px-10 sm:pt-14 sm:pb-10 lg:px-[clamp(3rem,6vw,8rem)] lg:py-16"}`}
+        >
+          <p className="text-muted-foreground text-xs font-semibold tracking-[0.15em]">
+            {siteName} / TRAVEL JOURNAL
+          </p>
           <Heading
             id={headingId}
-            className={`mt-4 max-w-[12ch] font-serif leading-[1.18] break-keep sm:mt-6 lg:mt-10 ${desktop ? "text-[clamp(3rem,5vw,4.75rem)]" : "text-[clamp(2rem,5vw,5.25rem)]"}`}
+            className={`mt-7 max-w-[13ch] font-serif leading-[1.22] tracking-[-0.045em] break-keep ${desktop ? "text-[clamp(2.5rem,4vw,3.75rem)]" : "text-[clamp(2.15rem,4vw,4.25rem)] lg:mt-10"}`}
           >
             {headline}
           </Heading>
-          <p className="text-muted-foreground mt-3 max-w-md text-sm leading-relaxed sm:mt-5 sm:text-base lg:mt-7">
+          <p className="text-muted-foreground mt-4 max-w-md text-sm leading-relaxed sm:mt-5 sm:text-base">
             {summary}
           </p>
-          <div className="[&_a]:mt-4 sm:[&_a]:mt-5 lg:[&_a]:mt-7">{action}</div>
+          <div className="[&_a]:mt-6 [&_a]:rounded-none">{action}</div>
+          <span className="text-muted-foreground mt-auto hidden pt-8 text-xs tracking-[0.06em] lg:block">
+            01 — 사진으로 남긴 여행의 장면
+          </span>
         </div>
         <HomeCoverACarousel
           scenes={scenes}
           interactive={!desktop}
           desktop={desktop}
         />
-        {!desktop && (
-          <span
-            aria-hidden="true"
-            className="text-muted-foreground pointer-events-none absolute bottom-1.5 left-5 text-[10px] tracking-[0.12em] sm:bottom-4 sm:left-10"
-          >
-            스크롤해 여행 보기 ↓
+        <div className="bg-primary text-primary-foreground col-span-full flex min-h-14 items-center justify-between gap-4 px-6 py-3 text-xs sm:px-10 lg:px-[clamp(3rem,6vw,8rem)]">
+          <span className="font-semibold tracking-[0.14em]">
+            SCROLL TO EXPLORE
           </span>
-        )}
+          <span>함께한 여행의 장면 ↓</span>
+        </div>
       </section>
     );
   }
