@@ -90,6 +90,44 @@ test("narrow documents keep resize corners apart with a 160px minimum", () => {
   expect(minImageWidthPct(120)).toBe(100);
 });
 
+test("paired images start at full cell width and resize within their own column", () => {
+  expect(imageWidthPct(0, "small", 500, "pair")).toBe(100);
+  expect(imageWidthPct(45, "small", 300, "pair")).toBe(45);
+  expect(minImageWidthPct(300, "pair")).toBe(32);
+  expect(minImageWidthPct(600, "pair")).toBe(20);
+  expect(minImageWidthPct(200, "pair")).toBe(48);
+  expect(
+    dragImageLayout(
+      { widthPct: 100, positionPct: 50 },
+      300,
+      -90,
+      "resize-right",
+      "pair",
+    ),
+  ).toEqual({ widthPct: 70, positionPct: 0 });
+  expect(
+    dragImageLayout(
+      { widthPct: 100, positionPct: 50 },
+      300,
+      90,
+      "resize-left",
+      "pair",
+    ),
+  ).toEqual({ widthPct: 70, positionPct: 100 });
+  expect(
+    dragImageLayout({ widthPct: 70, positionPct: 0 }, 300, 45, "move", "pair"),
+  ).toEqual({ widthPct: 70, positionPct: 50 });
+  expect(
+    dragImageLayout(
+      { widthPct: 70, positionPct: 50 },
+      200,
+      -200,
+      "resize-right",
+      "pair",
+    ),
+  ).toEqual({ widthPct: 48, positionPct: 28.8 });
+});
+
 test("corner drag converts vertical motion through the image aspect ratio", () => {
   expect(imageAspectRatio(1200, 600)).toBe(2);
   expect(imageAspectRatio(0, 0)).toBe(1.5);

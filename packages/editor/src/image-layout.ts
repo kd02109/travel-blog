@@ -40,6 +40,9 @@ export function imagePointerDelta(
 
 const MIN_IMAGE_WIDTH_PCT = 20;
 const MIN_IMAGE_WIDTH_PX = 160;
+const MIN_PAIRED_IMAGE_WIDTH_PX = 96;
+
+export type ImageLayoutMode = "single" | "pair";
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
@@ -49,12 +52,20 @@ function rounded(value: number) {
   return Math.round(value * 10) / 10;
 }
 
-export function minImageWidthPct(containerWidth: number) {
+export function minImageWidthPct(
+  containerWidth: number,
+  layout: ImageLayoutMode = "single",
+) {
   if (!Number.isFinite(containerWidth) || containerWidth <= 0)
     return MIN_IMAGE_WIDTH_PCT;
   return Math.min(
     100,
-    Math.max(MIN_IMAGE_WIDTH_PCT, (MIN_IMAGE_WIDTH_PX / containerWidth) * 100),
+    Math.max(
+      MIN_IMAGE_WIDTH_PCT,
+      ((layout === "pair" ? MIN_PAIRED_IMAGE_WIDTH_PX : MIN_IMAGE_WIDTH_PX) /
+        containerWidth) *
+        100,
+    ),
   );
 }
 
@@ -81,10 +92,14 @@ export function imageWidthPct(
   widthPct: number,
   width: "small" | "medium" | "large",
   containerWidth: number,
+  layout: ImageLayoutMode = "single",
 ) {
-  const minimum = minImageWidthPct(containerWidth);
+  const minimum = minImageWidthPct(containerWidth, layout);
   if (Number.isFinite(widthPct) && widthPct >= MIN_IMAGE_WIDTH_PCT)
     return clamp(widthPct, minimum, 100);
+  // Existing paired images filled their entire grid cell regardless of the old
+  // small/medium width setting. Keep that appearance until the first edit.
+  if (layout === "pair") return 100;
   if (containerWidth <= 0) return 100;
   return clamp(
     (legacyImageWidthPx(width, containerWidth) / containerWidth) * 100,
@@ -99,9 +114,10 @@ export function dragImageLayout(
   containerWidth: number,
   deltaX: number,
   mode: ImageDragMode,
+  layout: ImageLayoutMode = "single",
 ): ImagePercentLayout {
   if (!Number.isFinite(containerWidth) || containerWidth <= 0) return start;
-  const minimum = minImageWidthPct(containerWidth);
+  const minimum = minImageWidthPct(containerWidth, layout);
   const startWidth =
     (clamp(start.widthPct, minimum, 100) / 100) * containerWidth;
   const startRemaining = containerWidth - startWidth;

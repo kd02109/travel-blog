@@ -244,7 +244,7 @@ export function renderBlocks(
           const layout = b.props?.layout === "pair" ? "pair" : "single";
           const widthPct = b.props?.width_pct;
           const positionPct = b.props?.position_pct;
-          const customLayout = layout === "single" &&
+          const customLayout =
             typeof widthPct === "number" && Number.isFinite(widthPct) &&
             widthPct >= 20 && widthPct <= 100 &&
             typeof positionPct === "number" && Number.isFinite(positionPct) &&

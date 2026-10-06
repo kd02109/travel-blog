@@ -38,6 +38,7 @@ import {
   imageWidthPct,
   minImageWidthPct,
   type ImageDragMode,
+  type ImageLayoutMode,
   type ImagePercentLayout,
 } from "./image-layout";
 
@@ -118,6 +119,7 @@ type ImagePointerSession = {
   containerWidth: number;
   start: ImagePercentLayout;
   mode: ImageDragMode;
+  layout: ImageLayoutMode;
 };
 
 function AssetImage({
@@ -149,6 +151,7 @@ function AssetImage({
     useContext(ImagePreviewContext) ?? {};
   const { canPair, paired } = getPairState();
   const hasPairSetting = paired || layout === "pair";
+  const activeLayout: ImageLayoutMode = paired ? "pair" : "single";
   const slotRef = useRef<HTMLDivElement>(null);
   const pointerSession = useRef<ImagePointerSession | null>(null);
   const [draftLayout, setDraftLayout] = useState<ImagePercentLayout | null>(
@@ -177,7 +180,12 @@ function AssetImage({
       layout: {
         widthPct:
           draftLayout?.widthPct ??
-          imageWidthPct(hasCustomLayout ? widthPct : 0, width, containerWidth),
+          imageWidthPct(
+            hasCustomLayout ? widthPct : 0,
+            width,
+            containerWidth,
+            activeLayout,
+          ),
         positionPct:
           draftLayout?.positionPct ??
           imagePositionPct(hasCustomLayout ? positionPct : -1, align),
@@ -189,7 +197,7 @@ function AssetImage({
     mode: ImageDragMode,
     event: ReactPointerEvent<HTMLElement>,
   ) => {
-    if (!editable || hasPairSetting || pointerSession.current) return;
+    if (!editable || pointerSession.current) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     if (
       mode === "move" &&
@@ -211,6 +219,7 @@ function AssetImage({
       containerWidth: current.containerWidth,
       start: current.layout,
       mode,
+      layout: activeLayout,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -230,6 +239,7 @@ function AssetImage({
         session.aspectRatio,
       ),
       session.mode,
+      session.layout,
     );
     setDraftLayout(next);
     event.preventDefault();
@@ -255,6 +265,7 @@ function AssetImage({
         session.containerWidth,
         delta,
         session.mode,
+        session.layout,
       );
       if (
         next.widthPct !== session.start.widthPct ||
@@ -292,8 +303,7 @@ function AssetImage({
   const changePositionWithKeyboard = (
     event: ReactKeyboardEvent<HTMLElement>,
   ) => {
-    if (!editable || hasPairSetting || event.target !== event.currentTarget)
-      return;
+    if (!editable || event.target !== event.currentTarget) return;
     const current = readLayout();
     if (!current) return;
     const step = event.shiftKey ? 10 : 5;
@@ -318,7 +328,7 @@ function AssetImage({
     edge: "left" | "right",
     event: ReactKeyboardEvent<HTMLElement>,
   ) => {
-    if (!editable || hasPairSetting) return;
+    if (!editable) return;
     const current = readLayout();
     if (!current) return;
     const outward = edge === "left" ? -1 : 1;
@@ -337,6 +347,7 @@ function AssetImage({
       current.containerWidth,
       current.containerWidth * (event.shiftKey ? 0.1 : 0.05) * direction,
       edge === "left" ? "resize-left" : "resize-right",
+      activeLayout,
     );
     if (
       next.widthPct !== current.layout.widthPct ||
@@ -350,10 +361,10 @@ function AssetImage({
       <figure
         className="writer-image"
         data-image-width={width}
-        data-image-layout={paired ? "pair" : "single"}
+        data-image-layout={activeLayout}
         data-image-dragging={draftLayout ? "true" : undefined}
         style={
-          hasPairSetting
+          paired && !hasCustomLayout && !draftLayout
             ? undefined
             : {
                 width:
@@ -366,8 +377,8 @@ function AssetImage({
         {editable && (
           <div className="writer-image-toolbar" aria-label="사진 배치 설정">
             <span className="writer-image-hint" id={hintId}>
-              {hasPairSetting
-                ? "나란히 놓은 사진은 위치와 크기가 고정됩니다"
+              {paired
+                ? "사진을 끌어 열 안에서 이동 · 모서리를 끌어 크기 조절"
                 : "사진을 끌어 위치 이동 · 모서리를 끌어 크기 조절"}
             </span>
             <button
@@ -398,19 +409,13 @@ function AssetImage({
         <div className="writer-image-media-wrap">
           <div
             className="writer-image-media"
-            role={editable && !hasPairSetting ? "slider" : undefined}
-            aria-label={
-              editable && !hasPairSetting ? "사진 가로 위치" : undefined
-            }
-            aria-describedby={editable && !hasPairSetting ? hintId : undefined}
-            aria-valuemin={editable && !hasPairSetting ? 0 : undefined}
-            aria-valuemax={editable && !hasPairSetting ? 100 : undefined}
-            aria-valuenow={
-              editable && !hasPairSetting
-                ? Math.round(displayedPosition)
-                : undefined
-            }
-            tabIndex={editable && !hasPairSetting ? 0 : undefined}
+            role={editable ? "slider" : undefined}
+            aria-label={editable ? "사진 가로 위치" : undefined}
+            aria-describedby={editable ? hintId : undefined}
+            aria-valuemin={editable ? 0 : undefined}
+            aria-valuemax={editable ? 100 : undefined}
+            aria-valuenow={editable ? Math.round(displayedPosition) : undefined}
+            tabIndex={editable ? 0 : undefined}
             onPointerDown={(event) => beginDrag("move", event)}
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
@@ -418,7 +423,7 @@ function AssetImage({
             onLostPointerCapture={cancelDrag}
             onKeyDown={changePositionWithKeyboard}
             onDragStart={(event) => {
-              if (editable && !hasPairSetting) event.preventDefault();
+              if (editable) event.preventDefault();
             }}
           >
             {renderPreview?.(assetId) ?? (
@@ -427,7 +432,7 @@ function AssetImage({
               </p>
             )}
           </div>
-          {editable && !hasPairSetting && (
+          {editable && (
             <>
               {(["left", "right"] as const).map((edge) => (
                 <div
@@ -437,10 +442,17 @@ function AssetImage({
                   tabIndex={0}
                   aria-label={`사진 ${edge === "left" ? "왼쪽" : "오른쪽"} 모서리에서 폭 조절`}
                   aria-describedby={hintId}
-                  aria-valuemin={Math.ceil(minImageWidthPct(containerWidth))}
+                  aria-valuemin={Math.ceil(
+                    minImageWidthPct(containerWidth, activeLayout),
+                  )}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(
-                    imageWidthPct(displayedWidth ?? 0, width, containerWidth),
+                    imageWidthPct(
+                      displayedWidth ?? 0,
+                      width,
+                      containerWidth,
+                      activeLayout,
+                    ),
                   )}
                   onPointerDown={(event) =>
                     beginDrag(
