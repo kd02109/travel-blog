@@ -20,6 +20,14 @@ const recordDescriptions: Record<(typeof CATEGORIES)[number]["code"], string> =
       "여행의 순서를 다시 펼쳐 볼 수 있도록 일정표를 PDF로 모읍니다.",
   };
 
+const recordKickers: Record<(typeof CATEGORIES)[number]["code"], string> = {
+  "day-walk": "WALK",
+  "overnight-trip": "JOURNEY",
+  "food-cafe": "TABLE",
+  "stay-review": "STAY",
+  "itinerary-pdf": "PLAN",
+};
+
 export function AboutContent({
   initialSite,
   initialError,
@@ -70,12 +78,16 @@ export function AboutContent({
         </div>
       )}
 
-      <section className="rounded-panel border-border bg-surface mt-8 grid w-full gap-6 border p-6 sm:p-8 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)] lg:gap-12">
+      <section className="border-foreground/70 mt-9 grid w-full gap-6 border-y py-8 sm:py-10 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)] lg:gap-12">
         <div>
-          <h2 className="font-serif text-2xl">{title}</h2>
-          <p className="text-muted-foreground mt-2 text-sm">{description}</p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            {title}
+          </p>
+          <h2 className="mt-3 max-w-md font-serif text-2xl leading-snug sm:text-3xl">
+            {description}
+          </h2>
         </div>
-        <p className="text-base leading-[1.9] sm:text-lg">
+        <p className="max-w-3xl text-base leading-[1.9] sm:text-lg">
           여행을 다녀온 날짜와 지역, 길에서 만난 풍경과 쉬어 간 순간을 적습니다.
           하룻밤 더 머문 여행은 그 시간의 흐름대로 씁니다. 여행길에서 맛본
           음식과 커피, 머문 숙소의 이야기는 다시 떠올릴 수 있도록 따로 남깁니다.
@@ -85,7 +97,7 @@ export function AboutContent({
 
       <section
         aria-labelledby="record-types-heading"
-        className="mt-14 md:mt-16"
+        className="mt-16 md:mt-20"
       >
         <p className="text-muted-foreground text-sm tracking-widest">
           WHAT WE KEEP
@@ -96,28 +108,36 @@ export function AboutContent({
         >
           여행에서 남기는 것
         </h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {CATEGORIES.map((category) => (
-            <article
+        <ol className="border-border mt-7 grid border-t sm:grid-cols-2 lg:grid-cols-5">
+          {CATEGORIES.map((category, index) => (
+            <li
               key={category.code}
-              className="rounded-panel border-border bg-surface border p-6"
+              className="border-border border-b py-5 sm:px-5 sm:first:pl-0 sm:nth-[2n]:border-l lg:min-h-72 lg:border-r lg:border-b-0 lg:px-5 lg:last:border-r-0 lg:nth-[2n]:border-l-0"
             >
-              <h3 className="font-serif text-xl">{category.label}</h3>
-              <p className="text-muted-foreground mt-3 min-h-20 text-sm leading-7">
-                {recordDescriptions[category.code]}
-              </p>
               <Link
                 href={{
                   pathname: "/posts",
                   query: { category: category.code },
                 }}
-                className="text-foreground focus-visible:outline-ring mt-4 inline-flex min-h-11 items-center text-sm font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="group focus-visible:outline-ring flex h-full min-h-32 flex-col focus-visible:outline-2 focus-visible:outline-offset-4 lg:min-h-64"
               >
-                {category.label} 보기
+                <span className="text-xs font-semibold tracking-[0.22em] text-[#856a48]">
+                  {String(index + 1).padStart(2, "0")} /{" "}
+                  {recordKickers[category.code]}
+                </span>
+                <h3 className="mt-5 font-serif text-xl leading-snug group-hover:underline group-hover:underline-offset-4">
+                  {category.label}
+                </h3>
+                <p className="text-muted-foreground mt-3 text-sm leading-7">
+                  {recordDescriptions[category.code]}
+                </p>
+                <span aria-hidden="true" className="mt-auto pt-5 text-xl">
+                  ↗
+                </span>
               </Link>
-            </article>
+            </li>
           ))}
-        </div>
+        </ol>
       </section>
     </main>
   );
