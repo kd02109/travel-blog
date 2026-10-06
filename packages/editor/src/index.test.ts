@@ -60,6 +60,7 @@ test("restores each image's size, alignment, and paired layout from a saved draf
         width: "medium",
         align: "left",
         layout: "pair",
+        pair_share_pct: 65,
       },
     },
     {
@@ -70,6 +71,7 @@ test("restores each image's size, alignment, and paired layout from a saved draf
         width: "small",
         align: "right",
         layout: "pair",
+        pair_share_pct: 35,
       },
     },
   ];

@@ -143,11 +143,20 @@ describe("draft and published content", () => {
         align: "left",
         width_pct: 65,
         position_pct: 25,
+        pair_share_pct: 64,
       }),
-      image(mockId(4, 2), { layout: "pair", width: "medium", align: "right" }),
+      image(mockId(4, 2), {
+        layout: "pair",
+        width: "medium",
+        align: "right",
+        pair_share_pct: 30,
+      }),
       image(mockId(4, 3), { layout: "pair", width: '" onload="x' }),
     ]);
-    expect(rendered.html.match(/<div data-image-pair>/g)).toHaveLength(1);
+    expect(rendered.html.match(/<div data-image-pair /g)).toHaveLength(1);
+    expect(rendered.html).toContain(
+      '<div data-image-pair data-pair-first-pct="64" style="--pair-first:64%">',
+    );
     expect(rendered.html).toContain('data-image-width="small"');
     expect(rendered.html).toContain('data-image-align="right"');
     expect(rendered.html).toContain(
@@ -155,6 +164,30 @@ describe("draft and published content", () => {
     );
     expect(rendered.html).not.toContain("onload");
     expect(rendered.assetIds).toHaveLength(3);
+  });
+  it("uses the second photo share or legacy image widths when the first has no share", () => {
+    const image = (props: Record<string, unknown>) => ({
+      type: "image",
+      props: { asset_id: mockId(4, 1), layout: "pair", ...props },
+    });
+    const rendered = renderBlocks([
+      image({ pair_share_pct: 0 }),
+      image({ pair_share_pct: 25 }),
+      image({ width_pct: 60 }),
+      image({ width_pct: 40 }),
+      image({ pair_share_pct: "80%;color:red" }),
+      image({ pair_share_pct: Number.POSITIVE_INFINITY }),
+    ]);
+    expect(rendered.html).toContain(
+      'data-pair-first-pct="75" style="--pair-first:75%"',
+    );
+    expect(rendered.html).toContain(
+      'data-pair-first-pct="60" style="--pair-first:60%"',
+    );
+    expect(rendered.html).toContain(
+      'data-pair-first-pct="50" style="--pair-first:50%"',
+    );
+    expect(rendered.html).not.toContain("color:red");
   });
   it("renders dragged image size and position without accepting CSS injection", () => {
     const image = (props: Record<string, unknown>) => ({
