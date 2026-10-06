@@ -7,7 +7,13 @@ import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { CATEGORIES } from "@repo/constants";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
-import { Select } from "@repo/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/select";
 import { Pagination } from "@repo/ui/pagination";
 import {
   Table,
@@ -19,6 +25,8 @@ import {
 } from "@repo/ui/table";
 
 const pageSize = 12;
+const allCategoryValue = "__all_categories__";
+const allStatusValue = "__all_statuses__";
 const statuses = [
   { value: "", label: "모든 상태" },
   { value: "draft", label: "작성 중" },
@@ -131,34 +139,45 @@ export function PostList({ siteId }: { siteId: string }) {
         <label className="space-y-2">
           분류
           <Select
-            value={category}
-            onChange={(event) => {
-              setCategory(event.currentTarget.value);
+            value={category || allCategoryValue}
+            onValueChange={(value) => {
+              setCategory(value === allCategoryValue ? "" : value);
               setPage(1);
             }}
           >
-            <option value="">모든 분류</option>
-            {CATEGORIES.map((item) => (
-              <option key={item.code} value={item.code}>
-                {item.label}
-              </option>
-            ))}
+            <SelectTrigger aria-label="분류 선택">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allCategoryValue}>모든 분류</SelectItem>
+              {CATEGORIES.map((item) => (
+                <SelectItem key={item.code} value={item.code}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </label>
         <label className="space-y-2">
           상태
           <Select
-            value={status}
-            onChange={(event) => {
-              setStatus(event.currentTarget.value);
+            value={status || allStatusValue}
+            onValueChange={(value) => {
+              setStatus(value === allStatusValue ? "" : value);
               setPage(1);
             }}
           >
-            {statuses.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
+            <SelectTrigger aria-label="상태 선택">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allStatusValue}>모든 상태</SelectItem>
+              {statuses.slice(1).map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </label>
       </section>

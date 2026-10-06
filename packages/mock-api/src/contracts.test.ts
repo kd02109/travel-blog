@@ -31,6 +31,7 @@ it("validates public/member/admin reads including nullable profile and audit fie
       { id: MOCK_POST_IDS[0], revision_id: mockId(10, 1) },
     ],
     ["asset.access", { id: mockId(4, 1) }],
+    ["asset.list", site],
     ["asset.status", { id: mockId(4, 1), ...site }],
   ];
   for (const [action, input] of cases) {

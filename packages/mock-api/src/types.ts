@@ -72,6 +72,7 @@ export type Asset = {
   id: string;
   kind: "image" | "pdf";
   state: "ready" | "processing" | "uploading" | "failed";
+  created_at: string;
   metadata: Record<string, string | number>;
   preview_asset_id: string | null;
   url: string;

@@ -215,6 +215,20 @@ const samples = {
   "asset.complete": { id, state: "processing" },
   "asset.status": { id, state: "processing" },
   "asset.cancel": { saved: true },
+  "asset.list": {
+    items: [
+      {
+        id,
+        created_at: date,
+        metadata: { mime: "image/jpeg", bytes: 1024 },
+        thumbnail_url: "https://example.com/thumbnail",
+        original_url: "https://example.com/original",
+        usage: ["home", "post-cover"],
+      },
+    ],
+    next_offset: null,
+    expires_in: 300,
+  },
   "asset.access": {
     id,
     url: "https://example.com/signed",

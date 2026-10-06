@@ -13,7 +13,13 @@ import type { EditorDocument } from "@repo/editor";
 import { CATEGORIES } from "@repo/constants";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
-import { Select } from "@repo/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/select";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { TravelApiError } from "@repo/api-client";
 import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
@@ -1077,19 +1083,24 @@ export function Composer({ postId }: { postId?: string }) {
           <Select
             disabled={busy}
             value={category}
-            onChange={(event) => {
-              setCategory(event.currentTarget.value as typeof category);
+            onValueChange={(value) => {
+              setCategory(value as typeof category);
               setMetadataError("");
               markDirty();
             }}
           >
-            {CATEGORIES.filter((item) => item.code !== "itinerary-pdf").map(
-              (item) => (
-                <option key={item.code} value={item.code}>
-                  {item.label}
-                </option>
-              ),
-            )}
+            <SelectTrigger aria-label="분류 선택">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CATEGORIES.filter((item) => item.code !== "itinerary-pdf").map(
+                (item) => (
+                  <SelectItem key={item.code} value={item.code}>
+                    {item.label}
+                  </SelectItem>
+                ),
+              )}
+            </SelectContent>
           </Select>
         </label>
       )}
@@ -1235,17 +1246,19 @@ export function Composer({ postId }: { postId?: string }) {
               <Select
                 disabled={busy}
                 value={
-                  typeof metadata.venue_type === "string"
+                  typeof metadata.venue_type === "string" && metadata.venue_type
                     ? metadata.venue_type
-                    : ""
+                    : undefined
                 }
-                onChange={(event) =>
-                  updateMetadata("venue_type", event.currentTarget.value)
-                }
+                onValueChange={(value) => updateMetadata("venue_type", value)}
               >
-                <option value="">종류를 선택해 주세요</option>
-                <option value="cafe">카페</option>
-                <option value="restaurant">음식점</option>
+                <SelectTrigger aria-label="장소 종류 선택">
+                  <SelectValue placeholder="종류를 선택해 주세요" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cafe">카페</SelectItem>
+                  <SelectItem value="restaurant">음식점</SelectItem>
+                </SelectContent>
               </Select>
             </label>
           )}

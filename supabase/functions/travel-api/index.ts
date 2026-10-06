@@ -354,6 +354,56 @@ Deno.serve(async (req: Request) => {
       }
       return respond({ saved: true });
     }
+    if (action === "asset.list") {
+      const limit = Math.min(
+        50,
+        Math.max(1, Number.isInteger(input.limit) ? Number(input.limit) : 12),
+      );
+      const offset = Math.min(
+        100000,
+        Math.max(0, Number.isInteger(input.offset) ? Number(input.offset) : 0),
+      );
+      const { data, error } = await client.rpc("travel_asset_list", {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      if (error) throw databaseError(error);
+      const rows = Array.isArray(data) ? data : [];
+      const items = await Promise.all(
+        rows.map(async (row: Record<string, unknown>) => {
+          const bucket = typeof row.bucket === "string" ? row.bucket : "";
+          const objectPath =
+            typeof row.object_path === "string" ? row.object_path : "";
+          if (!bucket || !objectPath) {
+            throw new ApiError(502, "download_url_failed");
+          }
+          const { data: signed, error: signedError } = await client.storage
+            .from(bucket)
+            .createSignedUrl(objectPath, 300);
+          if (signedError || !signed?.signedUrl) {
+            throw new ApiError(502, "download_url_failed");
+          }
+          return {
+            id: row.id,
+            created_at: row.created_at,
+            metadata: row.metadata ?? {},
+            // The current worker stores one ready image object. Keep the two
+            // fields separate in the contract so a thumbnail transform can be
+            // added later without changing the picker API.
+            thumbnail_url: signed.signedUrl,
+            original_url: signed.signedUrl,
+            usage: Array.isArray(row.usage) ? row.usage : [],
+          };
+        }),
+      );
+      return respond({
+        items,
+        next_offset: rows.length === limit ? offset + limit : null,
+        expires_in: 300,
+      });
+    }
     if (action === "asset.access") {
       const { data: publishedHomeAsset, error: homeAssetError } = await client.rpc(
         "travel_home_asset",
