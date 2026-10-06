@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
-import { errorMessage, TravelApiError } from "@repo/api-client";
+import { TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
@@ -18,12 +19,6 @@ const actionLabels: Record<CommentAction, string> = {
   report: "신고",
   delete: "삭제",
 };
-
-function commentActionError(error: unknown) {
-  return error instanceof TravelApiError && error.code === "invalid_password"
-    ? "비밀번호가 일치하지 않습니다. 다시 입력해 주세요."
-    : errorMessage(error);
-}
 
 export function CommentSection({
   siteId,
@@ -46,6 +41,9 @@ export function CommentSection({
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [createTarget, setCreateTarget] = useState<"composer" | "reply" | null>(
+    null,
+  );
   const [reporting, setReporting] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Comment | null>(null);
@@ -180,6 +178,7 @@ export function CommentSection({
     parentId: string | null = null,
   ) {
     event.preventDefault();
+    if (create.isPending || saveProfile.isPending) return;
     const target = event.currentTarget;
     const form = new FormData(target);
     const text = String(form.get("body") ?? "").trim();
@@ -191,6 +190,9 @@ export function CommentSection({
       (displayName.length < 2 || String(form.get("password") ?? "").length < 8)
     )
       return;
+    setCreateTarget(parentId ? "reply" : "composer");
+    create.reset();
+    saveProfile.reset();
     try {
       if (
         signedIn &&
@@ -276,6 +278,8 @@ export function CommentSection({
   function chooseAction(action: CommentAction, item: Comment) {
     setMenuOpen(null);
     if (action === "reply") {
+      create.reset();
+      setCreateTarget(null);
       setEditing(null);
       setReporting(null);
       setReplyTo(replyTo === item.id ? null : item.id);
@@ -413,7 +417,22 @@ export function CommentSection({
                 취소
               </Button>
             </div>
-            {edit.error && <p role="alert">{commentActionError(edit.error)}</p>}
+            {edit.error && (
+              <ApiMutationError
+                error={edit.error}
+                title="댓글을 수정하지 못했어요"
+              />
+            )}
+            {edit.error instanceof TravelApiError &&
+              edit.error.status === 409 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void comments.refetch()}
+                >
+                  최신 내용 확인
+                </Button>
+              )}
           </form>
         ) : (
           <p className="leading-relaxed whitespace-pre-wrap">{item.body}</p>
@@ -448,7 +467,12 @@ export function CommentSection({
             >
               취소
             </Button>
-            {report.error && <p role="alert">{errorMessage(report.error)}</p>}
+            {report.error && (
+              <ApiMutationError
+                error={report.error}
+                title="신고를 접수하지 못했어요"
+              />
+            )}
           </form>
         )}
         {!deleted && replyTo === item.id && (
@@ -468,7 +492,23 @@ export function CommentSection({
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? "등록 중…" : "답글 등록"}
             </Button>
-            {create.error && <p role="alert">{errorMessage(create.error)}</p>}
+            {create.error && createTarget === "reply" && (
+              <ApiMutationError
+                error={create.error}
+                title="답글을 등록하지 못했어요"
+              />
+            )}
+            {createTarget === "reply" &&
+              create.error instanceof TravelApiError &&
+              create.error.status === 409 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void comments.refetch()}
+                >
+                  최신 내용 확인
+                </Button>
+              )}
           </form>
         )}
         {children.length > 0 && (
@@ -494,16 +534,20 @@ export function CommentSection({
       </h2>
       {notice && <p role="status">{notice}</p>}
       {comments.error && (
-        <div role="alert" className="space-y-2">
-          <p>{errorMessage(comments.error)}</p>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => void comments.refetch()}
-          >
-            댓글 다시 불러오기
-          </Button>
-        </div>
+        <ApiErrorState
+          error={comments.error}
+          title="댓글을 불러오지 못했어요"
+          onRetry={() => void comments.refetch()}
+          isRetrying={comments.isFetching}
+        />
+      )}
+      {me.error && (
+        <ApiErrorState
+          error={me.error}
+          title="계정 이름을 확인하지 못했어요"
+          onRetry={() => void me.refetch()}
+          isRetrying={me.isFetching}
+        />
       )}
       {comments.data?.length ? (
         <ul>
@@ -512,7 +556,7 @@ export function CommentSection({
             .map((item) => renderComment(item))}
         </ul>
       ) : (
-        !comments.isLoading && (
+        comments.isSuccess && (
           <p className="text-muted-foreground">
             아직 댓글이 없습니다. 첫 번째 이야기를 남겨 주세요.
           </p>
@@ -551,20 +595,28 @@ export function CommentSection({
           >
             {create.isPending ? "등록 중…" : "댓글 등록"}
           </Button>
-          {create.error && (
-            <p role="alert">
-              {errorMessage(create.error)}
-              {create.error instanceof TravelApiError &&
-              create.error.status === 429 &&
-              create.error.retryAfter
-                ? ` ${create.error.retryAfter}초 후 다시 시도해 주세요.`
-                : ""}
-            </p>
+          {create.error && createTarget === "composer" && (
+            <ApiMutationError
+              error={create.error}
+              title="댓글을 등록하지 못했어요"
+            />
           )}
+          {createTarget === "composer" &&
+            create.error instanceof TravelApiError &&
+            create.error.status === 409 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void comments.refetch()}
+              >
+                최신 내용 확인
+              </Button>
+            )}
           {saveProfile.error && (
-            <p role="alert">
-              표시 이름을 저장하지 못했습니다. 다시 시도해 주세요.
-            </p>
+            <ApiMutationError
+              error={saveProfile.error}
+              title="표시 이름을 저장하지 못했어요"
+            />
           )}
         </form>
       ) : (
@@ -604,10 +656,21 @@ export function CommentSection({
             </label>
           )}
           {remove.error && (
-            <p role="alert" className="text-destructive text-sm">
-              {commentActionError(remove.error)}
-            </p>
+            <ApiMutationError
+              error={remove.error}
+              title="댓글을 삭제하지 못했어요"
+            />
           )}
+          {remove.error instanceof TravelApiError &&
+            remove.error.status === 409 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void comments.refetch()}
+              >
+                최신 내용 확인
+              </Button>
+            )}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { describeApiError } from "@repo/api-client";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState } from "@repo/api-client/feedback";
 import Image from "next/image";
-import { Button } from "@repo/ui/button";
 
 export function PrivateImage({
   assetId,
@@ -10,21 +11,25 @@ export function PrivateImage({
   title,
   className,
   eager = false,
+  allowRetry = true,
 }: {
   assetId: string;
   siteId: string;
   title: string;
   className?: string;
   eager?: boolean;
+  allowRetry?: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
+      setLoading(true);
       try {
         const asset = await api.call("asset.access", {
           id: assetId,
@@ -32,13 +37,16 @@ export function PrivateImage({
         });
         if (disposed) return;
         setUrl(asset.url);
-        setError("");
+        setError(null);
+        setLoading(false);
         timer = setTimeout(
           () => void refresh(),
           Math.max(30, asset.expires_in - 45) * 1000,
         );
-      } catch {
-        if (!disposed) setError("사진을 불러오지 못했습니다.");
+      } catch (cause) {
+        if (disposed) return;
+        setError(cause ?? new Error("asset_access_failed"));
+        setLoading(false);
       }
     };
     void refresh();
@@ -47,31 +55,46 @@ export function PrivateImage({
       clearTimeout(timer);
     };
   }, [api, assetId, siteId, retry]);
-  return error ? (
-    <div role="alert" className="space-y-2">
-      <p>{error}</p>
-      <Button
-        variant="outline"
-        onClick={() => setRetry((current) => current + 1)}
-      >
-        사진 다시 불러오기
-      </Button>
-    </div>
-  ) : url ? (
-    <Image
-      src={url}
-      alt={title}
-      width={1600}
-      height={1200}
-      unoptimized
-      loading={eager ? "eager" : "lazy"}
-      fetchPriority={eager ? "high" : undefined}
-      className={
-        className ?? "h-auto max-h-[70vh] max-w-full rounded object-contain"
-      }
-    />
-  ) : (
-    <p role="status">사진을 여는 중…</p>
+  return (
+    <>
+      {error != null && (
+        <div
+          onClick={
+            allowRetry
+              ? (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }
+              : undefined
+          }
+        >
+          <ApiErrorState
+            error={error}
+            title="사진을 불러오지 못했어요"
+            onRetry={
+              allowRetry ? () => setRetry((current) => current + 1) : undefined
+            }
+            isRetrying={loading}
+          />
+        </div>
+      )}
+      {url ? (
+        <Image
+          src={url}
+          alt={title}
+          width={1600}
+          height={1200}
+          unoptimized
+          loading={eager ? "eager" : "lazy"}
+          fetchPriority={eager ? "high" : undefined}
+          className={
+            className ?? "h-auto max-h-[70vh] max-w-full rounded object-contain"
+          }
+        />
+      ) : error == null ? (
+        <p role="status">사진을 여는 중…</p>
+      ) : null}
+    </>
   );
 }
 
@@ -79,29 +102,66 @@ export function PdfCover({
   assetId,
   siteId,
   title,
+  allowRetry = true,
 }: {
   assetId: string;
   siteId: string;
   title: string;
+  allowRetry?: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
-  const [previewAssetId, setPreviewAssetId] = useState("");
-  const [failed, setFailed] = useState(false);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>();
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
-    void api
-      .call("asset.access", { id: assetId, site_id: siteId })
-      .then((asset) => {
-        if (active) setPreviewAssetId(asset.preview_asset_id ?? "");
-      })
-      .catch(() => {
-        if (active) setFailed(true);
-      });
+    const refresh = async () => {
+      setLoading(true);
+      try {
+        const asset = await api.call("asset.access", {
+          id: assetId,
+          site_id: siteId,
+        });
+        if (!active) return;
+        setPreviewAssetId(asset.preview_asset_id);
+        setError(null);
+        setLoading(false);
+      } catch (cause) {
+        if (!active) return;
+        setError(cause ?? new Error("asset_access_failed"));
+        setLoading(false);
+      }
+    };
+    void refresh();
     return () => {
       active = false;
     };
   }, [api, assetId, siteId, retry]);
+  if (error != null)
+    return (
+      <div
+        className="flex aspect-[3/2] items-center justify-center p-2"
+        onClick={
+          allowRetry
+            ? (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }
+            : undefined
+        }
+      >
+        <ApiErrorState
+          error={error}
+          title="PDF 표지를 불러오지 못했어요"
+          onRetry={
+            allowRetry ? () => setRetry((current) => current + 1) : undefined
+          }
+          isRetrying={loading}
+          className="w-full"
+        />
+      </div>
+    );
   if (previewAssetId)
     return (
       <PrivateImage
@@ -109,26 +169,17 @@ export function PdfCover({
         siteId={siteId}
         title={`${title} 표지`}
         className="h-full max-h-none w-full rounded-none object-cover"
+        allowRetry={allowRetry}
       />
     );
   return (
     <div
       className="bg-muted text-muted-foreground flex aspect-[3/2] flex-col items-center justify-center gap-2 px-4 text-center text-sm"
-      role={failed ? "alert" : "status"}
+      role="status"
     >
-      {failed ? (
-        <>
-          PDF 표지를 불러오지 못했습니다
-          <Button
-            variant="outline"
-            onClick={() => setRetry((current) => current + 1)}
-          >
-            다시 불러오기
-          </Button>
-        </>
-      ) : (
-        "PDF 표지를 여는 중…"
-      )}
+      {previewAssetId === null
+        ? "PDF 표지가 제공되지 않아요."
+        : "PDF 표지를 여는 중…"}
     </div>
   );
 }
@@ -147,6 +198,7 @@ export function PostAssetFigures({
     const timers: ReturnType<typeof setTimeout>[] = [];
     const mounted: Array<{
       image: HTMLImageElement;
+      errorMessage: HTMLParagraphElement;
       retryButton: HTMLButtonElement;
       onRetry: () => void;
     }> = [];
@@ -163,6 +215,11 @@ export function PostAssetFigures({
         figure.querySelector("figcaption")?.textContent?.trim() || "여행 사진";
       image.loading = "lazy";
       figure.prepend(image);
+      const errorMessage = document.createElement("p");
+      errorMessage.className = "m-3 text-sm text-destructive";
+      errorMessage.setAttribute("role", "alert");
+      errorMessage.hidden = true;
+      figure.append(errorMessage);
       const retryButton = document.createElement("button");
       retryButton.type = "button";
       retryButton.className =
@@ -171,6 +228,7 @@ export function PostAssetFigures({
       retryButton.hidden = true;
       figure.append(retryButton);
       const refresh = async () => {
+        retryButton.disabled = true;
         try {
           const asset = await api.call("asset.access", { id, site_id: siteId });
           if (disposed) return;
@@ -178,6 +236,7 @@ export function PostAssetFigures({
           image.alt =
             figure.querySelector("figcaption")?.textContent?.trim() ||
             "여행 사진";
+          errorMessage.hidden = true;
           retryButton.hidden = true;
           timers.push(
             setTimeout(
@@ -185,23 +244,41 @@ export function PostAssetFigures({
               Math.max(30, asset.expires_in - 45) * 1000,
             ),
           );
-        } catch {
+        } catch (cause) {
           if (disposed) return;
-          image.alt = "사진을 불러오지 못했습니다.";
-          retryButton.hidden = false;
+          const guidance = describeApiError(cause, "read");
+          image.alt = guidance.title;
+          errorMessage.textContent = `${guidance.title} ${guidance.description}`;
+          errorMessage.hidden = false;
+          retryButton.hidden = !guidance.canRetry;
+          const waitMs = Math.max(0, (guidance.retryAt ?? 0) - Date.now());
+          retryButton.disabled = waitMs > 0;
+          if (waitMs > 0) {
+            retryButton.textContent = `${Math.ceil(waitMs / 1000)}초 후 다시 시도`;
+            timers.push(
+              setTimeout(() => {
+                if (disposed) return;
+                retryButton.disabled = false;
+                retryButton.textContent = "사진 다시 불러오기";
+              }, waitMs),
+            );
+          } else {
+            retryButton.textContent = "사진 다시 불러오기";
+          }
         }
       };
       const onRetry = () => void refresh();
       retryButton.addEventListener("click", onRetry);
-      mounted.push({ image, retryButton, onRetry });
+      mounted.push({ image, errorMessage, retryButton, onRetry });
       void refresh();
     }
     return () => {
       disposed = true;
       timers.forEach(clearTimeout);
-      for (const { image, retryButton, onRetry } of mounted) {
+      for (const { image, errorMessage, retryButton, onRetry } of mounted) {
         retryButton.removeEventListener("click", onRetry);
         image.remove();
+        errorMessage.remove();
         retryButton.remove();
       }
     };
@@ -231,12 +308,14 @@ export function PrivatePdf({
     metadata: Record<string, unknown>;
     preview_asset_id: string | null;
   }>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     const refresh = async () => {
+      setLoading(true);
       try {
         const next = await api.call("asset.access", {
           id: assetId,
@@ -244,16 +323,16 @@ export function PrivatePdf({
         });
         if (disposed) return;
         setAsset(next);
-        setError("");
+        setError(null);
+        setLoading(false);
         timer = setTimeout(
           () => void refresh(),
           Math.max(30, next.expires_in - 45) * 1000,
         );
-      } catch {
-        if (!disposed)
-          setError(
-            "PDF를 열 수 없습니다. 공개 여부나 파일 접근 권한을 확인해 주세요.",
-          );
+      } catch (cause) {
+        if (disposed) return;
+        setError(cause ?? new Error("asset_access_failed"));
+        setLoading(false);
       }
     };
     void refresh();
@@ -265,17 +344,15 @@ export function PrivatePdf({
   return (
     <section className="my-6 space-y-2" aria-label="PDF 일정표">
       <h2>{title}</h2>
-      {error ? (
-        <div role="alert" className="space-y-2">
-          <p>{error}</p>
-          <Button
-            variant="outline"
-            onClick={() => setRetry((current) => current + 1)}
-          >
-            PDF 다시 불러오기
-          </Button>
-        </div>
-      ) : asset ? (
+      {error != null && (
+        <ApiErrorState
+          error={error}
+          title="PDF를 열지 못했어요"
+          onRetry={() => setRetry((current) => current + 1)}
+          isRetrying={loading}
+        />
+      )}
+      {asset ? (
         <>
           <p>{String(asset.metadata.page_count ?? "")}쪽</p>
           {asset.preview_asset_id ? (
@@ -294,9 +371,9 @@ export function PrivatePdf({
             className="h-[80vh] w-full rounded border"
           />
         </>
-      ) : (
+      ) : error == null ? (
         <p role="status">PDF를 여는 중…</p>
-      )}
+      ) : null}
     </section>
   );
 }

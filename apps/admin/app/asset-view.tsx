@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState } from "@repo/api-client/feedback";
 import type { ActionOutput } from "@repo/contracts";
 import Image from "next/image";
 
@@ -19,11 +20,14 @@ export function PrivateAssetView({
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [asset, setAsset] = useState<ActionOutput<"asset.access">>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<unknown>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
     const load = async () => {
+      setRefreshing(true);
       try {
         const value = await api.call("asset.access", {
           id: assetId,
@@ -31,16 +35,15 @@ export function PrivateAssetView({
         });
         if (disposed) return;
         setAsset(value);
-        setError("");
+        setError(null);
         timer = setTimeout(
           () => void load(),
           Math.max(30, value.expires_in - 45) * 1000,
         );
-      } catch {
-        if (!disposed)
-          setError(
-            "파일 주소를 갱신하지 못했습니다. 잠시 후 다시 열어 주세요.",
-          );
+      } catch (failure) {
+        if (!disposed) setError(failure);
+      } finally {
+        if (!disposed) setRefreshing(false);
       }
     };
     void load();
@@ -48,8 +51,16 @@ export function PrivateAssetView({
       disposed = true;
       clearTimeout(timer);
     };
-  }, [api, assetId, siteId]);
-  if (error) return <p role="alert">{error}</p>;
+  }, [api, assetId, siteId, retryKey]);
+  if (error)
+    return (
+      <ApiErrorState
+        error={error}
+        onRetry={() => setRetryKey((current) => current + 1)}
+        isRetrying={refreshing}
+        title="파일을 열지 못했어요"
+      />
+    );
   if (!asset) return <p role="status">파일을 여는 중…</p>;
   if (kind === "image")
     return (

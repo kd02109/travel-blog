@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { errorMessage, TravelApiError } from "@repo/api-client";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { Button } from "@repo/ui/button";
 
@@ -29,6 +29,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [mutationError, setMutationError] = useState<unknown>(null);
   const comments = useTravelQuery(
     api,
     "admin.comments",
@@ -76,6 +77,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
     status: "visible" | "hidden",
   ) {
     setFeedback("");
+    setMutationError(null);
     try {
       await moderate.submit({
         id: comment.id,
@@ -87,11 +89,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
         status === "hidden" ? "댓글을 숨겼습니다." : "댓글을 복원했습니다.",
       );
     } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "상태를 변경하지 못했습니다. 새로고침 후 다시 시도해 주세요.",
-      );
+      setMutationError(error);
     }
   }
 
@@ -100,6 +98,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
   ) {
     const rootId = comment.parent_id ?? comment.id;
     setFeedback("");
+    setMutationError(null);
     try {
       await create.submit({
         id: comment.post_id,
@@ -111,26 +110,19 @@ export function CommentInbox({ siteId }: { siteId: string }) {
       setReplyTo(null);
       setFeedback("답글을 등록했습니다.");
     } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "답글을 등록하지 못했습니다. 입력한 내용은 남겨 두었습니다.",
-      );
+      setMutationError(error);
     }
   }
 
   async function resolveReport(id: string, status: "resolved" | "dismissed") {
+    setMutationError(null);
     try {
       await resolve.submit({ site_id: siteId, id, status });
       setFeedback(
         status === "resolved" ? "신고를 처리했습니다." : "신고를 기각했습니다.",
       );
     } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "신고 상태를 변경하지 못했습니다.",
-      );
+      setMutationError(error);
     }
   }
 
@@ -163,22 +155,22 @@ export function CommentInbox({ siteId }: { siteId: string }) {
           {feedback}
         </p>
       )}
-      {me.isPending || comments.isPending || reports.isPending ? (
+      {mutationError !== null && <ApiMutationError error={mutationError} />}
+      {me.isPending ||
+      (me.isSuccess && (comments.isPending || reports.isPending)) ? (
         <p role="status">댓글을 불러오고 있어요…</p>
       ) : me.isError || comments.isError || reports.isError ? (
-        <section role="alert" className="rounded-panel space-y-3 border p-5">
-          <p>{errorMessage(me.error ?? comments.error ?? reports.error)}</p>
-          <Button
-            variant="outline"
-            onClick={() => {
-              void me.refetch();
-              void comments.refetch();
-              void reports.refetch();
-            }}
-          >
-            다시 불러오기
-          </Button>
-        </section>
+        <ApiErrorState
+          error={me.error ?? comments.error ?? reports.error}
+          onRetry={() => {
+            void me.refetch();
+            void comments.refetch();
+            void reports.refetch();
+          }}
+          isRetrying={
+            me.isFetching || comments.isFetching || reports.isFetching
+          }
+        />
       ) : visible.length ? (
         <ul className="space-y-4">
           {visible.map((comment) => {

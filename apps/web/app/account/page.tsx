@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createTravelApi } from "@repo/api-client";
 import { createServerDatabase } from "@repo/database/server";
 import { AccountSettings } from "./settings";
+import { AccountLoadError } from "./account-load-error";
 
 export default async function AccountPage() {
   const db = await createServerDatabase();
@@ -17,14 +18,7 @@ export default async function AccountPage() {
   try {
     site = await api.getSite();
   } catch {
-    return (
-      <main className="mx-auto max-w-2xl px-5 py-16">
-        <h1 className="font-editorial text-3xl font-semibold">내 계정</h1>
-        <p role="alert" className="mt-4">
-          계정 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
-        </p>
-      </main>
-    );
+    return <AccountLoadError />;
   }
   return <AccountSettings siteId={site.id} email={auth.user.email ?? ""} />;
 }

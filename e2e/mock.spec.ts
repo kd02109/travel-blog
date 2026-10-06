@@ -48,8 +48,9 @@ for (const port of [3010, 3012]) {
     await page
       .getByLabel("카테고리", { exact: true })
       .selectOption("itinerary-pdf");
-    await expect(page.getByRole("listitem")).toHaveCount(1);
-    await expect(page.getByRole("listitem")).not.toContainText("좋아요");
+    const cards = page.locator("main ul.grid > li");
+    await expect(cards).toHaveCount(1);
+    await expect(cards).not.toContainText("좋아요");
     await page.getByLabel("상태", { exact: true }).selectOption("empty");
     await expect(page.getByText("등록된 여행 기록이 없습니다.")).toBeVisible();
     await page.getByLabel("상태", { exact: true }).selectOption("rate-limited");
@@ -133,9 +134,7 @@ test("typed query list/detail and successful comment mutation refresh", async ({
   await page
     .getByRole("textbox", { name: "댓글", exact: true })
     .fill("입력 보존 확인");
-  await page
-    .getByLabel(/^댓글 관리 비밀번호/)
-    .fill("test-only-password");
+  await page.getByLabel(/^댓글 관리 비밀번호/).fill("test-only-password");
   await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
   await expect(
     page.getByRole("listitem").filter({ hasText: "입력 보존 확인" }),
@@ -144,6 +143,33 @@ test("typed query list/detail and successful comment mutation refresh", async ({
   await expect(
     page.getByRole("textbox", { name: "댓글", exact: true }),
   ).toHaveValue("");
+});
+test("public pages show a retry action when their API is unavailable", async ({
+  page,
+}) => {
+  await page.goto("/?mockScenario=error");
+  await expect(
+    page.getByRole("heading", { name: "여행 기록에 연결하지 못했어요" }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+
+  await page.goto("/posts?mockScenario=error");
+  await expect(
+    page.getByRole("heading", { name: "공개 기록을 확인하지 못했어요" }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+  await expect(
+    page.getByText("아직 여행 기록이 없어요", { exact: true }),
+  ).toHaveCount(0);
+});
+test("rate limits show a countdown before retry", async ({ page }) => {
+  await page.goto("/posts?mockScenario=rate-limited");
+  await expect(
+    page.getByRole("heading", { name: "공개 기록을 확인하지 못했어요" }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(
+    page.getByRole("button", { name: /초 후 다시 시도/ }),
+  ).toBeDisabled();
 });
 test("conflict keeps comment input and offers explicit recovery", async ({
   page,
@@ -156,12 +182,12 @@ test("conflict keeps comment input and offers explicit recovery", async ({
   await page
     .getByRole("textbox", { name: "댓글", exact: true })
     .fill("실패해도 남아 있는 입력");
-  await page
-    .getByLabel("댓글 비밀번호", { exact: true })
-    .fill("test-only-password");
+  await page.getByLabel(/^댓글 관리 비밀번호/).fill("test-only-password");
   await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
   await expect(
-    page.getByRole("alert").filter({ hasText: "다른 변경과 충돌했습니다." }),
+    page
+      .getByRole("alert")
+      .filter({ hasText: "최신 상태를 불러온 뒤 다시 시도해 주세요." }),
   ).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "댓글", exact: true }),
@@ -182,9 +208,7 @@ test("slow responses show pending state and disable duplicate comment submission
   await page
     .getByRole("textbox", { name: "댓글", exact: true })
     .fill("한 번만 등록");
-  await page
-    .getByLabel("댓글 비밀번호", { exact: true })
-    .fill("test-only-password");
+  await page.getByLabel(/^댓글 관리 비밀번호/).fill("test-only-password");
   await page.getByRole("button", { name: "댓글 등록", exact: true }).click();
   await expect(page.getByRole("button", { name: "등록 중…" })).toBeDisabled();
   await expect(

@@ -5,8 +5,8 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, SITE_NAME } from "@repo/constants";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
+import { ApiErrorState } from "@repo/api-client/feedback";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { ErrorState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
 import {
   HomeCover,
@@ -24,10 +24,12 @@ export function HomeContent({
   initialSite,
   initialPosts,
   initialFeatured,
+  initialError,
 }: {
   initialSite?: ActionOutput<"site.get">;
   initialPosts?: ActionOutput<"posts.list">;
   initialFeatured?: ActionOutput<"post.get">;
+  initialError?: string;
 }) {
   const mainRef = useRef<HTMLElement>(null);
   useLayoutEffect(() => {
@@ -111,9 +113,19 @@ export function HomeContent({
   const featured =
     recentFeatured ??
     featuredDetail.data ??
-    (needsFeaturedLookup && featuredDetail.isPending
-      ? undefined
-      : posts.data?.[0]);
+    (!featuredId ? posts.data?.[0] : undefined);
+  const retryContent = () => {
+    if (!site.data || site.error) void site.refetch();
+    if (site.data && (posts.error || !posts.data)) void posts.refetch();
+  };
+  const showInitialSiteError =
+    Boolean(initialError) && !site.data && !site.isFetching && !site.error;
+  const showInitialPostsError =
+    Boolean(initialError) &&
+    Boolean(site.data) &&
+    !posts.data &&
+    !posts.isFetching &&
+    !posts.error;
   const renderPhoto = (
     assetId: string | undefined,
     sample: { src: string; alt: string } | undefined,
@@ -160,39 +172,65 @@ export function HomeContent({
     { length: secondaryCount },
     () => heroAssetIds.length === 0,
   );
-  const coverAction = featured ? (
-    <Link
-      href={"/posts/" + encodeURIComponent(featured.slug)}
-      className={homeCoverActionClassName}
-    >
-      {featured.title} 읽기 ↗
-    </Link>
-  ) : (
-    <Link href="/posts" className={homeCoverActionClassName}>
-      이 여행 펼치기 ↗
-    </Link>
+  const coverAction = (
+    <>
+      {featured ? (
+        <Link
+          href={"/posts/" + encodeURIComponent(featured.slug)}
+          className={homeCoverActionClassName}
+        >
+          {featured.title} 읽기 ↗
+        </Link>
+      ) : (
+        <Link href="/posts" className={homeCoverActionClassName}>
+          이 여행 펼치기 ↗
+        </Link>
+      )}
+      {needsFeaturedLookup && featuredDetail.error ? (
+        <div className="mt-5 max-w-md">
+          <ApiErrorState
+            error={featuredDetail.error}
+            title="대표 여행 기록을 확인하지 못했어요"
+            onRetry={() => void featuredDetail.refetch()}
+            isRetrying={featuredDetail.isFetching}
+          />
+        </div>
+      ) : null}
+    </>
   );
 
   return (
     <main ref={mainRef} className={styles.homeMain}>
       <div className={styles.heroScreen}>
-        <HomeCover
-          template={template}
-          title={
-            typeof settings?.title === "string" ? settings.title : undefined
-          }
-          description={
-            typeof settings?.description === "string"
-              ? settings.description
-              : undefined
-          }
-          siteName={site.data?.name ?? SITE_NAME}
-          image={heroImage}
-          secondaryImages={secondaryImages}
-          secondarySampleImages={secondarySampleImages}
-          action={coverAction}
-          sampleImage={!heroAssetIds[0]}
-        />
+        {(site.error && !site.data) || showInitialSiteError ? (
+          <div className="mx-auto flex w-full max-w-2xl items-center px-5 py-16">
+            <ApiErrorState
+              error={site.error ?? initialError}
+              title="여행 기록에 연결하지 못했어요"
+              description={site.error ? undefined : initialError}
+              onRetry={() => void site.refetch()}
+              isRetrying={site.isFetching}
+            />
+          </div>
+        ) : (
+          <HomeCover
+            template={template}
+            title={
+              typeof settings?.title === "string" ? settings.title : undefined
+            }
+            description={
+              typeof settings?.description === "string"
+                ? settings.description
+                : undefined
+            }
+            siteName={site.data?.name ?? SITE_NAME}
+            image={heroImage}
+            secondaryImages={secondaryImages}
+            secondarySampleImages={secondarySampleImages}
+            action={coverAction}
+            sampleImage={!heroAssetIds[0]}
+          />
+        )}
       </div>
       <div id="home-journal" className={styles.journalScreen}>
         <div className="mx-auto w-full max-w-[var(--content-max)] px-5 md:px-8 xl:px-16">
@@ -250,31 +288,47 @@ export function HomeContent({
                 모두 보기
               </Link>
             </div>
-            {site.error || posts.error ? (
+            {posts.error ||
+            (site.error && site.data) ||
+            showInitialPostsError ? (
               <div className="mt-5">
-                <ErrorState
-                  description="여행 기록을 불러오지 못했습니다."
-                  onRetry={() => {
-                    void site.refetch();
-                    void posts.refetch();
-                  }}
+                <ApiErrorState
+                  error={posts.error ?? site.error ?? initialError}
+                  title={
+                    posts.error
+                      ? "최근 여행 기록을 확인하지 못했어요"
+                      : site.error
+                        ? "사이트 정보를 새로 확인하지 못했어요"
+                        : "최근 여행 기록을 불러오지 못했어요"
+                  }
+                  description={
+                    posts.error || site.error ? undefined : initialError
+                  }
+                  onRetry={retryContent}
+                  isRetrying={site.isFetching || posts.isFetching}
                 />
               </div>
-            ) : !posts.data ? (
+            ) : null}
+            {!posts.data &&
+            !site.error &&
+            !posts.error &&
+            !showInitialSiteError &&
+            !showInitialPostsError ? (
               <div className="mt-5">
                 <LoadingState label="최근 여행 기록을 불러오고 있어요…" />
               </div>
-            ) : posts.data.length ? (
+            ) : null}
+            {posts.data?.length ? (
               <ul className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {posts.data.map((post) => (
                   <PostCard key={post.post_id} post={post} siteId={siteId} />
                 ))}
               </ul>
-            ) : (
+            ) : posts.data && !posts.error ? (
               <p className="rounded-panel mt-5 border p-8 text-center">
                 아직 공개된 여행 기록이 없습니다.
               </p>
-            )}
+            ) : null}
           </section>
           <div className="mt-12">
             <AnalyticsConsent />

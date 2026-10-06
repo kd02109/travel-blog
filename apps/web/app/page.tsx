@@ -12,6 +12,7 @@ export default async function Home() {
   let initialSite;
   let initialPosts;
   let initialFeatured;
+  let initialError: string | undefined;
   try {
     const api = createServerTravelApi();
     initialSite = await api.getSite();
@@ -35,13 +36,15 @@ export default async function Home() {
       }
     }
   } catch {
-    // The browser API can recover and display its own retry state.
+    initialError =
+      "여행 기록을 불러오지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.";
   }
   return (
     <HomeContent
       initialSite={initialSite}
       initialPosts={initialPosts}
       initialFeatured={initialFeatured}
+      initialError={initialError}
     />
   );
 }

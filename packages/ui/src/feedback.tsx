@@ -35,15 +35,32 @@ export function ErrorState({
   title = "불러오지 못했어요",
   description,
   onRetry,
+  retryPending = false,
+  retryDisabled = false,
+  retryLabel = "다시 시도",
+  compact = false,
+  details,
+  className,
 }: {
   title?: string;
   description: string;
   onRetry?: () => void;
+  retryPending?: boolean;
+  retryDisabled?: boolean;
+  retryLabel?: string;
+  compact?: boolean;
+  details?: React.ReactNode;
+  className?: string;
 }) {
   return (
     <section
       role="alert"
-      className="rounded-panel border-destructive/40 bg-destructive-surface text-destructive border p-6"
+      aria-busy={retryPending}
+      className={cn(
+        "rounded-panel border-destructive/40 bg-destructive-surface text-destructive border",
+        compact ? "p-4" : "p-6",
+        className,
+      )}
     >
       <div className="flex items-start gap-3">
         <AlertCircle aria-hidden="true" className="mt-1 size-5 shrink-0" />
@@ -54,12 +71,24 @@ export function ErrorState({
             <Button
               type="button"
               variant="outline"
-              className="border-destructive text-destructive mt-4"
+              className={cn(
+                "border-destructive text-destructive",
+                compact ? "mt-3" : "mt-4",
+              )}
               onClick={onRetry}
+              disabled={retryPending || retryDisabled}
             >
-              <RefreshCw aria-hidden="true" className="size-4" />
-              다시 시도
+              <RefreshCw
+                aria-hidden="true"
+                className={cn("size-4", retryPending && "animate-spin")}
+              />
+              <span aria-live="off">
+                {retryPending ? "다시 시도 중…" : retryLabel}
+              </span>
             </Button>
+          )}
+          {details && (
+            <div className="text-muted-foreground mt-3 text-xs">{details}</div>
           )}
         </div>
       </div>

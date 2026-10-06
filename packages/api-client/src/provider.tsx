@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { shouldRetryQuery } from "./errors";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { createAuthCacheSync } from "./auth-cache";
+import { ApiErrorProvider } from "./error-provider";
 export function ApiProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
@@ -26,5 +27,9 @@ export function ApiProvider({ children }: { children: ReactNode }) {
     );
     return () => data.subscription.unsubscribe();
   }, [client]);
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  return (
+    <QueryClientProvider client={client}>
+      <ApiErrorProvider>{children}</ApiErrorProvider>
+    </QueryClientProvider>
+  );
 }

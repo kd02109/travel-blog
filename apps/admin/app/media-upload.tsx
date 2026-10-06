@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { errorMessage, TravelApiError } from "@repo/api-client";
+import { TravelApiError } from "@repo/api-client";
+import { ApiMutationError } from "@repo/api-client/feedback";
 import { PrivateAssetView } from "./asset-view";
 import {
   AssetStatusCheckError,
@@ -20,6 +21,7 @@ type MediaItem = {
   assetId?: string;
   uploaded?: boolean;
   error?: string;
+  apiError?: unknown;
   show?: boolean;
 };
 
@@ -131,6 +133,7 @@ export function MediaUpload({
       state: statusOnly ? "processing" : "uploading",
       progress: statusOnly ? 100 : 0,
       error: undefined,
+      apiError: undefined,
     });
     let assetId = item.assetId;
     try {
@@ -240,9 +243,10 @@ export function MediaUpload({
         patch(item.id, {
           state: "failed",
           assetId,
+          apiError: error instanceof TravelApiError ? error : undefined,
           error:
             error instanceof TravelApiError
-              ? errorMessage(error)
+              ? undefined
               : error instanceof Error
                 ? error.message
                 : "파일을 처리하지 못했습니다.",
@@ -377,8 +381,14 @@ export function MediaUpload({
                 {item.error}
               </p>
             )}
+            {item.apiError !== undefined && (
+              <ApiMutationError
+                error={item.apiError}
+                onRetry={() => void process(item)}
+              />
+            )}
             <div className="flex flex-wrap gap-2">
-              {item.state === "failed" && (
+              {item.state === "failed" && item.apiError === undefined && (
                 <button
                   className="rounded border px-3 py-1"
                   onClick={() => void process(item)}

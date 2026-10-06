@@ -15,7 +15,8 @@ import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
 import { Select } from "@repo/ui/select";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { TravelApiError, errorMessage } from "@repo/api-client";
+import { TravelApiError } from "@repo/api-client";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import type { ActionInput, ActionOutput } from "@repo/contracts";
 import { validateDraftMetadata } from "@repo/contracts";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
@@ -184,6 +185,9 @@ export function Composer({ postId }: { postId?: string }) {
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [mutationError, setMutationError] = useState<unknown>(null);
   const [dirty, setDirty] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [editorError, setEditorError] = useState("");
@@ -194,6 +198,7 @@ export function Composer({ postId }: { postId?: string }) {
   const [revisionOffset, setRevisionOffset] = useState(0);
   const savingRef = useRef(false);
   const editVersionRef = useRef(0);
+  const loadedPostIdRef = useRef<string | undefined>(undefined);
   const published = useTravelQuery(
     api,
     "admin.post.published",
@@ -265,6 +270,7 @@ export function Composer({ postId }: { postId?: string }) {
     editVersionRef.current += 1;
     setDirty(true);
     setSaveError("");
+    setMutationError(null);
     setAutoSaveBlocked(false);
   }
 
@@ -279,26 +285,26 @@ export function Composer({ postId }: { postId?: string }) {
     void api
       .getSite()
       .then((site) => active && setSiteId(site.id))
-      .catch(() => active && setMessage("사이트 정보를 불러오지 못했습니다."));
-    if (postId) {
+      .catch((error: unknown) => active && setLoadError(error));
+    if (postId && loadedPostIdRef.current !== postId) {
       void api
         .call("admin.post.get", { id: postId })
         .then((draft) => {
           if (!active) return;
+          loadedPostIdRef.current = postId;
           applyDraft(draft);
         })
-        .catch((error: unknown) =>
-          setMessage(
-            error instanceof TravelApiError
-              ? errorMessage(error)
-              : "글을 불러오지 못했습니다.",
-          ),
-        );
+        .catch((error: unknown) => active && setLoadError(error));
     }
     return () => {
       active = false;
     };
-  }, [api, postId]);
+  }, [api, postId, loadAttempt]);
+
+  function retryInitialLoad() {
+    setLoadError(null);
+    setLoadAttempt((attempt) => attempt + 1);
+  }
 
   const onEditorReady = useCallback(
     (insert: (assetId: string, caption?: string) => void) =>
@@ -396,11 +402,13 @@ export function Composer({ postId }: { postId?: string }) {
         setDirty(editVersionRef.current !== editVersionAtStart);
         setAutoSaveBlocked(false);
         setSaveError("");
+        setMutationError(null);
         return true;
       } catch (error) {
+        if (error instanceof TravelApiError) setMutationError(error);
         setSaveError(
           error instanceof TravelApiError
-            ? errorMessage(error)
+            ? ""
             : "저장하지 못했습니다. 입력 내용은 화면에 남아 있습니다.",
         );
         setAutoSaveBlocked(true);
@@ -477,6 +485,7 @@ export function Composer({ postId }: { postId?: string }) {
     )
       return;
     setBusy(true);
+    setMutationError(null);
     try {
       let version = post.lock_version;
       if (dirty) {
@@ -501,11 +510,13 @@ export function Composer({ postId }: { postId?: string }) {
       void revisions.refetch();
       setMessage("선택한 수정 이력을 복원했습니다.");
     } catch (error) {
+      if (error instanceof TravelApiError && error.status !== 409)
+        setMutationError(error);
       setSaveError(
         error instanceof TravelApiError && error.status === 409
           ? "복원 중 글이 변경됐습니다. 최신본을 다시 불러와 주세요."
           : error instanceof TravelApiError
-            ? errorMessage(error)
+            ? ""
             : error instanceof Error
               ? error.message
               : "수정 이력을 복원하지 못했습니다.",
@@ -525,6 +536,7 @@ export function Composer({ postId }: { postId?: string }) {
       return;
     setBusy(true);
     setMessage("");
+    setMutationError(null);
     try {
       await deleteRevision.submit({
         id: post.id,
@@ -537,6 +549,12 @@ export function Composer({ postId }: { postId?: string }) {
         setRevisionOffset(Math.max(0, revisionOffset - 20));
       setMessage("수정 이력을 완전히 삭제했습니다.");
     } catch (error) {
+      if (
+        error instanceof TravelApiError &&
+        error.status !== 409 &&
+        error.code !== "published_revision_protected"
+      )
+        setMutationError(error);
       setMessage(
         error instanceof TravelApiError &&
           error.code === "published_revision_protected"
@@ -544,7 +562,7 @@ export function Composer({ postId }: { postId?: string }) {
           : error instanceof TravelApiError && error.status === 409
             ? "그 사이 글이 변경됐습니다. 새로고침한 뒤 다시 시도해 주세요."
             : error instanceof TravelApiError
-              ? errorMessage(error)
+              ? ""
               : "수정 이력을 삭제하지 못했습니다.",
       );
     } finally {
@@ -571,6 +589,7 @@ export function Composer({ postId }: { postId?: string }) {
       return;
     setBusy(true);
     setMessage("");
+    setMutationError(null);
     try {
       if (dirty) {
         if (!(await saveDraft()))
@@ -600,9 +619,10 @@ export function Composer({ postId }: { postId?: string }) {
           : "글을 공개 발행했습니다.",
       );
     } catch (error) {
+      if (error instanceof TravelApiError) setMutationError(error);
       setMessage(
         error instanceof TravelApiError
-          ? errorMessage(error)
+          ? ""
           : error instanceof Error
             ? error.message
             : "발행하지 못했습니다.",
@@ -628,6 +648,7 @@ export function Composer({ postId }: { postId?: string }) {
       return;
     setBusy(true);
     setMessage("");
+    setMutationError(null);
     try {
       if (dirty) {
         if (!(await saveDraft()))
@@ -655,9 +676,10 @@ export function Composer({ postId }: { postId?: string }) {
           : "글을 휴지통으로 옮겼습니다.",
       );
     } catch (error) {
+      if (error instanceof TravelApiError) setMutationError(error);
       setMessage(
         error instanceof TravelApiError
-          ? errorMessage(error)
+          ? ""
           : error instanceof Error
             ? error.message
             : "상태를 변경하지 못했습니다. 다시 불러와 주세요.",
@@ -732,6 +754,7 @@ export function Composer({ postId }: { postId?: string }) {
   async function create(kind: "article" | "pdf") {
     setBusy(true);
     setMessage("");
+    setMutationError(null);
     try {
       if (!siteId) throw new Error("사이트 정보를 불러오는 중입니다.");
       const created = await createPost.submit({
@@ -744,9 +767,10 @@ export function Composer({ postId }: { postId?: string }) {
       });
       router.replace(`/write/${created.id}`);
     } catch (error) {
+      if (error instanceof TravelApiError) setMutationError(error);
       setMessage(
         error instanceof TravelApiError
-          ? errorMessage(error)
+          ? ""
           : error instanceof Error
             ? error.message
             : "새 글을 만들지 못했습니다.",
@@ -780,16 +804,21 @@ export function Composer({ postId }: { postId?: string }) {
           </Button>
         </div>
         {message && <p role="status">{message}</p>}
+        {mutationError !== null && <ApiMutationError error={mutationError} />}
+        {loadError !== null && (
+          <ApiErrorState error={loadError} onRetry={retryInitialLoad} />
+        )}
       </main>
     );
 
   if (!post)
     return (
-      <main
-        className="mx-auto max-w-4xl px-5 py-12"
-        role={message ? "alert" : "status"}
-      >
-        {message || "글을 불러오고 있어요…"}
+      <main className="mx-auto max-w-4xl px-5 py-12">
+        {loadError !== null ? (
+          <ApiErrorState error={loadError} onRetry={retryInitialLoad} />
+        ) : (
+          <p role="status">{message || "글을 불러오고 있어요…"}</p>
+        )}
       </main>
     );
   const hasUnpublishedDraft =
@@ -800,6 +829,10 @@ export function Composer({ postId }: { postId?: string }) {
           hasUnpublishedChanges(post.draft_content, published.data.snapshot))));
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-5 py-12 md:px-8">
+      {loadError !== null && (
+        <ApiErrorState error={loadError} onRetry={retryInitialLoad} />
+      )}
+      {mutationError !== null && <ApiMutationError error={mutationError} />}
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-muted-foreground">
@@ -901,9 +934,11 @@ export function Composer({ postId }: { postId?: string }) {
                     : "수정 초안과 공개본이 같습니다."}
           </p>
           {published.isError && (
-            <Button variant="outline" onClick={() => void published.refetch()}>
-              공개본 다시 확인
-            </Button>
+            <ApiErrorState
+              error={published.error}
+              onRetry={() => void published.refetch()}
+              isRetrying={published.isFetching}
+            />
           )}
         </aside>
       )}
@@ -1325,7 +1360,11 @@ export function Composer({ postId }: { postId?: string }) {
                     {revisionDetail.isPending ? (
                       <p role="status">이력 내용을 불러오는 중…</p>
                     ) : revisionDetail.isError || !revisionDetail.data ? (
-                      <p role="alert">이력 내용을 불러오지 못했습니다.</p>
+                      <ApiErrorState
+                        error={revisionDetail.error}
+                        onRetry={() => void revisionDetail.refetch()}
+                        isRetrying={revisionDetail.isFetching}
+                      />
                     ) : (
                       <SnapshotView
                         snapshot={revisionDetail.data.snapshot}
@@ -1345,14 +1384,11 @@ export function Composer({ postId }: { postId?: string }) {
             이력을 불러오는 중…
           </p>
         ) : revisions.isError ? (
-          <div className="space-y-2">
-            <p role="alert" className="text-sm">
-              수정 이력을 불러오지 못했습니다.
-            </p>
-            <Button variant="outline" onClick={() => void revisions.refetch()}>
-              다시 불러오기
-            </Button>
-          </div>
+          <ApiErrorState
+            error={revisions.error}
+            onRetry={() => void revisions.refetch()}
+            isRetrying={revisions.isFetching}
+          />
         ) : (
           <p className="text-muted-foreground text-sm">
             저장된 수정 이력이 없습니다. 초안을 직접 저장하면 이력이 남습니다.

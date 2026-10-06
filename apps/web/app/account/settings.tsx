@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { errorMessage, TravelApiError } from "@repo/api-client";
+import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { Button } from "@repo/ui/button";
 import { Input } from "@repo/ui/input";
@@ -29,12 +29,8 @@ export function AccountSettings({
     try {
       await save.submit({ display_name: displayName });
       setFeedback("별명을 저장했습니다.");
-    } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "별명을 저장하지 못했습니다.",
-      );
+    } catch {
+      setFeedback("");
     }
   }
 
@@ -51,12 +47,8 @@ export function AccountSettings({
       setFeedback(
         "계정 삭제 요청을 접수했습니다. 처리 전까지 로그인과 계정 사용은 계속 가능합니다.",
       );
-    } catch (error) {
-      setFeedback(
-        error instanceof TravelApiError
-          ? errorMessage(error)
-          : "요청을 접수하지 못했습니다. 다시 시도해 주세요.",
-      );
+    } catch {
+      setFeedback("");
     }
   }
 
@@ -71,17 +63,25 @@ export function AccountSettings({
           {feedback}
         </p>
       )}
-      {me.isPending ? (
+      {!me.data && me.isPending ? (
         <p role="status">계정 정보를 불러오고 있어요…</p>
-      ) : me.isError ? (
-        <section role="alert" className="rounded-panel space-y-3 border p-5">
-          <p>{errorMessage(me.error)}</p>
-          <Button variant="outline" onClick={() => void me.refetch()}>
-            다시 확인하기
-          </Button>
-        </section>
+      ) : !me.data && me.error ? (
+        <ApiErrorState
+          error={me.error}
+          title="계정 정보를 확인하지 못했어요"
+          onRetry={() => void me.refetch()}
+          isRetrying={me.isFetching}
+        />
       ) : (
         <>
+          {me.error && (
+            <ApiErrorState
+              error={me.error}
+              title="계정 정보를 새로 확인하지 못했어요"
+              onRetry={() => void me.refetch()}
+              isRetrying={me.isFetching}
+            />
+          )}
           <section className="rounded-panel space-y-2 border p-5">
             <h2 className="font-semibold">로그인 계정</h2>
             <p>{email}</p>
@@ -106,6 +106,12 @@ export function AccountSettings({
             >
               별명 저장
             </Button>
+            {save.error && (
+              <ApiMutationError
+                error={save.error}
+                title="별명을 저장하지 못했어요"
+              />
+            )}
           </form>
           <section className="rounded-panel space-y-3 border p-5">
             <h2 className="font-semibold">로그아웃</h2>
@@ -134,6 +140,12 @@ export function AccountSettings({
             >
               {request.isPending ? "요청 중…" : "계정 삭제 요청"}
             </Button>
+            {request.error && (
+              <ApiMutationError
+                error={request.error}
+                title="계정 삭제 요청을 접수하지 못했어요"
+              />
+            )}
           </section>
         </>
       )}
