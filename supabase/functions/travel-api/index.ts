@@ -100,6 +100,36 @@ async function rate(key: string, action: string, max: number, seconds = 60) {
   });
   if (!r.allowed) throw new ApiError(429, "rate_limited", r.retry_after);
 }
+
+async function removeAssetPrefix(bucket: string, prefix: string) {
+  const paths: string[] = [];
+  async function collect(directory: string): Promise<void> {
+    let offset = 0;
+    for (;;) {
+      const { data, error } = await client.storage.from(bucket).list(directory, {
+        limit: 1000,
+        offset,
+        sortBy: { column: "name", order: "asc" },
+      });
+      if (error || !data) throw new ApiError(502, "asset_delete_failed");
+      if (!data.length) break;
+      for (const item of data) {
+        const path = `${directory}/${item.name}`;
+        if (item.id === null) await collect(path);
+        else paths.push(path);
+      }
+      offset += data.length;
+      if (data.length < 1000) break;
+    }
+  }
+  await collect(prefix);
+  for (let offset = 0; offset < paths.length; offset += 1000) {
+    const { error } = await client.storage.from(bucket).remove(
+      paths.slice(offset, offset + 1000),
+    );
+    if (error) throw new ApiError(502, "asset_delete_failed");
+  }
+}
 async function visitor(req: Request): Promise<string> {
   const token = req.headers.get("x-visitor-token") ??
     req.headers.get("cookie")?.match(/(?:^|;\s*)travel_visitor=([^;]+)/)?.[1];
@@ -354,6 +384,61 @@ Deno.serve(async (req: Request) => {
       }
       return respond({ saved: true });
     }
+    if (action === "asset.delete") {
+      const args = {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_asset_id: input.id,
+      };
+      const { data: claim, error: claimError } = await client.rpc(
+        "travel_asset_delete",
+        { p_action: "begin", ...args },
+      );
+      if (claimError) throw databaseError(claimError);
+      if (claim?.deleted === true) return respond({ deleted: true });
+      if (
+        !claim || typeof claim.lease_until !== "string" ||
+        !Array.isArray(claim.targets) || claim.targets.length === 0
+      ) throw new ApiError(502, "asset_delete_failed");
+      try {
+        const visited = new Set<string>();
+        for (const target of claim.targets) {
+          const bucket = target?.bucket;
+          const prefix = target?.prefix;
+          if (
+            typeof bucket !== "string" || typeof prefix !== "string" ||
+            !/^[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(prefix)
+          ) throw new ApiError(502, "asset_delete_failed");
+          const key = `${bucket}:${prefix}`;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          await removeAssetPrefix(bucket, prefix);
+        }
+        const { data, error } = await client.rpc("travel_asset_delete", {
+          p_action: "finalize",
+          ...args,
+          p_lease_until: claim.lease_until,
+        });
+        if (error) throw databaseError(error);
+        if (data?.deleted !== true) {
+          throw new ApiError(502, "asset_delete_failed");
+        }
+        return respond({ deleted: true });
+      } catch (error) {
+        // Storage may be partly removed; keep the database deletion fence and
+        // let a second request finish the remaining objects.
+        try {
+          await client.rpc("travel_asset_delete", {
+            p_action: "release",
+            ...args,
+            p_lease_until: claim.lease_until,
+          });
+        } catch {
+          // The lease expires even if the release RPC is unavailable.
+        }
+        throw error;
+      }
+    }
     if (action === "asset.list") {
       const limit = Math.min(
         50,
@@ -376,8 +461,22 @@ Deno.serve(async (req: Request) => {
           const bucket = typeof row.bucket === "string" ? row.bucket : "";
           const objectPath =
             typeof row.object_path === "string" ? row.object_path : "";
+          const deletionPending = row.deletion_pending === true;
           if (!bucket || !objectPath) {
             throw new ApiError(502, "download_url_failed");
+          }
+          if (deletionPending) {
+            return {
+              id: row.id,
+              created_at: row.created_at,
+              metadata: row.metadata ?? {},
+              thumbnail_url: null,
+              original_url: null,
+              usage: [],
+              can_delete: row.can_delete === true,
+              deletion_pending: true,
+              delete_available_at: null,
+            };
           }
           const { data: signed, error: signedError } = await client.storage
             .from(bucket)
@@ -395,6 +494,11 @@ Deno.serve(async (req: Request) => {
             thumbnail_url: signed.signedUrl,
             original_url: signed.signedUrl,
             usage: Array.isArray(row.usage) ? row.usage : [],
+            can_delete: row.can_delete === true,
+            deletion_pending: false,
+            delete_available_at: typeof row.delete_available_at === "string"
+              ? row.delete_available_at
+              : null,
           };
         }),
       );

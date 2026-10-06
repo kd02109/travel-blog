@@ -145,6 +145,12 @@ export function Composer({ postId }: { postId?: string }) {
     { siteId, actor: "session" },
     { enabled: !!siteId },
   );
+  const canDeleteImages =
+    me.data?.memberships.some(
+      (membership) =>
+        membership.site_id === siteId &&
+        (membership.role === "owner" || membership.role === "admin"),
+    ) ?? false;
   const mutationScope = { siteId, actor: me.data?.user_id ?? "session" };
   const createPost = useTravelMutation(api, "admin.post.create", mutationScope);
   const savePost = useTravelMutation(api, "admin.post.save", mutationScope);
@@ -186,6 +192,22 @@ export function Composer({ postId }: { postId?: string }) {
   const [document, setDocument] = useState<EditorDocument>([
     { type: "paragraph", content: "여행의 첫 장면을 적어 보세요." },
   ]);
+  const protectedImageIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (coverAssetId) ids.add(coverAssetId);
+    const visit = (value: unknown): void => {
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      const item = value as Record<string, unknown>;
+      if (typeof item.asset_id === "string") ids.add(item.asset_id);
+      Object.values(item).forEach(visit);
+    };
+    visit(document);
+    return [...ids];
+  }, [coverAssetId, document]);
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -1535,6 +1557,8 @@ export function Composer({ postId }: { postId?: string }) {
             key="image-upload"
             siteId={siteId}
             kindFilter="image"
+            canDelete={canDeleteImages}
+            protectedAssetIds={protectedImageIds}
             onInsertImage={(assetId, caption) => {
               insertImage?.(assetId, caption);
               markDirty();

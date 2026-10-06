@@ -52,6 +52,7 @@ const usageLabels: Record<string, string> = {
   "post-body": "본문",
   "pdf-preview": "PDF 미리보기",
 };
+const noProtectedAssetIds: readonly string[] = [];
 
 function libraryAssetName(asset: LibraryAsset) {
   return `사진 ${asset.id.slice(0, 8)}`;
@@ -62,6 +63,12 @@ function formatAssetDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function deleteAvailabilityLabel(value: string) {
+  return Date.parse(value) > Date.now()
+    ? `삭제 가능: ${formatAssetDate(value)}`
+    : "삭제 가능 시각이 지났습니다. 새로고침해 주세요.";
 }
 
 function assetBytes(asset: LibraryAsset) {
@@ -77,6 +84,34 @@ function formatBytes(bytes: number | undefined) {
 
 function uniqueAssets(items: LibraryAsset[]) {
   return [...new Map(items.map((asset) => [asset.id, asset])).values()];
+}
+
+function isUnusedAsset(
+  asset: LibraryAsset,
+  protectedAssetIds: readonly string[],
+) {
+  return (
+    asset.can_delete &&
+    asset.usage.length === 0 &&
+    !protectedAssetIds.includes(asset.id)
+  );
+}
+
+function isUnusedLibraryAsset(
+  asset: LibraryAsset,
+  protectedAssetIds: readonly string[],
+) {
+  return (
+    asset.usage.length === 0 &&
+    !protectedAssetIds.includes(asset.id) &&
+    (asset.deletion_pending ||
+      asset.can_delete ||
+      asset.delete_available_at !== null)
+  );
+}
+
+function isAvailableAsset(asset: LibraryAsset) {
+  return !asset.deletion_pending && asset.original_url !== null;
 }
 
 function libraryResult(
@@ -152,6 +187,8 @@ export async function uploadEditorImage(
 
 export function MediaUpload({
   siteId,
+  canDelete = false,
+  protectedAssetIds = noProtectedAssetIds,
   onInsertImage,
   onSetCoverImage,
   onImageReady,
@@ -162,6 +199,8 @@ export function MediaUpload({
   coverActionDisabled = false,
 }: {
   siteId: string;
+  canDelete?: boolean;
+  protectedAssetIds?: readonly string[];
   onInsertImage?: (assetId: string, caption?: string) => void;
   onSetCoverImage?: (assetId: string) => void;
   onImageReady?: (assetId: string) => void;
@@ -190,6 +229,16 @@ export function MediaUpload({
     siteId: string;
     asset: LibraryAsset;
   }>();
+  const [deleteSelection, setDeleteSelection] = useState<{
+    siteId: string;
+    asset: LibraryAsset;
+  }>();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<unknown>();
+  const [deleteFeedback, setDeleteFeedback] = useState<{
+    siteId: string;
+    message: string;
+  }>();
   const controllers = useRef(new Map<string, AbortController>());
   const libraryRequest = useRef(0);
   const renewingThumbnails = useRef(new Set<string>());
@@ -197,10 +246,9 @@ export function MediaUpload({
   const thumbnailCooldown = useRef(new Set<string>());
   const thumbnailTimers = useRef(new Map<string, number>());
   const loadingMoreOffset = useRef<number | null>(null);
+  const deletingAsset = useRef<string | null>(null);
   const thumbnailUrls =
     thumbnailState.siteId === siteId ? thumbnailState.urls : {};
-  const previewAsset =
-    previewSelection?.siteId === siteId ? previewSelection.asset : undefined;
   const library = useMemo<LibraryState>(
     () =>
       libraryState.siteId === siteId
@@ -214,10 +262,39 @@ export function MediaUpload({
           },
     [libraryState, siteId],
   );
+  const selectedPreviewAsset =
+    previewSelection?.siteId === siteId
+      ? library.items.find((asset) => asset.id === previewSelection.asset.id)
+      : undefined;
+  const previewAsset =
+    selectedPreviewAsset && isAvailableAsset(selectedPreviewAsset)
+      ? selectedPreviewAsset
+      : undefined;
+  const selectedDeleteAsset =
+    deleteSelection?.siteId === siteId
+      ? library.items.find((asset) => asset.id === deleteSelection.asset.id)
+      : undefined;
+  const deleteAsset =
+    canDelete &&
+    selectedDeleteAsset &&
+    isUnusedAsset(selectedDeleteAsset, protectedAssetIds)
+      ? selectedDeleteAsset
+      : undefined;
+  const pendingDeletionIds = useMemo(
+    () =>
+      new Set(
+        library.items
+          .filter((asset) => asset.deletion_pending)
+          .map((asset) => asset.id),
+      ),
+    [library.items],
+  );
   const visibleLibraryAssets = useMemo(() => {
     const source = library.items.filter((asset) => {
-      if (libraryFilter === "used") return asset.usage.length > 0;
-      if (libraryFilter === "unused") return asset.usage.length === 0;
+      if (libraryFilter === "used")
+        return !isUnusedLibraryAsset(asset, protectedAssetIds);
+      if (libraryFilter === "unused")
+        return isUnusedLibraryAsset(asset, protectedAssetIds);
       return true;
     });
     return [...source].sort((left, right) => {
@@ -238,7 +315,7 @@ export function MediaUpload({
         left.id.localeCompare(right.id)
       );
     });
-  }, [library.items, libraryFilter, librarySort]);
+  }, [library.items, libraryFilter, librarySort, protectedAssetIds]);
   useEffect(() => {
     if (kindFilter !== "image" || !siteId) return;
     const requestRef = libraryRequest;
@@ -347,10 +424,58 @@ export function MediaUpload({
       },
     );
   }
+  function requestDelete(asset: LibraryAsset) {
+    if (
+      !canDelete ||
+      !isUnusedAsset(asset, protectedAssetIds) ||
+      deletingAsset.current
+    )
+      return;
+    setDeleteFeedback(undefined);
+    setDeleteError(undefined);
+    setPreviewSelection(undefined);
+    setDeleteSelection({ siteId, asset });
+  }
+  async function deleteUnusedAsset() {
+    if (
+      !deleteAsset ||
+      !canDelete ||
+      !isUnusedAsset(deleteAsset, protectedAssetIds) ||
+      deletingAsset.current
+    )
+      return;
+    deletingAsset.current = deleteAsset.id;
+    setIsDeleting(true);
+    setDeleteError(undefined);
+    try {
+      await api.mutate("asset.delete", {
+        id: deleteAsset.id,
+        site_id: siteId,
+      });
+      setItems((current) =>
+        current.filter((item) => item.assetId !== deleteAsset.id),
+      );
+      setDeleteSelection(undefined);
+      setDeleteFeedback({
+        siteId,
+        message: deleteAsset.deletion_pending
+          ? "남아 있던 사진 삭제를 완료했습니다."
+          : "사진을 Storage에서 영구 삭제했습니다.",
+      });
+      refreshLibrary();
+    } catch (error) {
+      setDeleteError(error);
+    } finally {
+      deletingAsset.current = null;
+      setIsDeleting(false);
+    }
+  }
   async function renewThumbnail(asset: LibraryAsset) {
     const currentUrl = thumbnailUrls[asset.id] ?? asset.thumbnail_url;
     const request = libraryRequest.current;
     if (
+      asset.deletion_pending ||
+      !currentUrl ||
       renewingThumbnails.current.has(asset.id) ||
       failedThumbnailUrls.current.get(asset.id) === currentUrl ||
       thumbnailCooldown.current.has(asset.id)
@@ -678,7 +803,9 @@ export function MediaUpload({
                     : item.state === "waiting"
                       ? "파일 처리 대기 중"
                       : item.state === "ready"
-                        ? "사용할 수 있어요"
+                        ? item.assetId && pendingDeletionIds.has(item.assetId)
+                          ? "삭제 처리 중"
+                          : "사용할 수 있어요"
                         : item.state === "cancelled"
                           ? "취소됨"
                           : "처리 실패"}
@@ -733,6 +860,7 @@ export function MediaUpload({
               {item.state === "ready" &&
                 item.kind === "image" &&
                 item.assetId &&
+                !pendingDeletionIds.has(item.assetId) &&
                 onInsertImage && (
                   <button
                     className="rounded border px-3 py-1"
@@ -744,6 +872,7 @@ export function MediaUpload({
               {item.state === "ready" &&
                 item.kind === "image" &&
                 item.assetId &&
+                !pendingDeletionIds.has(item.assetId) &&
                 onSetCoverImage && (
                   <button
                     className="rounded border px-3 py-1"
@@ -775,7 +904,8 @@ export function MediaUpload({
             </div>
             {item.state === "ready" &&
               item.assetId &&
-              item.kind === "image" && (
+              item.kind === "image" &&
+              !pendingDeletionIds.has(item.assetId) && (
                 <PrivateAssetView
                   assetId={item.assetId}
                   siteId={siteId}
@@ -808,6 +938,11 @@ export function MediaUpload({
                 한 번 저장한 사진을 홈 표지와 글에 다시 사용할 수 있어요. 사진을
                 누르면 원본을 확인합니다.
               </p>
+              {deleteFeedback?.siteId === siteId && (
+                <p role="status" className="mt-2 text-sm text-green-800">
+                  {deleteFeedback.message}
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -885,25 +1020,47 @@ export function MediaUpload({
                 key={asset.id}
                 className="rounded-panel min-w-0 overflow-hidden border bg-white"
               >
-                <button
-                  type="button"
-                  className="group relative block aspect-[4/3] w-full overflow-hidden bg-stone-100 text-left"
-                  onClick={() => setPreviewSelection({ siteId, asset })}
-                  aria-label={`${libraryAssetName(asset)} 원본 확대`}
-                >
-                  <Image
-                    src={thumbnailUrls[asset.id] ?? asset.thumbnail_url}
-                    alt={libraryAssetName(asset)}
-                    fill
-                    unoptimized
-                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px"
-                    className="object-cover transition-transform duration-300 group-hover:scale-105"
-                    onError={() => void renewThumbnail(asset)}
-                  />
-                  <span className="absolute inset-x-2 bottom-2 rounded bg-black/65 px-2 py-1 text-center text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
-                    원본 보기
-                  </span>
-                </button>
+                {isAvailableAsset(asset) ? (
+                  <button
+                    type="button"
+                    className="group relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-stone-100 text-left"
+                    onClick={() => setPreviewSelection({ siteId, asset })}
+                    aria-label={`${libraryAssetName(asset)} 원본 확대`}
+                  >
+                    {asset.thumbnail_url ? (
+                      <Image
+                        src={thumbnailUrls[asset.id] ?? asset.thumbnail_url}
+                        alt={libraryAssetName(asset)}
+                        fill
+                        unoptimized
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px"
+                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={() => void renewThumbnail(asset)}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground px-3 text-center text-sm">
+                        미리보기 없음 · 원본 보기
+                      </span>
+                    )}
+                    <span className="absolute inset-x-2 bottom-2 rounded bg-black/65 px-2 py-1 text-center text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+                      원본 보기
+                    </span>
+                  </button>
+                ) : (
+                  <div
+                    role="status"
+                    className="text-muted-foreground flex aspect-[4/3] flex-col items-center justify-center gap-1 bg-stone-100 px-3 text-center text-sm"
+                  >
+                    <span className="font-medium">
+                      {asset.deletion_pending
+                        ? "삭제 처리 중"
+                        : "원본을 확인할 수 없음"}
+                    </span>
+                    {asset.deletion_pending && (
+                      <span className="text-xs">사진을 사용할 수 없습니다</span>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-3 p-3">
                   <div>
                     <p className="truncate font-medium">
@@ -915,7 +1072,13 @@ export function MediaUpload({
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-1" aria-label="사용 위치">
-                    {asset.usage.length > 0 ? (
+                    {asset.deletion_pending ? (
+                      <span className="text-muted-foreground text-xs">
+                        {asset.can_delete
+                          ? "삭제 정리 대기 · 다시 시도 가능"
+                          : "Storage 삭제 진행 중 · 잠시 후 새로고침"}
+                      </span>
+                    ) : asset.usage.length > 0 ? (
                       asset.usage.map((usage) => (
                         <span
                           key={usage}
@@ -924,14 +1087,26 @@ export function MediaUpload({
                           {usageLabels[usage] ?? usage}
                         </span>
                       ))
-                    ) : (
+                    ) : protectedAssetIds.includes(asset.id) ? (
+                      <span className="text-muted-foreground text-xs">
+                        현재 편집 중 사용 중
+                      </span>
+                    ) : asset.can_delete ? (
                       <span className="text-muted-foreground text-xs">
                         아직 사용 안 함
+                      </span>
+                    ) : asset.delete_available_at ? (
+                      <span className="text-muted-foreground text-xs">
+                        {deleteAvailabilityLabel(asset.delete_available_at)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        이전 글 이력 등에서 사용 중
                       </span>
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {onSetCoverImage && (
+                    {onSetCoverImage && isAvailableAsset(asset) && (
                       <button
                         type="button"
                         className="rounded-control border px-3 py-2 text-xs"
@@ -941,13 +1116,25 @@ export function MediaUpload({
                         {coverActionLabel}
                       </button>
                     )}
-                    {onInsertImage && (
+                    {onInsertImage && isAvailableAsset(asset) && (
                       <button
                         type="button"
                         className="rounded-control border px-3 py-2 text-xs"
                         onClick={() => onInsertImage(asset.id, "")}
                       >
                         본문에 넣기
+                      </button>
+                    )}
+                    {canDelete && isUnusedAsset(asset, protectedAssetIds) && (
+                      <button
+                        type="button"
+                        className="rounded-control border border-red-300 px-3 py-2 text-xs text-red-800 hover:bg-red-50"
+                        onClick={() => requestDelete(asset)}
+                        disabled={isDeleting}
+                      >
+                        {asset.deletion_pending
+                          ? "삭제 다시 시도"
+                          : "영구 삭제"}
                       </button>
                     )}
                   </div>
@@ -961,7 +1148,7 @@ export function MediaUpload({
             visibleLibraryAssets.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {libraryFilter === "unused"
-                  ? "현재 불러온 사진 중 아직 사용하지 않은 사진이 없습니다."
+                  ? "현재 불러온 사진 중 삭제할 수 있는 미사용 사진이 없습니다."
                   : libraryFilter === "used"
                     ? "현재 불러온 사진 중 사용 중인 사진이 없습니다."
                     : "저장된 사진이 없습니다. 첫 사진을 올려 보세요."}
@@ -1026,7 +1213,101 @@ export function MediaUpload({
                     본문에 넣기
                   </button>
                 )}
+                {canDelete &&
+                  isUnusedAsset(previewAsset, protectedAssetIds) && (
+                    <button
+                      type="button"
+                      className="rounded-control border border-red-300 px-3 py-2 text-red-800 hover:bg-red-50"
+                      onClick={() => requestDelete(previewAsset)}
+                      disabled={isDeleting}
+                    >
+                      영구 삭제
+                    </button>
+                  )}
               </div>
+            </div>
+          </div>
+        )}
+      </Dialog>
+      <Dialog
+        open={Boolean(deleteAsset)}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) {
+            setDeleteSelection(undefined);
+            setDeleteError(undefined);
+          }
+        }}
+        title={
+          deleteAsset?.deletion_pending
+            ? "남은 사진 삭제를 다시 시도할까요?"
+            : "사진을 영구 삭제할까요?"
+        }
+        description={
+          deleteAsset?.deletion_pending
+            ? "이전 삭제가 중단되어 Storage 정리가 남아 있습니다. 원본과 썸네일을 다시 확인해 완전히 삭제합니다. 복구할 수 없습니다."
+            : "이 사진의 원본과 썸네일을 Storage에서 완전히 삭제합니다. 삭제 후에는 복구할 수 없습니다."
+        }
+        className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] overflow-y-auto"
+      >
+        {deleteAsset && (
+          <div className="space-y-5">
+            <div className="rounded-control bg-muted/50 p-4 text-sm">
+              <p className="font-medium">{libraryAssetName(deleteAsset)}</p>
+              <p className="text-muted-foreground mt-1">
+                {formatAssetDate(deleteAsset.created_at)} ·{" "}
+                {formatBytes(assetBytes(deleteAsset))}
+              </p>
+            </div>
+            <p className="text-sm">
+              현재·이전 글이나 다른 자료에서 참조하지 않는 사진만 삭제할 수
+              있습니다.
+            </p>
+            {deleteError !== undefined && (
+              <div className="space-y-2">
+                <ApiMutationError
+                  error={deleteError}
+                  title="사진을 삭제하지 못했어요"
+                />
+                <p className="text-muted-foreground text-sm">
+                  삭제 상태를 새로고침해 확인한 뒤 필요하면 다시 시도해 주세요.
+                </p>
+                <button
+                  type="button"
+                  className="rounded-control border px-3 py-2 text-sm"
+                  onClick={() => {
+                    setDeleteSelection(undefined);
+                    setDeleteError(undefined);
+                    refreshLibrary();
+                  }}
+                >
+                  목록 새로고침
+                </button>
+              </div>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-control border px-4 py-2"
+                onClick={() => {
+                  setDeleteSelection(undefined);
+                  setDeleteError(undefined);
+                }}
+                disabled={isDeleting}
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                className="rounded-control border border-red-700 bg-red-700 px-4 py-2 font-medium text-white hover:bg-red-800 disabled:opacity-60"
+                onClick={() => void deleteUnusedAsset()}
+                disabled={isDeleting || deleteError !== undefined}
+              >
+                {isDeleting
+                  ? "삭제하는 중…"
+                  : deleteAsset.deletion_pending
+                    ? "Storage 삭제 다시 시도"
+                    : "Storage에서 영구 삭제"}
+              </button>
             </div>
           </div>
         )}

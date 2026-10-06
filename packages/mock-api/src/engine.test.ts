@@ -777,6 +777,73 @@ describe("settings, assets, and failures", () => {
       body: { error: "mock_upload_not_implemented" },
     });
   });
+  it("deletes only unused ready images for site admins", () => {
+    const used = mockId(4, 2);
+    const unused = mockId(4, 3);
+    const preview = mockId(4, 5);
+    const request = { ...site, id: unused };
+    const recent = createMockEngine({ scenario: "empty" });
+    expect(call(recent, "asset.delete", request, owner)).toMatchObject({
+      status: 409,
+      body: { error: "asset_upload_token_active" },
+    });
+    const recentList = call(recent, "asset.list", site, owner).body as {
+      items: {
+        id: string;
+        can_delete: boolean;
+        delete_available_at: string | null;
+      }[];
+    };
+    expect(recentList.items.find((asset) => asset.id === unused)).toMatchObject(
+      {
+        can_delete: false,
+        delete_available_at: expect.any(String),
+      },
+    );
+    const afterExpiry = { now: () => "2026-09-20T00:00:00.000Z" };
+    const engine = createMockEngine({ scenario: "empty", ...afterExpiry });
+    expect(call(engine, "asset.delete", request).status).toBe(401);
+    expect(call(engine, "asset.delete", request, reader).status).toBe(403);
+    expect(
+      call(engine, "asset.delete", request, {
+        Authorization: "Bearer mock-editor",
+      }).status,
+    ).toBe(403);
+    expect(
+      call(engine, "asset.delete", { ...request, site_id: mockId(1, 2) }, owner)
+        .status,
+    ).toBe(403);
+    const list = call(engine, "asset.list", site, owner).body as {
+      items: { id: string; can_delete: boolean }[];
+    };
+    expect(list.items.find((asset) => asset.id === unused)?.can_delete).toBe(
+      true,
+    );
+    expect(list.items.find((asset) => asset.id === preview)?.can_delete).toBe(
+      false,
+    );
+    expect(
+      call(engine, "asset.delete", { ...site, id: preview }, owner),
+    ).toMatchObject({
+      status: 409,
+      body: { error: "asset_in_use" },
+    });
+    expect(call(engine, "asset.delete", request, owner)).toMatchObject({
+      status: 200,
+      body: { deleted: true },
+    });
+    expect(
+      (call(engine, "asset.list", site, owner).body as typeof list).items.some(
+        (asset) => asset.id === unused,
+      ),
+    ).toBe(false);
+    expect(call(engine, "asset.access", request, owner).status).toBe(404);
+
+    const populated = createMockEngine(afterExpiry);
+    expect(
+      call(populated, "asset.delete", { ...site, id: used }, owner),
+    ).toMatchObject({ status: 409, body: { error: "asset_in_use" } });
+  });
   it("injects one-shot failures and deterministic empty/error/rate-limit scenarios", () => {
     const engine = createMockEngine();
     engine.failNext("posts.list", 409, "version_conflict");
