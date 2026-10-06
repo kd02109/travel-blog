@@ -11,6 +11,7 @@ import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
 import { ErrorState, EmptyState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
 import { Button } from "@repo/ui/button";
+import { Dialog } from "@repo/ui/dialog";
 import { CommentSection } from "./comment-section";
 export function PostDetail({
   slug,
@@ -48,6 +49,10 @@ export function PostDetail({
     count: number;
   } | null>(null);
   const [likeMessage, setLikeMessage] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
+  const shareLink = useRef<HTMLInputElement>(null);
   const likeState = useTravelQuery(
     api,
     "like.get",
@@ -109,6 +114,41 @@ export function PostDetail({
     } catch (error) {
       setOptimisticLike(null);
       setLikeMessage(errorMessage(error));
+    }
+  }
+  async function sharePost() {
+    if (!post.data) return;
+    const url = new URL(
+      `/posts/${encodeURIComponent(slug)}`,
+      window.location.origin,
+    ).href;
+    const data: ShareData = { title: post.data.title, url };
+    if (
+      typeof navigator.share === "function" &&
+      (typeof navigator.canShare !== "function" || navigator.canShare(data))
+    ) {
+      try {
+        await navigator.share(data);
+        return;
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+      }
+    }
+    setShareUrl(url);
+    setCopyMessage("");
+    setShareOpen(true);
+  }
+  async function copyShareLink() {
+    const url = shareLink.current?.value;
+    if (!url) return;
+    try {
+      if (!navigator.clipboard?.writeText)
+        throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(url);
+      setCopyMessage("링크를 복사했어요.");
+    } catch {
+      shareLink.current?.select();
+      setCopyMessage("주소를 선택해 복사해 주세요.");
     }
   }
   if (initialError && !site.data && !post.data)
@@ -209,65 +249,76 @@ export function PostDetail({
         <h1 className="font-serif text-3xl leading-relaxed sm:text-4xl">
           {post.data.title}
         </h1>
-        {article && (
-          <div className="space-y-2">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            {article && (
+              <button
+                type="button"
+                onClick={() => void toggleLike()}
+                disabled={
+                  setLike.isPending ||
+                  likeState.isLoading ||
+                  (!likeState.data && !optimisticLike)
+                }
+                aria-label={
+                  (optimisticLike ?? likeState.data)?.liked
+                    ? "좋아요 취소"
+                    : "좋아요"
+                }
+                aria-pressed={
+                  (optimisticLike ?? likeState.data)?.liked ?? false
+                }
+                className="rounded-control inline-flex min-h-11 min-w-11 items-center gap-2 px-2 text-base transition-transform hover:opacity-75 active:scale-95 disabled:opacity-60"
+              >
+                {(optimisticLike ?? likeState.data)?.liked ? (
+                  <span aria-hidden="true">♥</span>
+                ) : (
+                  <span aria-hidden="true">♡</span>
+                )}
+                좋아요 ·{" "}
+                {(optimisticLike ?? likeState.data)?.count ??
+                  post.data.like_count ??
+                  0}
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => void toggleLike()}
-              disabled={
-                setLike.isPending ||
-                likeState.isLoading ||
-                (!likeState.data && !optimisticLike)
-              }
-              aria-label={
-                (optimisticLike ?? likeState.data)?.liked
-                  ? "좋아요 취소"
-                  : "좋아요"
-              }
-              aria-pressed={(optimisticLike ?? likeState.data)?.liked ?? false}
-              className="rounded-control border-border inline-flex min-h-11 min-w-11 items-center gap-2 border px-4 text-base transition-transform active:scale-95 disabled:opacity-60"
+              onClick={() => void sharePost()}
+              className="rounded-control inline-flex min-h-11 items-center px-2 text-base transition-opacity hover:opacity-75"
             >
-              {(optimisticLike ?? likeState.data)?.liked ? (
-                <span aria-hidden="true">♥</span>
-              ) : (
-                <span aria-hidden="true">♡</span>
-              )}
-              좋아요 ·{" "}
-              {(optimisticLike ?? likeState.data)?.count ??
-                post.data.like_count ??
-                0}
+              공유하기 ↗
             </button>
-            {likeState.error && (
-              <p className="text-muted-foreground text-sm">
-                좋아요 상태를 확인하지 못했습니다.{" "}
-                <button
-                  type="button"
-                  className="underline"
-                  onClick={() => void likeState.refetch()}
-                >
-                  다시 시도
-                </button>
-              </p>
-            )}
-            {likeMessage && (
-              <p role="alert" className="text-muted-foreground text-sm">
-                {likeMessage}
-              </p>
-            )}
           </div>
-        )}
+          {article && (
+            <>
+              {likeState.error && (
+                <p className="text-muted-foreground text-sm">
+                  좋아요 상태를 확인하지 못했습니다.{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => void likeState.refetch()}
+                  >
+                    다시 시도
+                  </button>
+                </p>
+              )}
+              {likeMessage && (
+                <p role="alert" className="text-muted-foreground text-sm">
+                  {likeMessage}
+                </p>
+              )}
+            </>
+          )}
+        </div>
         {article && (
           <>
             <p className="text-muted-foreground">{visitInfo}</p>
             <p className="flex flex-wrap gap-3">
               {post.data.tags.map((tag) => (
-                <Link
-                  key={tag}
-                  href={`/posts?tag=${encodeURIComponent(tag)}`}
-                  className="text-sm underline underline-offset-4"
-                >
+                <span key={tag} className="text-muted-foreground text-sm">
                   #{tag}
-                </Link>
+                </span>
               ))}
             </p>
           </>
@@ -343,6 +394,35 @@ export function PostDetail({
           commentsEnabled={post.data.comments_enabled}
         />
       )}
+      <Dialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title="여행 기록 공유하기"
+        description="아래 주소를 복사해 이 글을 전할 수 있어요."
+      >
+        <div className="space-y-3">
+          <label htmlFor="post-share-url" className="block text-sm font-medium">
+            글 주소
+          </label>
+          <input
+            ref={shareLink}
+            id="post-share-url"
+            type="url"
+            readOnly
+            value={shareUrl}
+            onFocus={(event) => event.currentTarget.select()}
+            className="border-input bg-surface text-foreground rounded-control min-h-12 w-full border px-3 text-sm"
+          />
+          <Button type="button" onClick={() => void copyShareLink()}>
+            링크 복사
+          </Button>
+          {copyMessage && (
+            <p role="status" className="text-muted-foreground text-sm">
+              {copyMessage}
+            </p>
+          )}
+        </div>
+      </Dialog>
     </main>
   );
 }
