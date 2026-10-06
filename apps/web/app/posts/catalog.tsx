@@ -12,6 +12,7 @@ import { Pagination } from "@repo/ui/pagination";
 import { LoadingState } from "@repo/ui/skeleton";
 import { PostCard } from "../post-card";
 import { CatalogEmpty } from "./catalog-empty";
+import styles from "./catalog.module.css";
 export function Catalog({
   initialSite,
   initialPosts,
@@ -96,6 +97,7 @@ export function Catalog({
       "",
       `/posts${query.size ? `?${query}` : ""}`,
     );
+    window.scrollTo({ top: 0, behavior: "auto" });
   }
   function selectCategory(nextCategory: CategoryCode | "all") {
     setCategory(nextCategory);
@@ -107,6 +109,7 @@ export function Catalog({
       "",
       `/posts${query.size ? `?${query}` : ""}`,
     );
+    window.scrollTo({ top: 0, behavior: "auto" });
   }
   return (
     <main className="mx-auto w-full max-w-[var(--content-max)] px-5 py-10 md:px-8 md:py-14 xl:px-16">
@@ -145,7 +148,13 @@ export function Catalog({
             <LoadingState label="여행 기록을 불러오고 있어요…" />
           )}
         {posts.data && posts.data.length > 0 && (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul
+            className={
+              posts.data.length === 1
+                ? styles.singlePostList
+                : "grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            }
+          >
             {posts.data.slice(0, 12).map((post) => (
               <PostCard key={post.post_id} post={post} siteId={siteId} />
             ))}
@@ -176,7 +185,7 @@ export function Catalog({
             }
           />
         )}
-        {posts.data && posts.data.length > 0 && (
+        {posts.data && (page > 1 || posts.data.length > 12) && (
           <Pagination
             page={page}
             hasNextPage={posts.data.length > 12}
