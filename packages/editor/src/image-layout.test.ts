@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import {
   dragImageLayout,
+  imageAspectRatio,
   imagePairState,
+  imagePointerDelta,
   imagePositionPct,
   imageWidthPct,
   minImageWidthPct,
@@ -86,4 +88,15 @@ test("narrow documents keep resize corners apart with a 160px minimum", () => {
     ),
   ).toEqual({ widthPct: 50, positionPct: 0 });
   expect(minImageWidthPct(120)).toBe(100);
+});
+
+test("corner drag converts vertical motion through the image aspect ratio", () => {
+  expect(imageAspectRatio(1200, 600)).toBe(2);
+  expect(imageAspectRatio(0, 0)).toBe(1.5);
+  expect(imagePointerDelta("move", 20, 80, 2)).toBe(20);
+  expect(imagePointerDelta("resize-right", 20, 30, 2)).toBe(60);
+  expect(imagePointerDelta("resize-left", -20, 30, 2)).toBe(-60);
+  expect(imagePointerDelta("resize-right", -70, 20, 2)).toBe(-70);
+  expect(imagePointerDelta("resize-left", 70, 20, 2)).toBe(70);
+  expect(imagePointerDelta("resize-right", 30, 20, 1.5)).toBe(30);
 });
