@@ -1,0 +1,48 @@
+.homeMain {
+  width: 100%;
+}
+
+.heroScreen {
+  display: grid;
+  min-height: calc(100svh - var(--home-top-offset, 88px));
+  min-height: calc(100dvh - var(--home-top-offset, 88px));
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  scroll-margin-top: var(--home-top-offset, 88px);
+}
+
+.heroScreen > :global([data-home-template]) {
+  min-height: 100%;
+  align-self: stretch;
+  border: 0;
+  border-radius: 0;
+}
+
+.heroScreen > :global([data-home-template="D"]) > :first-child {
+  inset: 0;
+  border-radius: 0;
+}
+
+.heroImage {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(140deg, #d8e2d8, #b9d1cf 45%, #f4eee2);
+}
+
+.heroImage > :global([role="status"]),
+.heroImage > :global([role="alert"]) {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  padding: 1rem;
+  text-align: center;
+}
+
+.journalScreen {
+  min-height: 100svh;
+  min-height: 100dvh;
+  padding-top: calc(var(--home-header-height, 88px) + clamp(2.5rem, 6vh, 4rem));
+  padding-bottom: clamp(2.5rem, 6vh, 4rem);
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}

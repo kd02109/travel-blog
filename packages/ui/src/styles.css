@@ -129,6 +129,36 @@
   }
 }
 
+@layer components {
+  [data-home-a-carousel] .home-a-slide {
+    opacity: 0;
+    transform: scale(1.055);
+    pointer-events: none;
+    transition:
+      opacity 800ms ease,
+      transform 5200ms ease-out;
+  }
+
+  [data-home-a-carousel] .home-a-slide[data-active="true"] {
+    z-index: 1;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  [data-home-a-carousel] .home-a-progress {
+    width: 0;
+    animation-name: home-a-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+}
+
+@keyframes home-a-progress {
+  to {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
