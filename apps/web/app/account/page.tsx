@@ -6,9 +6,9 @@ import { AccountSettings } from "./settings";
 export default async function AccountPage() {
   const db = await createServerDatabase();
   const { data: auth } = await db.auth.getUser();
-  if (!auth.user) redirect("/login?next=%2Faccount");
+  if (!auth.user) redirect("/?login=1&next=%2Faccount");
   const { data: session } = await db.auth.getSession();
-  if (!session.session) redirect("/login?error=expired&next=%2Faccount");
+  if (!session.session) redirect("/?login=1&error=expired&next=%2Faccount");
   const api = createTravelApi({
     baseURL: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/travel-api`,
     getAccessToken: async () => session.session!.access_token,

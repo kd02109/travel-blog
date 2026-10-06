@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { shouldRetryQuery } from "./errors";
 import { createBrowserDatabase } from "@repo/database/browser";
+import { createAuthCacheSync } from "./auth-cache";
 export function ApiProvider({ children }: { children: ReactNode }) {
   const [client] = useState(
     () =>
@@ -19,15 +20,9 @@ export function ApiProvider({ children }: { children: ReactNode }) {
       !process.env.NEXT_PUBLIC_SUPABASE_URL
     )
       return;
-    let userId: string | undefined;
+    const syncAuthCache = createAuthCacheSync(client);
     const { data } = createBrowserDatabase().auth.onAuthStateChange(
-      (_event, session) => {
-        const nextId = session?.user.id;
-        if (nextId !== userId) {
-          client.clear();
-          userId = nextId;
-        }
-      },
+      (event, session) => syncAuthCache(event, session?.user.id),
     );
     return () => data.subscription.unsubscribe();
   }, [client]);

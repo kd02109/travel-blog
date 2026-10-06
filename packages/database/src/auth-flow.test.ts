@@ -130,9 +130,13 @@ describe("OAuth callbacks", () => {
 });
 
 describe("OAuth return path", () => {
-  it("allows only local post routes", () => {
+  it("allows only known local return routes", () => {
     expect(safeReturnPath("/posts/my-trip#comments")).toBe(
       "/posts/my-trip#comments",
+    );
+    expect(safeReturnPath("/account")).toBe("/account");
+    expect(safeReturnPath("/posts?category=day-walk")).toBe(
+      "/posts?category=day-walk",
     );
     for (const value of [
       "https://evil.example",
@@ -176,6 +180,23 @@ describe("sign out", () => {
     expect(response.headers.get("location")).toContain("status=signed_out");
     const failed = await handleSignOut(request, async () =>
       client(new Error("network")),
+    );
+    expect(failed.headers.get("location")).toContain("error=signout");
+  });
+  it("uses the public site's destination after a successful sign out", async () => {
+    const request = new Request("http://localhost/auth/signout", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+    });
+    const success = await handleSignOut(request, async () => client(), {
+      successPath: "/",
+    });
+    expect(success.headers.get("location")).toBe("http://localhost/");
+
+    const failed = await handleSignOut(
+      request,
+      async () => client(new Error("network")),
+      { successPath: "/" },
     );
     expect(failed.headers.get("location")).toContain("error=signout");
   });

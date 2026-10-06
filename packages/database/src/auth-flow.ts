@@ -38,7 +38,7 @@ function redirect(request: Request, path: string) {
   });
 }
 
-/** Accept only same-site post return paths; OAuth parameters must not become open redirects. */
+/** Accept only known same-site pages; OAuth parameters must not become open redirects. */
 export function safeReturnPath(value: string | null | undefined): string {
   if (
     !value ||
@@ -51,7 +51,12 @@ export function safeReturnPath(value: string | null | undefined): string {
     const url = new URL(value, "http://travel.local");
     if (
       url.origin !== "http://travel.local" ||
-      !/^\/posts\/[^/]+$/.test(url.pathname)
+      !(
+        /^\/posts\/[^/]+$/.test(url.pathname) ||
+        ["/posts", "/about", "/contents", "/notice", "/account"].includes(
+          url.pathname,
+        )
+      )
     )
       return "/";
     return `${url.pathname}${url.search}${url.hash}`;
@@ -144,6 +149,7 @@ export async function handleCallback(
 export async function handleSignOut(
   request: Request,
   createClient: () => Promise<AuthClient>,
+  { successPath = "/login?status=signed_out" }: { successPath?: string } = {},
 ) {
   // POST + exact origin check prevents cross-site logout submissions.
   if (
@@ -157,10 +163,7 @@ export async function handleSignOut(
   try {
     const client = await createClient();
     const { error } = await client.auth.signOut({ scope: "local" });
-    return redirect(
-      request,
-      error ? "/login?error=signout" : "/login?status=signed_out",
-    );
+    return redirect(request, error ? "/login?error=signout" : successPath);
   } catch {
     return redirect(request, "/login?error=signout");
   }
