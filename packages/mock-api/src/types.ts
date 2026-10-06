@@ -46,6 +46,7 @@ export type Settings = {
   title?: string;
   description?: string;
   hero_asset_id?: string;
+  hero_asset_ids?: string[];
   featured_post_id?: string;
 };
 export type Comment = {

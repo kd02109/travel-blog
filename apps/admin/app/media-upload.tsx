@@ -1,10 +1,15 @@
 "use client";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { errorMessage, TravelApiError } from "@repo/api-client";
 import { PrivateAssetView } from "./asset-view";
+import {
+  AssetStatusCheckError,
+  completeAndPollAsset,
+} from "../lib/asset-processing";
 
-type MediaState = "uploading" | "processing" | "ready" | "failed" | "cancelled";
+type MediaState =
+  "uploading" | "processing" | "waiting" | "ready" | "failed" | "cancelled";
 type MediaItem = {
   id: string;
   name: string;
@@ -18,20 +23,6 @@ type MediaItem = {
   show?: boolean;
 };
 
-function pause(ms: number, signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new DOMException("취소됨", "AbortError"));
-      },
-      { once: true },
-    );
-  });
-}
-
 /** Upload an editor-dropped image through the same asset lifecycle as the media panel. */
 export async function uploadEditorImage(
   siteId: string,
@@ -42,6 +33,7 @@ export async function uploadEditorImage(
     site_id: siteId,
     kind: "image",
   });
+  let completionSucceeded = false;
   try {
     await new Promise<void>((resolve, reject) => {
       const request = new XMLHttpRequest();
@@ -58,29 +50,33 @@ export async function uploadEditorImage(
         reject(new Error("네트워크 연결을 확인해 주세요."));
       request.send(file);
     });
-    let result = await api.mutate("asset.complete", {
-      id: created.id,
-      site_id: siteId,
-    });
-    const deadline = Date.now() + 10 * 60 * 1000;
-    while (result.state === "processing" && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 2500));
-      result = await api.mutate("asset.complete", {
-        id: created.id,
-        site_id: siteId,
-      });
-    }
-    if (result.state !== "ready")
+    const state = await completeAndPollAsset(
+      async () => {
+        const state = (
+          await api.mutate("asset.complete", {
+            id: created.id,
+            site_id: siteId,
+          })
+        ).state;
+        completionSucceeded = true;
+        return state;
+      },
+      async () =>
+        (await api.call("asset.status", { id: created.id, site_id: siteId }))
+          .state,
+    );
+    if (state !== "ready")
       throw new Error(
-        result.state === "failed"
+        state === "failed"
           ? "이미지 처리에 실패했습니다. 다시 시도해 주세요."
-          : "이미지 처리가 오래 걸리고 있습니다. 다시 확인해 주세요.",
+          : "이미지 처리가 지연되고 있습니다. 잠시 후 다시 업로드해 주세요.",
       );
     return created.id;
   } catch (error) {
-    await api
-      .mutate("asset.cancel", { id: created.id, site_id: siteId })
-      .catch(() => undefined);
+    if (!completionSucceeded)
+      await api
+        .mutate("asset.cancel", { id: created.id, site_id: siteId })
+        .catch(() => undefined);
     throw error;
   }
 }
@@ -89,29 +85,73 @@ export function MediaUpload({
   siteId,
   onInsertImage,
   onSetCoverImage,
+  onImageReady,
+  onProcessingChange,
   onSelectPdf,
   kindFilter,
+  coverActionLabel = "대표 사진으로 선택",
+  coverActionDisabled = false,
 }: {
   siteId: string;
   onInsertImage?: (assetId: string, caption?: string) => void;
   onSetCoverImage?: (assetId: string) => void;
+  onImageReady?: (assetId: string) => void;
+  onProcessingChange?: (processing: boolean) => void;
   onSelectPdf?: (assetId: string) => void;
   kindFilter?: "image" | "pdf";
+  coverActionLabel?: string;
+  coverActionDisabled?: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [items, setItems] = useState<MediaItem[]>([]);
   const controllers = useRef(new Map<string, AbortController>());
+  useEffect(() => {
+    onProcessingChange?.(
+      items.some(
+        (item) => item.state === "uploading" || item.state === "processing",
+      ),
+    );
+  }, [items, onProcessingChange]);
+  useEffect(() => {
+    const active = controllers.current;
+    return () => {
+      for (const controller of active.values()) controller.abort("unmount");
+    };
+  }, []);
   const patch = (id: string, value: Partial<MediaItem>) =>
     setItems((current) =>
       current.map((item) => (item.id === id ? { ...item, ...value } : item)),
     );
 
-  async function process(item: MediaItem) {
+  async function process(item: MediaItem, statusOnly = false) {
+    if (controllers.current.has(item.id)) return;
     const controller = new AbortController();
     controllers.current.set(item.id, controller);
-    patch(item.id, { state: "uploading", progress: 0, error: undefined });
+    patch(item.id, {
+      state: statusOnly ? "processing" : "uploading",
+      progress: statusOnly ? 100 : 0,
+      error: undefined,
+    });
     let assetId = item.assetId;
     try {
+      if (statusOnly) {
+        if (!assetId) throw new Error("파일 정보를 찾지 못했습니다.");
+        const state = (
+          await api.call("asset.status", { id: assetId, site_id: siteId })
+        ).state;
+        if (controller.signal.aborted)
+          throw new DOMException("취소됨", "AbortError");
+        if (state === "ready") {
+          patch(item.id, { state: "ready", progress: 100 });
+          if (item.kind === "image") onImageReady?.(assetId);
+        } else if (state === "failed")
+          patch(item.id, {
+            state: "failed",
+            error: "파일 처리에 실패했습니다. 다시 시도해 주세요.",
+          });
+        else patch(item.id, { state: "waiting" });
+        return;
+      }
       if (!assetId || !item.uploaded) {
         const created = await api.call("asset.create", {
           site_id: siteId,
@@ -120,7 +160,6 @@ export function MediaUpload({
         assetId = created.id;
         patch(item.id, { assetId });
         if (controller.signal.aborted) {
-          await api.mutate("asset.cancel", { id: assetId, site_id: siteId });
           throw new DOMException("취소됨", "AbortError");
         }
         await new Promise<void>((resolve, reject) => {
@@ -155,32 +194,48 @@ export function MediaUpload({
         patch(item.id, { uploaded: true });
       }
       patch(item.id, { state: "processing", progress: 100 });
-      let result = await api.mutate("asset.complete", {
-        id: assetId,
-        site_id: siteId,
-      });
-      const deadline = Date.now() + 10 * 60 * 1000;
-      while (result.state === "processing" && Date.now() < deadline) {
-        await pause(2500, controller.signal);
-        result = await api.mutate("asset.complete", {
-          id: assetId,
-          site_id: siteId,
-        });
+      const state = await completeAndPollAsset(
+        async () =>
+          (
+            await api.mutate("asset.complete", {
+              id: assetId!,
+              site_id: siteId,
+            })
+          ).state,
+        async () =>
+          (await api.call("asset.status", { id: assetId!, site_id: siteId }))
+            .state,
+        { signal: controller.signal },
+      );
+      if (state === "processing") {
+        patch(item.id, { state: "waiting", assetId, progress: 100 });
+        return;
       }
-      if (result.state !== "ready")
+      if (state !== "ready")
         throw new Error(
-          result.state === "failed"
+          state === "failed"
             ? "파일 처리에 실패했습니다. 다시 시도해 주세요."
-            : "파일 처리가 오래 걸리고 있습니다. 다시 확인해 주세요.",
+            : "파일 상태를 확인하지 못했습니다. 다시 확인해 주세요.",
         );
       patch(item.id, { state: "ready", assetId, progress: 100 });
+      if (item.kind === "image") onImageReady?.(assetId);
     } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
+      if (controller.signal.aborted && controller.signal.reason === "unmount")
+        return;
+      if (
+        controller.signal.aborted ||
+        (error instanceof DOMException && error.name === "AbortError")
+      ) {
         if (assetId)
           await api
             .mutate("asset.cancel", { id: assetId, site_id: siteId })
             .catch(() => undefined);
         patch(item.id, { state: "cancelled", error: undefined });
+      } else if (statusOnly || error instanceof AssetStatusCheckError) {
+        patch(item.id, {
+          state: "waiting",
+          error: "처리 상태를 확인하지 못했습니다. 다시 확인해 주세요.",
+        });
       } else {
         patch(item.id, {
           state: "failed",
@@ -194,21 +249,26 @@ export function MediaUpload({
         });
       }
     } finally {
-      controllers.current.delete(item.id);
+      if (controllers.current.get(item.id) === controller)
+        controllers.current.delete(item.id);
     }
   }
 
   async function cancel(item: MediaItem) {
-    controllers.current.get(item.id)?.abort();
-    if (!controllers.current.has(item.id) && item.assetId) {
+    const controller = controllers.current.get(item.id);
+    if (controller) {
+      controller.abort();
+      return;
+    }
+    if (item.assetId) {
       try {
         await api.mutate("asset.cancel", { id: item.assetId, site_id: siteId });
+        patch(item.id, { state: "cancelled" });
       } catch {
         patch(item.id, {
           error: "취소 요청을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
         });
       }
-      patch(item.id, { state: "cancelled" });
     }
   }
 
@@ -249,9 +309,11 @@ export function MediaUpload({
   return (
     <section
       className="space-y-4 rounded-lg border p-5"
-      aria-label="사진과 PDF 파일"
+      aria-label={kindFilter === "image" ? "사진 업로드" : "사진과 PDF 파일"}
     >
-      <h2 className="text-lg font-semibold">사진과 PDF</h2>
+      <h2 className="text-lg font-semibold">
+        {kindFilter === "image" ? "사진 업로드" : "사진과 PDF"}
+      </h2>
       <div className="flex flex-wrap gap-3">
         {kindFilter !== "pdf" && (
           <label className="cursor-pointer rounded border px-4 py-2">
@@ -293,11 +355,13 @@ export function MediaUpload({
                   ? `업로드 ${item.progress}%`
                   : item.state === "processing"
                     ? "파일을 확인하고 표지를 만드는 중…"
-                    : item.state === "ready"
-                      ? "사용할 수 있어요"
-                      : item.state === "cancelled"
-                        ? "취소됨"
-                        : "처리 실패"}
+                    : item.state === "waiting"
+                      ? "파일 처리 대기 중"
+                      : item.state === "ready"
+                        ? "사용할 수 있어요"
+                        : item.state === "cancelled"
+                          ? "취소됨"
+                          : "처리 실패"}
               </span>
             </div>
             {(item.state === "uploading" || item.state === "processing") && (
@@ -322,7 +386,17 @@ export function MediaUpload({
                   다시 시도
                 </button>
               )}
-              {(item.state === "uploading" || item.state === "processing") && (
+              {item.state === "waiting" && (
+                <button
+                  className="rounded border px-3 py-1"
+                  onClick={() => void process(item, true)}
+                >
+                  상태 다시 확인
+                </button>
+              )}
+              {(item.state === "uploading" ||
+                item.state === "processing" ||
+                item.state === "waiting") && (
                 <button
                   className="rounded border px-3 py-1"
                   onClick={() => void cancel(item)}
@@ -348,8 +422,9 @@ export function MediaUpload({
                   <button
                     className="rounded border px-3 py-1"
                     onClick={() => onSetCoverImage(item.assetId!)}
+                    disabled={coverActionDisabled}
                   >
-                    대표 사진으로 선택
+                    {coverActionLabel}
                   </button>
                 )}
               {item.state === "ready" &&

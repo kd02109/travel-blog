@@ -26,6 +26,7 @@ it("validates public/member/admin reads including nullable profile and audit fie
     ["admin.audit", site],
     ["admin.revisions", { id: MOCK_POST_IDS[0] }],
     ["asset.access", { id: mockId(4, 1) }],
+    ["asset.status", { id: mockId(4, 1), ...site }],
   ];
   for (const [action, input] of cases) {
     const result = engine.handle({ action, input }, owner);
@@ -34,6 +35,85 @@ it("validates public/member/admin reads including nullable profile and audit fie
       actionContracts[action].output.safeParse(result.body).success,
       action,
     ).toBe(true);
+  }
+});
+it("restricts asset status to staff of the selected site", () => {
+  const engine = createMockEngine();
+  const request = {
+    action: "asset.status",
+    input: { id: mockId(4, 1), ...site },
+  };
+  expect(engine.handle(request).status).toBe(401);
+  expect(
+    engine.handle(request, { Authorization: "Bearer mock-reader" }).status,
+  ).toBe(403);
+  expect(
+    engine.handle(
+      {
+        action: "asset.status",
+        input: { id: mockId(4, 1), site_id: mockId(1, 2) },
+      },
+      owner,
+    ).status,
+  ).toBe(403);
+});
+it("publishes an ordered home photo set and keeps draft-only photos private", () => {
+  const engine = createMockEngine({ scenario: "empty" });
+  const primary = mockId(4, 1);
+  const secondary = mockId(4, 5);
+  const settings = {
+    template_id: "C",
+    hero_asset_id: primary,
+    hero_asset_ids: [primary, secondary],
+  };
+  const imageRequest = {
+    action: "asset.access",
+    input: { ...site, id: secondary },
+  };
+  expect(engine.handle(imageRequest).status).toBe(401);
+  expect(
+    engine.handle(
+      {
+        action: "admin.settings.save",
+        input: { ...site, version: 1, settings },
+      },
+      owner,
+    ).status,
+  ).toBe(200);
+  expect(engine.handle(imageRequest).status).toBe(401);
+  expect(
+    engine.handle(
+      { action: "admin.settings.apply", input: { ...site, version: 2 } },
+      owner,
+    ).status,
+  ).toBe(200);
+  expect(engine.handle(imageRequest).status).toBe(200);
+  expect(engine.handle({ action: "site.get", input: {} }).body).toMatchObject({
+    settings,
+  });
+});
+it("rejects invalid home photo arrays", () => {
+  for (const hero_asset_ids of [
+    [mockId(4, 1), mockId(4, 1)],
+    Array.from({ length: 5 }, () => mockId(4, 1)),
+    [mockId(4, 1), mockId(4, 6)],
+  ]) {
+    const result = createMockEngine().handle(
+      {
+        action: "admin.settings.save",
+        input: {
+          ...site,
+          version: 1,
+          settings: {
+            template_id: "B",
+            hero_asset_id: mockId(4, 1),
+            hero_asset_ids,
+          },
+        },
+      },
+      owner,
+    );
+    expect(result.status).toBe(422);
   }
 });
 it("uses real status/error envelopes for denied, delayed, failed and conflicted scenarios", () => {
@@ -79,25 +159,40 @@ it("filters admin posts by status, category and title/slug search before paginat
   const filtered = engine.handle(
     {
       action: "admin.posts",
-      input: { ...site, status: "published", category: "food-cafe", search: "강릉" },
+      input: {
+        ...site,
+        status: "published",
+        category: "food-cafe",
+        search: "강릉",
+      },
     },
     owner,
   );
   expect(filtered.body).toHaveLength(1);
   expect(filtered.body).toMatchObject([
-    { category_code: "food-cafe", status: "published", title: "강릉 골목에서 만난 커피" },
+    {
+      category_code: "food-cafe",
+      status: "published",
+      title: "강릉 골목에서 만난 커피",
+    },
   ]);
 });
 it("maps invalid PostgreSQL date input to the same safe API validation code", () => {
-  expect(databaseError({ code: "22007", message: "sensitive database detail" })).toMatchObject({
+  expect(
+    databaseError({ code: "22007", message: "sensitive database detail" }),
+  ).toMatchObject({
     status: 422,
     message: "invalid_date",
   });
-  expect(databaseError({ code: "PT422", message: "invalid_dates" })).toMatchObject({
+  expect(
+    databaseError({ code: "PT422", message: "invalid_dates" }),
+  ).toMatchObject({
     status: 422,
     message: "invalid_dates",
   });
-  expect(databaseError({ code: "XX000", message: "sensitive database detail" })).toMatchObject({
+  expect(
+    databaseError({ code: "XX000", message: "sensitive database detail" }),
+  ).toMatchObject({
     status: 500,
     message: "internal_error",
   });

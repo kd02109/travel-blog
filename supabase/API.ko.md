@@ -28,7 +28,9 @@ Endpoint: `https://kqbqoopqomrwozpqgono.supabase.co/functions/v1/travel-api`
 
 프로필 아바타 필드는 DB에 준비했지만 업로드/아바타 변경 action은 아직 제공하지 않는다. 기본 별명으로 시작할 수 있다.
 
-관리자 media flow는 `asset.create`로 20MB 이하 signed upload URL을 받고 Storage에 직접 업로드한 뒤 `asset.complete`를 호출한다. `processing`/`failed` 상태는 `asset.complete`를 다시 호출해 조회하며, `failed`는 다시 호출하면 처리 큐에 재등록된다. `asset.cancel`은 아직 업로드/처리 중인 원격 작업을 중단하고 asset을 `failed` 상태로 표시한다. 관리자/owner만 사용할 수 있다. `asset.access` URL은 300초 유효하며 private bucket에서만 발급된다.
+관리자 media flow는 `asset.create`로 20MB 이하 signed upload URL을 받고 Storage에 직접 업로드한 뒤 `asset.complete`를 한 번 호출한다. 이후 처리 상태는 읽기 전용 `asset.status`로 확인한다. `asset.complete`는 `failed` 파일에 다시 호출하면 처리 큐에 재등록된다. `asset.cancel`은 아직 업로드/처리 중인 원격 작업을 중단하고 asset을 `failed` 상태로 표시한다. 관리자/owner만 사용할 수 있다. `asset.access` URL은 300초 유효하며 private bucket에서만 발급된다.
+
+구버전 Edge Function이 `asset.status`를 지원하지 않으면 관리자 화면의 처리 상태 확인이 보류된다. 새 함수를 배포하고 화면을 새로고침하면 읽기 전용 조회를 사용한다.
 
 미디어 worker는 `service_role`로만 사용할 수 있는 `travel_worker` RPC를 통해 claim/complete/fail/cancel 처리한다. `travel_queue_health`는 큐 대기·실패·만료 lease와 가장 오래된 대기 시간을 반환하는 읽기 전용 모니터다. `travel_media_cleanup`은 오래된 미참조 자산을 격리하고 7일 보존 후 Storage API 삭제·DB 최종 참조 검사 및 제거를 수행한다. 원격 migration은 적용했으며, worker가 실행되어야 정리 주기가 시작된다.
 
@@ -135,7 +137,7 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 
 회원은 `account.delete.request`(입력 없음)로 중복 없는 계정 삭제 요청을 제출할 수 있다. 처리 순서는 관리자 화면에서 댓글 익명 처리 → Supabase Auth 사용자 삭제 → 완료 표시다. 댓글 본문은 공개 대화 기록으로 보존하고 작성자 ID·프로필 연결·비회원 댓글 수정 자격증명을 제거한다. 작성자 표시는 익명 독자로 처리한다. 계정 삭제는 즉시 실행되지 않으며 요청 동안 회원은 계정을 계속 사용할 수 있다. 이메일은 요청 데이터에 복사하지 않고 대기 목록을 보여 줄 때 기존 Auth 사용자에서 읽는다. 모든 댓글이 익명 처리되기 전에는 Auth 삭제 단계를 진행하지 않는다.
 
-홈 settings 허용 필드: template_id(A/B/C/D), title(150자), description(500자), hero_asset_id, featured_post_id. 사진은 같은 사이트의 ready 이미지, 대표 글은 현재 공개 글이어야 한다. 선택/저장만으로 공개 홈이 바뀌지 않는다.
+홈 settings 허용 필드: template_id(A/B/C/D), title(150자), description(500자), hero_asset_id, hero_asset_ids, featured_post_id. `hero_asset_ids`는 순서가 있는 최대 4개의 사진 ID이고 첫 번째 ID를 `hero_asset_id`에도 기록한다. 사진은 같은 사이트의 ready 이미지, 대표 글은 현재 공개 글이어야 한다. 선택/저장만으로 공개 홈이 바뀌지 않는다. 적용 후 `hero_asset_ids`의 모든 사진을 공개 홈에서 열 수 있다.
 
 ## 파일
 
@@ -143,6 +145,7 @@ visitor.create는 HttpOnly/Secure/SameSite=Lax 쿠키도 발급한다. 다른 �
 | --- | --- | --- |
 | `asset.create` | `site_id`, `kind: image/pdf` | id, bucket, upload_url, token, path |
 | `asset.complete` | `id`, 선택 `site_id` | 업로드 검증 후 processing |
+| `asset.status` | `id`, 선택 `site_id` | 관리자 권한 확인 후 현재 처리 상태 |
 | `asset.cancel` | `id`, 선택 `site_id` | 처리 중인 원격 job 취소, asset을 failed로 표시 |
 | `asset.access` | `id`, 선택 `site_id` | 현재 공개 승인 또는 관리자 권한 확인 후 5분 URL |
 
