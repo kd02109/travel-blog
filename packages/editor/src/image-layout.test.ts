@@ -1,5 +1,11 @@
 import { expect, test } from "vitest";
-import { imagePairState } from "./image-layout";
+import {
+  dragImageLayout,
+  imagePairState,
+  imagePositionPct,
+  imageWidthPct,
+  minImageWidthPct,
+} from "./image-layout";
 
 test("adjacent paired photos share a row and an odd leftover stays single", () => {
   const photos = [
@@ -22,4 +28,62 @@ test("a photo can pair only with the next adjacent single photo", () => {
   expect(imagePairState(blocks, "a").canPair).toBe(true);
   expect(imagePairState(blocks, "b").canPair).toBe(false);
   expect(imagePairState(blocks, "c").canPair).toBe(false);
+});
+
+test("legacy image dimensions become percentages only when an edit starts", () => {
+  expect(imageWidthPct(0, "small", 800)).toBe(40);
+  expect(imageWidthPct(0, "medium", 800)).toBe(65);
+  expect(imageWidthPct(0, "large", 800)).toBe(100);
+  expect(imageWidthPct(0, "small", 320)).toBe(100);
+  expect(imagePositionPct(-1, "left")).toBe(0);
+  expect(imagePositionPct(-1, "center")).toBe(50);
+  expect(imagePositionPct(-1, "right")).toBe(100);
+  expect(imageWidthPct(62.5, "small", 800)).toBe(62.5);
+  expect(imagePositionPct(37.5, "right")).toBe(37.5);
+});
+
+test("moving an image uses the space left after its width and stays in bounds", () => {
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, 100, "move"),
+  ).toEqual({ widthPct: 50, positionPct: 75 });
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, 800, "move"),
+  ).toEqual({ widthPct: 50, positionPct: 100 });
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, -800, "move"),
+  ).toEqual({ widthPct: 50, positionPct: 0 });
+});
+
+test("corner resizing preserves the opposite edge until a document boundary", () => {
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, 80, "resize-right"),
+  ).toEqual({ widthPct: 60, positionPct: 62.5 });
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, -80, "resize-left"),
+  ).toEqual({ widthPct: 60, positionPct: 37.5 });
+  expect(
+    dragImageLayout(
+      { widthPct: 50, positionPct: 50 },
+      800,
+      800,
+      "resize-right",
+    ),
+  ).toEqual({ widthPct: 100, positionPct: 0 });
+  expect(
+    dragImageLayout({ widthPct: 50, positionPct: 50 }, 800, 800, "resize-left"),
+  ).toEqual({ widthPct: 20, positionPct: 68.8 });
+});
+
+test("narrow documents keep resize corners apart with a 160px minimum", () => {
+  expect(minImageWidthPct(320)).toBe(50);
+  expect(imageWidthPct(20, "large", 320)).toBe(50);
+  expect(
+    dragImageLayout(
+      { widthPct: 50, positionPct: 0 },
+      320,
+      -300,
+      "resize-right",
+    ),
+  ).toEqual({ widthPct: 50, positionPct: 0 });
+  expect(minImageWidthPct(120)).toBe(100);
 });
