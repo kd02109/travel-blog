@@ -12,6 +12,7 @@ export function PrivateImage({
   className,
   eager = false,
   allowRetry = true,
+  reserveSpace = false,
 }: {
   assetId: string;
   siteId: string;
@@ -19,6 +20,7 @@ export function PrivateImage({
   className?: string;
   eager?: boolean;
   allowRetry?: boolean;
+  reserveSpace?: boolean;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
@@ -55,10 +57,15 @@ export function PrivateImage({
       clearTimeout(timer);
     };
   }, [api, assetId, siteId, retry]);
-  return (
+  const content = (
     <>
       {error != null && (
         <div
+          className={
+            reserveSpace
+              ? "bg-surface/90 relative z-10 flex min-h-full items-center justify-center p-4"
+              : undefined
+          }
           onClick={
             allowRetry
               ? (event) => {
@@ -78,7 +85,7 @@ export function PrivateImage({
           />
         </div>
       )}
-      {url ? (
+      {url && (!reserveSpace || error == null) ? (
         <Image
           src={url}
           alt={title}
@@ -88,13 +95,32 @@ export function PrivateImage({
           loading={eager ? "eager" : "lazy"}
           fetchPriority={eager ? "high" : undefined}
           className={
-            className ?? "h-auto max-h-[70vh] max-w-full rounded object-contain"
+            className ??
+            (reserveSpace
+              ? "absolute inset-0 h-full w-full object-contain"
+              : "h-auto max-h-[70vh] max-w-full rounded object-contain")
           }
         />
       ) : error == null ? (
-        <p role="status">사진을 여는 중…</p>
+        <p
+          role="status"
+          className={
+            reserveSpace
+              ? "text-muted-foreground flex h-full items-center justify-center text-sm"
+              : undefined
+          }
+        >
+          사진을 여는 중…
+        </p>
       ) : null}
     </>
+  );
+  return reserveSpace ? (
+    <div className="bg-muted/30 relative aspect-[3/2] max-h-[70vh] w-full overflow-auto rounded">
+      {content}
+    </div>
+  ) : (
+    content
   );
 }
 
