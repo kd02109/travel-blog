@@ -31,7 +31,9 @@ import {
 } from "@blocknote/react";
 import {
   dragImageLayout,
+  imageAspectRatio,
   imagePairState,
+  imagePointerDelta,
   imagePositionPct,
   imageWidthPct,
   minImageWidthPct,
@@ -111,6 +113,8 @@ const ImagePreviewContext = createContext<
 type ImagePointerSession = {
   pointerId: number;
   startX: number;
+  startY: number;
+  aspectRatio: number;
   containerWidth: number;
   start: ImagePercentLayout;
   mode: ImageDragMode;
@@ -195,9 +199,15 @@ function AssetImage({
       return;
     const current = readLayout();
     if (!current) return;
+    const image = slotRef.current?.querySelector("img");
     pointerSession.current = {
       pointerId: event.pointerId,
       startX: event.clientX,
+      startY: event.clientY,
+      aspectRatio: imageAspectRatio(
+        image?.naturalWidth ?? 0,
+        image?.naturalHeight ?? 0,
+      ),
       containerWidth: current.containerWidth,
       start: current.layout,
       mode,
@@ -213,7 +223,12 @@ function AssetImage({
     const next = dragImageLayout(
       session.start,
       session.containerWidth,
-      event.clientX - session.startX,
+      imagePointerDelta(
+        session.mode,
+        event.clientX - session.startX,
+        event.clientY - session.startY,
+        session.aspectRatio,
+      ),
       session.mode,
     );
     setDraftLayout(next);
@@ -228,11 +243,17 @@ function AssetImage({
     if (event.currentTarget.hasPointerCapture(event.pointerId))
       event.currentTarget.releasePointerCapture(event.pointerId);
     setDraftLayout(null);
-    if (Math.abs(event.clientX - session.startX) >= 2) {
+    const delta = imagePointerDelta(
+      session.mode,
+      event.clientX - session.startX,
+      event.clientY - session.startY,
+      session.aspectRatio,
+    );
+    if (Math.abs(delta) >= 2) {
       const next = dragImageLayout(
         session.start,
         session.containerWidth,
-        event.clientX - session.startX,
+        delta,
         session.mode,
       );
       if (

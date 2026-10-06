@@ -188,7 +188,6 @@
   border-radius: 0.45rem;
   background: rgb(30 49 38 / 80%);
   box-shadow: 0 1px 6px rgb(0 0 0 / 20%);
-  cursor: ew-resize;
   touch-action: none;
 }
 
@@ -201,6 +200,7 @@
 
 .writer-image-resize-handle-left {
   left: 0.35rem;
+  cursor: nesw-resize;
 }
 
 .writer-image-resize-handle-left::after {
@@ -209,6 +209,7 @@
 
 .writer-image-resize-handle-right {
   right: 0.35rem;
+  cursor: nwse-resize;
 }
 
 .writer-image-resize-handle-right::after {

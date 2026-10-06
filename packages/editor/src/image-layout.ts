@@ -11,6 +11,33 @@ export type ImagePercentLayout = {
   positionPct: number;
 };
 
+export function imageAspectRatio(naturalWidth: number, naturalHeight: number) {
+  return Number.isFinite(naturalWidth) &&
+    Number.isFinite(naturalHeight) &&
+    naturalWidth > 0 &&
+    naturalHeight > 0
+    ? naturalWidth / naturalHeight
+    : 1.5;
+}
+
+/** A corner follows whichever pointer axis requests the larger width change. */
+export function imagePointerDelta(
+  mode: ImageDragMode,
+  deltaX: number,
+  deltaY: number,
+  aspectRatio: number,
+) {
+  if (mode === "move") return deltaX;
+  const edgeDirection = mode === "resize-left" ? -1 : 1;
+  const horizontalGrowth = deltaX * edgeDirection;
+  const verticalGrowth = deltaY * aspectRatio;
+  const growth =
+    Math.abs(verticalGrowth) > Math.abs(horizontalGrowth)
+      ? verticalGrowth
+      : horizontalGrowth;
+  return growth * edgeDirection;
+}
+
 const MIN_IMAGE_WIDTH_PCT = 20;
 const MIN_IMAGE_WIDTH_PX = 160;
 
