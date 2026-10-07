@@ -1,5 +1,52 @@
 import { describe, expect, it } from "vitest";
-import { hasUnpublishedChanges } from "./post-publication";
+import {
+  hasUnpublishedChanges,
+  publicationChecklist,
+} from "./post-publication";
+
+describe("publicationChecklist", () => {
+  const article = {
+    kind: "article" as const,
+    title: "제주 여행",
+    slug: "jeju-trip",
+    tags: ["제주"],
+    category: "day-walk" as const,
+    metadata: { region: "제주", visited_on: "2026-10-06" },
+    hasBodyContent: true,
+    coverAssetId: "cover-id",
+    pdfAssetId: "",
+  };
+
+  it("rejects missing travel details before asking to publish", () => {
+    const checks = publicationChecklist({ ...article, metadata: {} });
+    expect(
+      checks.find((check) => check.label === "분류별 여행 정보")?.valid,
+    ).toBe(false);
+    expect(checks.filter((check) => !check.valid)).toHaveLength(1);
+  });
+
+  it("matches title, slug, and tag restrictions on the publish endpoint", () => {
+    const checks = publicationChecklist({
+      ...article,
+      slug: "제주-여행",
+      tags: ["x".repeat(31)],
+    });
+    expect(
+      checks.filter((check) => !check.valid).map((check) => check.label),
+    ).toEqual(["주소 이름", "태그"]);
+  });
+
+  it("accepts a complete article and requires a PDF for an itinerary", () => {
+    expect(publicationChecklist(article).every((check) => check.valid)).toBe(
+      true,
+    );
+    expect(
+      publicationChecklist({ ...article, kind: "pdf", pdfAssetId: "" }).find(
+        (check) => check.label === "일정 PDF 파일",
+      )?.valid,
+    ).toBe(false);
+  });
+});
 
 describe("hasUnpublishedChanges", () => {
   it("reports a clean draft immediately after publishing its saved snapshot", () => {
