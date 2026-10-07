@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { describeApiError } from "@repo/api-client";
@@ -13,11 +19,13 @@ export function PostCover({
   siteId,
   title,
   caption,
+  overlay,
 }: {
   assetId: string;
   siteId: string;
   title: string;
   caption?: string;
+  overlay: ReactNode;
 }) {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<ImagePhase>("loading");
@@ -123,7 +131,18 @@ export function PostCover({
   return (
     <>
       <figure className={styles.cover}>
-        <div className={styles.stage}>
+        <div
+          className={styles.stage}
+          data-phase={phase}
+          style={
+            dimensions.width
+              ? ({
+                  "--photo-width": `${dimensions.width}px`,
+                  "--photo-height": `${dimensions.height}px`,
+                } as CSSProperties)
+              : undefined
+          }
+        >
           {url && phase !== "error" && (
             <button
               ref={triggerRef}
@@ -141,31 +160,48 @@ export function PostCover({
             >
               <Image
                 src={url}
-                alt={title}
+                alt=""
+                aria-hidden="true"
                 fill
                 sizes="100vw"
                 unoptimized
-                preload
-                loading="eager"
-                className={styles.coverImage}
-                onLoad={(event) => {
-                  loadedUrl.current = url;
-                  setDimensions({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight,
-                  });
-                  setPhase("ready");
-                }}
-                onError={() => {
-                  if (loadedUrl.current && loadedUrl.current !== url) {
-                    currentUrl.current = loadedUrl.current;
-                    setUrl(loadedUrl.current);
-                    return;
-                  }
-                  setError(new Error("image_load_failed"));
-                  setPhase("error");
-                }}
+                className={styles.photoBackdrop}
               />
+              <span
+                className={styles.photoFrame}
+                style={{
+                  maxWidth: dimensions.width || undefined,
+                  maxHeight: dimensions.height || undefined,
+                }}
+              >
+                <Image
+                  src={url}
+                  alt={title}
+                  fill
+                  sizes="100vw"
+                  unoptimized
+                  preload
+                  loading="eager"
+                  className={styles.coverImage}
+                  onLoad={(event) => {
+                    loadedUrl.current = url;
+                    setDimensions({
+                      width: event.currentTarget.naturalWidth,
+                      height: event.currentTarget.naturalHeight,
+                    });
+                    setPhase("ready");
+                  }}
+                  onError={() => {
+                    if (loadedUrl.current && loadedUrl.current !== url) {
+                      currentUrl.current = loadedUrl.current;
+                      setUrl(loadedUrl.current);
+                      return;
+                    }
+                    setError(new Error("image_load_failed"));
+                    setPhase("error");
+                  }}
+                />
+              </span>
               {phase === "ready" && (
                 <span className={styles.openHint} aria-hidden="true">
                   <ExpandIcon /> 원본 보기
@@ -192,6 +228,7 @@ export function PostCover({
               </div>
             </div>
           )}
+          <div className={styles.overlay}>{overlay}</div>
         </div>
         {caption && (
           <figcaption className={styles.caption}>{caption}</figcaption>

@@ -36,9 +36,25 @@
   margin-left: max(20px, calc((100% - 1064px) / 2));
 }
 
+.skeletonHero {
+  position: relative;
+  display: flex;
+  min-height: clamp(560px, 72svh, 720px);
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  margin-top: clamp(32px, 4vw, 44px);
+  padding: clamp(180px, 22svh, 260px) clamp(24px, 4vw, 52px)
+    clamp(24px, 4vw, 52px);
+  background: #dce5e1;
+}
+
 .skeletonHeader {
-  width: min(calc(100% - 40px), 720px);
-  margin: clamp(32px, 4vw, 44px) auto 0;
+  position: relative;
+  z-index: 1;
+  width: min(56%, 590px);
+  padding: clamp(29px, 3.5vw, 47px);
+  background: rgb(255 255 255 / 86%);
 }
 
 .skeletonEyebrow {
@@ -69,9 +85,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  margin-top: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  margin-top: 28px;
 }
 
 .skeletonMetaLine {
@@ -85,10 +99,10 @@
 }
 
 .skeletonCover {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: 100svh;
-  min-height: 420px;
-  margin-top: 48px;
+  height: 100%;
   background: #e1e9e5;
 }
 
@@ -147,6 +161,92 @@
 .head {
   max-width: 720px;
   margin-inline: auto;
+}
+
+.coverHead {
+  width: 100%;
+  padding: clamp(29px, 3.5vw, 47px);
+  border: 1px solid rgb(23 40 43 / 7%);
+  background: rgb(255 255 255 / 86%);
+  color: #17282b;
+  box-shadow: 0 18px 48px rgb(10 29 34 / 14%);
+}
+
+.coverHead .eyebrow {
+  margin: 0;
+  color: #3e5255;
+  font-size: 0.75rem;
+  letter-spacing: 0.09em;
+}
+
+.coverHead .eyebrow span + span::before {
+  color: #7e9292;
+}
+
+.coverHead .title {
+  max-width: 11em;
+  margin-top: 15px;
+  font-size: clamp(2.25rem, 4.1vw, 3.4375rem);
+  line-height: 1.26;
+  text-wrap: balance;
+}
+
+.coverHead .summary {
+  margin-top: 16px;
+  color: #3e5255;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+}
+
+.coverHead .metaBar {
+  display: block;
+  margin-top: 24px;
+  padding: 0;
+  border: 0;
+}
+
+.coverHead .meta {
+  gap: 5px 20px;
+  color: #3e5255;
+  font-size: 0.75rem;
+  line-height: 1.75;
+}
+
+.coverHead .actions {
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
+}
+
+.coverHead .action {
+  padding: 0 9px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #17282b;
+  font-size: 0.8125rem;
+}
+
+.coverHead .action:hover {
+  background: transparent;
+  color: #24585d;
+}
+
+.coverHead .action:focus-visible {
+  outline: 2px solid #17282b;
+  outline-offset: 3px;
+}
+
+.coverHead .shareAction {
+  margin-left: auto;
+  padding: 0 16px;
+  background: #173c42;
+  color: #fff;
+}
+
+.coverHead .shareAction:hover {
+  background: #24585d;
+  color: #fff;
 }
 
 .eyebrow {
@@ -239,12 +339,26 @@
 }
 
 .action[aria-pressed="true"] .heart {
-  color: var(--destructive);
+  fill: #bd6757;
+  stroke: #bd6757;
 }
 
 .heart {
-  font-size: 1.15rem;
-  line-height: 1;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+}
+
+.shareIcon {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
 }
 
 .status {
@@ -542,14 +656,39 @@
   }
 }
 
+@media (max-width: 820px) {
+  .skeletonHero {
+    min-height: 600px;
+    padding: 260px 18px 18px;
+  }
+
+  .skeletonHeader {
+    width: 100%;
+    padding: 27px;
+  }
+
+  .coverHead {
+    padding: 27px;
+  }
+
+  .coverHead .title {
+    font-size: clamp(2rem, 5vw, 2.625rem);
+  }
+}
+
 @media (max-width: 640px) {
   .skeletonTitle,
   .skeletonTitleShort {
     height: 30px;
   }
 
-  .skeletonCover {
-    margin-top: 40px;
+  .skeletonHero {
+    min-height: 620px;
+    padding: 240px 12px 12px;
+  }
+
+  .skeletonHeader {
+    padding: 22px 20px 18px;
   }
 
   .skeletonBody {
@@ -571,6 +710,29 @@
   .title {
     font-size: 2rem;
     line-height: 1.35;
+  }
+
+  .coverHead {
+    padding: 22px 20px 18px;
+  }
+
+  .coverHead .title {
+    font-size: clamp(1.8125rem, 8vw, 2.3125rem);
+  }
+
+  .coverHead .meta {
+    display: grid;
+    gap: 1px;
+    font-size: 0.8125rem;
+  }
+
+  .coverHead .meta span + span::before {
+    display: none;
+  }
+
+  .coverHead .actions {
+    margin-top: 20px;
+    margin-left: 0;
   }
 
   .summary {
