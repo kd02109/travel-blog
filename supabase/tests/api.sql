@@ -37,6 +37,8 @@ begin
  begin perform public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',0,'content',d)); raise exception 'lost update allowed'; exception when sqlstate 'PT409' then null; end;
  r:=public.travel_api('posts.list',null,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=0;
  r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',1,'rendered_html','<p>hello</p>','asset_ids','[]'::jsonb)); rid:=(r->>'revision_id')::uuid;
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'search','test-post'));
+ assert jsonb_array_length(r)=1 and r->0->>'published_slug'='test-post' and r->0->>'published_title'='테스트 글';
  r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',pid)); assert r->>'title'='테스트 글';
  r:=public.travel_api('posts.list',null,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=1;
  for meta_case in select * from (values
@@ -58,7 +60,11 @@ begin
   r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',pid,'version',0,'content',d));
   r:=public.travel_api('admin.post.publish',t.editor_id,jsonb_build_object('id',pid,'version',1,'rendered_html','<p>검증 본문</p>','asset_ids','[]'::jsonb));
  end loop;
- r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',base_pid,'version',2,'content',base_d||'{"title":"아직 비공개 수정"}'::jsonb));
+ r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',base_pid,'version',2,'content',base_d||'{"title":"아직 비공개 수정","slug":"unpublished-address"}'::jsonb));
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'search','test-post'));
+ assert jsonb_array_length(r)=1 and r->0->>'title'='아직 비공개 수정' and r->0->>'published_slug'='test-post';
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'search','unpublished-address'));
+ assert jsonb_array_length(r)=1 and r->0->>'published_slug'='test-post';
  r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'slug','test-post')); assert r->>'title'='테스트 글';
  r:=public.travel_api('comment.create',null,jsonb_build_object('id',base_pid,'body','댓글','guest_name','방문자','password_hash',hash,'actor_hash',repeat('a',64),'request_hash','abc','request_key',req)); cid:=(r->>'id')::uuid;
  r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'unanswered',50,0); assert jsonb_array_length(r)=1 and r->0->>'id'=cid::text and (r->0->>'comments_enabled')::boolean and r->0->'open_reports'='[]'::jsonb;
@@ -102,6 +108,10 @@ begin
  r:=public.travel_api('site.get',null,jsonb_build_object('site_id',t.site_id)); assert r->'settings'->>'template_id'='A';
  r:=public.travel_api('asset.access',null,jsonb_build_object('id',t.asset_id)); assert r->>'state'='ready';
  r:=public.travel_api('admin.post.status',t.editor_id,jsonb_build_object('id',base_pid,'version',3,'status','private'));
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'search','test-post'));
+ assert jsonb_array_length(r)=0;
+ r:=public.travel_admin_posts(t.editor_id,jsonb_build_object('site_id',t.site_id,'search','unpublished-address'));
+ assert jsonb_array_length(r)=1 and r->0->>'published_slug' is null and r->0->>'published_title' is null;
  begin perform public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'id',base_pid)); raise exception 'private leaked'; exception when sqlstate 'PT404' then null; end;
  begin perform public.travel_api('asset.access',null,jsonb_build_object('id',t.asset_id)); raise exception 'private asset leaked'; exception when sqlstate 'PT401' then null; end;
  -- Draft edits remain private; checkpoints, restores and publication updates keep distinct snapshots.

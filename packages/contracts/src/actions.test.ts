@@ -89,6 +89,8 @@ const samples = {
       status: "draft",
       category_code: "day-walk",
       title: null,
+      published_slug: null,
+      published_title: null,
       lock_version: 0,
       updated_at: date,
       first_published_at: null,

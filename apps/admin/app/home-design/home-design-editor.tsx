@@ -621,7 +621,7 @@ export function HomeDesignEditor({
               )}
               {(visiblePublishedPosts ?? []).map((post) => (
                 <SelectItem value={post.id} key={post.id}>
-                  {post.title || "제목 없는 글"}
+                  {post.published_title || post.title || "제목 없는 글"}
                 </SelectItem>
               ))}
             </SelectContent>

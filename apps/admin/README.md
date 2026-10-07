@@ -7,3 +7,4 @@
 `/write`는 서버에서 사용자와 사이트 편집 권한을 확인합니다.
 `/playground`는 개발 환경 전용이며 작성 내용은 저장하지 않습니다.
 환경 변수와 연동 범위는 [루트 README](../../README.md)를 참고하세요.
+글 관리의 “공개 글 보기” 링크는 관리자 서버의 `WEB_ORIGIN`을 공개 웹 사이트의 origin(예: `https://blog.example.com`)으로 설정하면 표시됩니다. 개발 모드에서는 값이 없을 때 `http://localhost:3000`을 사용하고, 운영 모드에서는 HTTPS origin이 없으면 링크를 표시하지 않습니다.
