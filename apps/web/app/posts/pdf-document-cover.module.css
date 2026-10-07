@@ -1,0 +1,194 @@
+.field {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: inline-size;
+  background: #dce4df;
+}
+
+.field::before {
+  position: absolute;
+  width: 75%;
+  height: 68%;
+  border: 1px solid rgb(39 79 69 / 8%);
+  border-radius: 50%;
+  content: "";
+  transform: rotate(-20deg) scale(1.35);
+}
+
+.fieldLabel,
+.pdfMark {
+  position: absolute;
+  z-index: 2;
+  color: #40695d;
+  font-family: var(--font-body), "Noto Sans KR", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+}
+
+.fieldLabel {
+  top: clamp(12px, 4cqw, 24px);
+  left: clamp(14px, 4.5cqw, 27px);
+  font-size: clamp(8px, 1.9cqw, 10px);
+}
+
+.pdfMark {
+  right: clamp(13px, 4cqw, 24px);
+  bottom: clamp(12px, 4cqw, 22px);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(9px, 2cqw, 11px);
+}
+
+.pdfMark svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: clamp(112px, 42cqw, 220px);
+  aspect-ratio: 0.71;
+  padding: clamp(12px, 4.2cqw, 25px) clamp(11px, 3.7cqw, 22px)
+    clamp(10px, 3.2cqw, 19px);
+  background: #fffefa;
+  box-shadow:
+    0 18px 35px rgb(16 45 50 / 15%),
+    0 2px 5px rgb(16 45 50 / 8%);
+}
+
+.sheetHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  color: #426e5d;
+  font-size: clamp(5px, 1.25cqw, 7px);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: 0.12em;
+}
+
+.sheetHead span:last-child {
+  color: #9bacaa;
+}
+
+.rule {
+  height: 1px;
+  margin-top: clamp(8px, 2.5cqw, 14px);
+  background: #cddad2;
+}
+
+.title {
+  display: -webkit-box;
+  overflow: hidden;
+  margin-top: clamp(12px, 4cqw, 24px);
+  color: #173c42;
+  font-family: var(--font-editorial), "Noto Serif KR", serif;
+  font-size: clamp(16px, 5cqw, 27px);
+  font-weight: 500;
+  line-height: 1.38;
+  letter-spacing: -0.065em;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.subtitle {
+  margin-top: clamp(4px, 1.2cqw, 8px);
+  color: #6d8380;
+  font-size: clamp(6px, 1.35cqw, 8px);
+  letter-spacing: 0.04em;
+}
+
+.route {
+  position: relative;
+  height: clamp(39px, 12cqw, 70px);
+  margin-top: clamp(10px, 4cqw, 27px);
+  border-block: 1px solid #dce5dd;
+}
+
+.route svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.route path {
+  fill: none;
+  stroke: #7fa093;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.route circle {
+  fill: #3f755f;
+  stroke: #fffefa;
+  stroke-width: 2;
+}
+
+.rows {
+  display: grid;
+  gap: clamp(4px, 1.4cqw, 8px);
+  margin-top: clamp(9px, 3cqw, 18px);
+}
+
+.rows i {
+  height: clamp(2px, 0.6cqw, 3px);
+  background: #d1dcd4;
+}
+
+.rows i:nth-child(2) {
+  width: 83%;
+}
+
+.rows i:nth-child(3) {
+  width: 61%;
+}
+
+.sheetFoot {
+  margin-top: auto;
+  padding-top: 6px;
+  color: #789087;
+  font-size: clamp(5px, 1.25cqw, 7px);
+  letter-spacing: 0.05em;
+}
+
+@container (max-width: 420px) {
+  .title {
+    margin-top: 10px;
+    line-height: 1.32;
+  }
+
+  .route {
+    height: clamp(28px, 10cqw, 42px);
+    margin-top: 9px;
+  }
+
+  .rows {
+    gap: 4px;
+    margin-top: 9px;
+  }
+
+  .sheetFoot {
+    padding-top: 4px;
+  }
+}
+
+@container (max-width: 320px) {
+  .subtitle,
+  .rows i:last-child {
+    display: none;
+  }
+}

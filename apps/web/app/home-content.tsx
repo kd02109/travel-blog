@@ -18,7 +18,8 @@ import { AnalyticsConsent } from "./analytics-consent";
 import { HomeHeroSkeleton } from "./home-loading";
 import { PostCard, PostCardSkeleton } from "./post-card";
 import { CatalogEmpty } from "./posts/catalog-empty";
-import { PdfCover, PrivateImage } from "./posts/post-media";
+import { PrivateImage } from "./posts/post-media";
+import { PdfDocumentCover } from "./posts/pdf-document-cover";
 import { PublicApiErrorState } from "./public-feedback";
 import styles from "./home-content.module.css";
 
@@ -74,12 +75,7 @@ function LatestStory({
       <div className={styles.latestMedia}>
         {coverAssetId ? (
           pdf ? (
-            <PdfCover
-              assetId={coverAssetId}
-              siteId={siteId}
-              title={post.title}
-              allowRetry={false}
-            />
+            <PdfDocumentCover title={post.title} />
           ) : (
             <PrivateImage
               assetId={coverAssetId}

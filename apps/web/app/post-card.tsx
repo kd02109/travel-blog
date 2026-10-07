@@ -2,7 +2,8 @@ import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES } from "@repo/constants";
 import { Skeleton } from "@repo/ui/skeleton";
-import { PdfCover, PrivateImage } from "./posts/post-media";
+import { PrivateImage } from "./posts/post-media";
+import { PdfDocumentCover } from "./posts/pdf-document-cover";
 
 export type PublicPostCard = ActionOutput<"posts.list">[number];
 
@@ -73,12 +74,7 @@ export function PostCard({
             className="aspect-[3/2] w-full overflow-hidden bg-[linear-gradient(150deg,#d8e2d8,#b9d1cf_45%,#f4eee2)]"
           >
             {pdf && post.pdf_asset_id ? (
-              <PdfCover
-                assetId={post.pdf_asset_id}
-                siteId={siteId}
-                title={post.title}
-                allowRetry={false}
-              />
+              <PdfDocumentCover title={post.title} />
             ) : post.cover_asset_id ? (
               <PrivateImage
                 assetId={post.cover_asset_id}
@@ -94,17 +90,15 @@ export function PostCard({
           data-card-copy
           className={`flex flex-1 flex-col items-start ${hasImage ? "p-5" : "p-7"}`}
         >
-          {!pdf && (
-            <span className="text-muted-foreground text-sm">
-              {
-                CATEGORIES.find((item) => item.code === post.category_code)
-                  ?.label
-              }
-            </span>
-          )}
+          <span className="text-muted-foreground text-sm">
+            {pdf
+              ? "PDF · 여행 일정표"
+              : CATEGORIES.find((item) => item.code === post.category_code)
+                  ?.label}
+          </span>
           <span
             data-card-title
-            className={`font-serif leading-relaxed group-hover:underline ${hasImage ? "mt-3 text-xl" : "mt-8 text-2xl"}`}
+            className={`font-serif leading-relaxed group-hover:underline ${hasImage ? `${pdf ? "mt-6" : "mt-3"} text-xl` : "mt-8 text-2xl"}`}
           >
             {post.title}
           </span>
