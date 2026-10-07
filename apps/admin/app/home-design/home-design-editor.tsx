@@ -30,6 +30,7 @@ import { HomeCoverThumbnail } from "./home-cover-thumbnail";
 import styles from "./home-preview.module.css";
 
 const latestFeaturedPostValue = "__latest_featured_post__";
+const featuredPostPageSize = 12;
 
 type SiteSettings = ActionInput<"admin.settings.save">["settings"];
 const maxHomeImages = 4;
@@ -93,10 +94,19 @@ export function HomeDesignEditor({
     scope,
     { enabled: owner },
   );
+  const [postSearch, setPostSearch] = useState("");
+  const [settledPostSearch, setSettledPostSearch] = useState("");
+  const [postPage, setPostPage] = useState(1);
   const publishedPosts = useTravelQuery(
     api,
     "admin.posts",
-    { site_id: siteId, status: "published", limit: 50, offset: 0 },
+    {
+      site_id: siteId,
+      status: "published",
+      limit: featuredPostPageSize + 1,
+      offset: (postPage - 1) * featuredPostPageSize,
+      ...(settledPostSearch ? { search: settledPostSearch } : {}),
+    },
     scope,
     { enabled: owner },
   );
@@ -131,9 +141,15 @@ export function HomeDesignEditor({
   const featuredInRecent = recentPosts.data?.find(
     (post) => post.post_id === featuredId,
   );
-  const featuredInAdmin = publishedPosts.data?.find(
+  const visiblePublishedPosts = publishedPosts.data?.slice(
+    0,
+    featuredPostPageSize,
+  );
+  const featuredInAdmin = visiblePublishedPosts?.find(
     (post) => post.id === featuredId,
   );
+  const hasMorePublishedPosts =
+    (publishedPosts.data?.length ?? 0) > featuredPostPageSize;
   const featuredDetail = useTravelQuery(
     api,
     "post.get",
@@ -152,6 +168,14 @@ export function HomeDesignEditor({
     if (fullscreenPreview && !dialog.open) dialog.showModal();
     if (!fullscreenPreview && dialog.open) dialog.close();
   }, [fullscreenPreview]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setSettledPostSearch(postSearch.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [postSearch]);
 
   function update(key: string, value: string | null) {
     setDraft((previous) => ({
@@ -551,45 +575,98 @@ export function HomeDesignEditor({
           isRetrying={featuredDetail.isFetching}
         />
       )}
-      <label className="block max-w-2xl space-y-2">
-        대표 여행 글
-        <Select
-          value={
-            typeof draftSettings.featured_post_id === "string"
-              ? draftSettings.featured_post_id || latestFeaturedPostValue
-              : latestFeaturedPostValue
-          }
-          onValueChange={(value) =>
-            update(
-              "featured_post_id",
-              value === latestFeaturedPostValue ? null : value,
-            )
-          }
-        >
-          <SelectTrigger aria-label="대표 여행 글 선택">
-            <SelectValue placeholder="최근 공개 글 사용" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={latestFeaturedPostValue}>
-              최근 공개 글 사용
-            </SelectItem>
-            {featuredId && !featuredInAdmin && (
-              <SelectItem value={featuredId}>
-                {featuredInRecent?.title ??
-                  featuredDetail.data?.title ??
-                  (featuredDetail.isError
-                    ? "선택한 글을 찾을 수 없음"
-                    : "선택한 글 불러오는 중…")}
+      <div className="max-w-2xl space-y-3">
+        <label className="block space-y-2">
+          공개 글 검색
+          <Input
+            value={postSearch}
+            maxLength={100}
+            placeholder="제목 또는 주소 이름으로 검색"
+            onChange={(event) => {
+              setPostSearch(event.currentTarget.value);
+              setPostPage(1);
+            }}
+          />
+        </label>
+        <label className="block space-y-2">
+          대표 여행 글
+          <Select
+            value={
+              typeof draftSettings.featured_post_id === "string"
+                ? draftSettings.featured_post_id || latestFeaturedPostValue
+                : latestFeaturedPostValue
+            }
+            onValueChange={(value) =>
+              update(
+                "featured_post_id",
+                value === latestFeaturedPostValue ? null : value,
+              )
+            }
+          >
+            <SelectTrigger aria-label="대표 여행 글 선택">
+              <SelectValue placeholder="최근 공개 글 사용" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={latestFeaturedPostValue}>
+                최근 공개 글 사용
               </SelectItem>
+              {featuredId && !featuredInAdmin && (
+                <SelectItem value={featuredId}>
+                  {featuredInRecent?.title ??
+                    featuredDetail.data?.title ??
+                    (featuredDetail.isError
+                      ? "선택한 글을 찾을 수 없음"
+                      : "선택한 글 불러오는 중…")}
+                </SelectItem>
+              )}
+              {(visiblePublishedPosts ?? []).map((post) => (
+                <SelectItem value={post.id} key={post.id}>
+                  {post.title || "제목 없는 글"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </label>
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={postPage === 1 || publishedPosts.isFetching}
+            onClick={() => setPostPage((page) => Math.max(1, page - 1))}
+          >
+            이전 글
+          </Button>
+          <span aria-live="polite">{postPage} 페이지</span>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              !hasMorePublishedPosts ||
+              publishedPosts.isFetching ||
+              publishedPosts.isError
+            }
+            onClick={() => setPostPage((page) => page + 1)}
+          >
+            다음 글
+          </Button>
+          {publishedPosts.isFetching && (
+            <span className="text-muted-foreground" role="status">
+              공개 글을 불러오는 중…
+            </span>
+          )}
+          {!publishedPosts.isFetching &&
+            !publishedPosts.isError &&
+            visiblePublishedPosts?.length === 0 && (
+              <span className="text-muted-foreground" role="status">
+                검색 결과가 없습니다.
+              </span>
             )}
-            {(publishedPosts.data ?? []).map((post) => (
-              <SelectItem value={post.id} key={post.id}>
-                {post.title || "제목 없는 글"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </label>
+        </div>
+        <p className="text-muted-foreground text-sm">
+          검색과 페이지 이동은 공개 글 목록에만 적용됩니다. 선택한 대표 글은
+          계속 유지됩니다.
+        </p>
+      </div>
 
       <section className="space-y-4" aria-labelledby="home-images-heading">
         <div>
