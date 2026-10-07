@@ -24,11 +24,17 @@ import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { TravelApiError } from "@repo/api-client";
 import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import type { ActionInput, ActionOutput } from "@repo/contracts";
-import { validateDraftMetadata } from "@repo/contracts";
+import {
+  validateDraftMetadata,
+  validatePublishedMetadata,
+} from "@repo/contracts";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { MediaUpload, uploadEditorImage } from "./media-upload";
 import { PrivateAssetView } from "./asset-view";
-import { hasUnpublishedChanges } from "../lib/post-publication";
+import {
+  hasUnpublishedChanges,
+  publicationChecklist,
+} from "../lib/post-publication";
 const Editor = dynamic(
   () => import("@repo/editor").then((module) => module.WriterEditor),
   { ssr: false, loading: () => <p>편집기를 준비하고 있어요…</p> },
@@ -476,32 +482,20 @@ export function Composer({ postId }: { postId?: string }) {
   );
 
   const publishChecks = post
-    ? post.kind === "article"
-      ? [
-          {
-            label: "제목과 주소 이름",
-            valid: title.trim().length > 0 && slug.trim().length > 0,
-          },
-          {
-            label: "분류별 여행 정보",
-            valid: !validateDraftMetadata(
-              category as Exclude<
-                (typeof CATEGORIES)[number]["code"],
-                "itinerary-pdf"
-              >,
-              metadata,
-            ),
-          },
-          { label: "본문 내용", valid: document.some(blockHasContent) },
-          { label: "대표 사진", valid: !!coverAssetId },
-        ]
-      : [
-          {
-            label: "제목과 주소 이름",
-            valid: title.trim().length > 0 && slug.trim().length > 0,
-          },
-          { label: "일정 PDF 파일", valid: !!pdfAssetId },
-        ]
+    ? publicationChecklist({
+        kind: post.kind,
+        title,
+        slug,
+        tags,
+        category: category as Exclude<
+          (typeof CATEGORIES)[number]["code"],
+          "itinerary-pdf"
+        >,
+        metadata,
+        hasBodyContent: document.some(blockHasContent),
+        coverAssetId,
+        pdfAssetId,
+      })
     : [];
 
   async function restoreSnapshot(revisionId: string) {
@@ -603,9 +597,20 @@ export function Composer({ postId }: { postId?: string }) {
     const missing = publishChecks
       .filter((check) => !check.valid)
       .map((check) => check.label);
-    if (post.kind === "article" && missing.length) {
+    if (missing.length) {
+      if (post.kind === "article") {
+        setMetadataError(
+          validatePublishedMetadata(
+            category as Exclude<
+              (typeof CATEGORIES)[number]["code"],
+              "itinerary-pdf"
+            >,
+            metadata,
+          ) ?? "",
+        );
+        setPreview(true);
+      }
       setMessage(`발행 전에 확인해 주세요: ${missing.join(", ")}`);
-      setPreview(true);
       return;
     }
     const updating = post.status === "published";
@@ -1286,11 +1291,19 @@ export function Composer({ postId }: { postId?: string }) {
           )}
           {metadataError && (
             <p role="alert">
-              {metadataError === "invalid_date"
-                ? "날짜를 다시 확인해 주세요."
-                : metadataError === "invalid_dates"
-                  ? "종료일은 시작일 이후로 선택해 주세요."
-                  : "카페 또는 음식점 중 하나를 선택해 주세요."}
+              {metadataError === "incomplete_article"
+                ? "지역명을 입력해 주세요."
+                : metadataError === "missing_date"
+                  ? "방문일을 입력해 주세요."
+                  : metadataError === "missing_place"
+                    ? category === "stay-review"
+                      ? "숙소명을 입력해 주세요."
+                      : "장소명을 입력해 주세요."
+                    : metadataError === "invalid_date"
+                      ? "날짜를 다시 확인해 주세요."
+                      : metadataError === "invalid_dates"
+                        ? "종료일은 시작일 이후로 선택해 주세요."
+                        : "카페 또는 음식점 중 하나를 선택해 주세요."}
             </p>
           )}
         </fieldset>
