@@ -1,0 +1,251 @@
+.imageFrame,
+.pdfCover {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  place-items: center;
+  overflow: hidden;
+  background: #e4e9e6;
+}
+
+.imageFrame {
+  aspect-ratio: 3 / 2;
+}
+
+.reserveFrame {
+  max-height: 70vh;
+  border-radius: 0.4rem;
+}
+
+.imageFrame > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.imagePending {
+  visibility: hidden;
+}
+
+.imageSkeleton {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #e4e9e6;
+}
+
+.imageSkeleton::after,
+.figureSkeleton::after {
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    rgb(255 255 255 / 48%) 50%,
+    transparent 72%
+  );
+  animation: sweep 1.55s ease-in-out infinite;
+  content: "";
+}
+
+@keyframes sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.imageError {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: auto;
+}
+
+.imageError > *,
+.pdfCover > [role="alert"] {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.compactImageError {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #fafbf9;
+}
+
+.compactImageError > span {
+  display: grid;
+  width: min(70%, 32px);
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid #d6ded8;
+  border-radius: 50%;
+  color: #7a4d3a;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.pdfCover {
+  aspect-ratio: 3 / 2;
+}
+
+.pdfUnavailable {
+  position: relative;
+  z-index: 1;
+  padding: 16px;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+
+.assetFigures figure[data-asset-id] > .figureFrame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  max-height: min(70vh, 760px);
+  aspect-ratio: 3 / 2;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 0.4rem;
+  background: #e4e9e6;
+}
+
+.assetFigures figure[data-image-width="small"] > .figureFrame {
+  max-height: min(42vh, 340px);
+}
+
+.assetFigures figure[data-image-width="medium"] > .figureFrame {
+  max-height: min(56vh, 540px);
+}
+
+.assetFigures [data-image-pair] figure[data-asset-id] > .figureFrame {
+  max-height: min(52vh, 480px);
+}
+
+.figureFrame > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.assetFigures figure[data-asset-id] > .figureFrame[data-state="ready"] {
+  display: block;
+  max-height: none;
+  aspect-ratio: auto;
+  overflow: visible;
+  background: transparent;
+}
+
+.figureFrame[data-state="ready"] > img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(70vh, 760px);
+  margin-inline: auto;
+  border-radius: 0.4rem;
+}
+
+.assetFigures
+  figure[data-image-width="small"]
+  > .figureFrame[data-state="ready"]
+  > img {
+  max-height: min(42vh, 340px);
+}
+
+.assetFigures
+  figure[data-image-width="medium"]
+  > .figureFrame[data-state="ready"]
+  > img {
+  max-height: min(56vh, 540px);
+}
+
+.assetFigures
+  [data-image-pair]
+  figure[data-asset-id]
+  > .figureFrame[data-state="ready"]
+  > img {
+  max-height: min(52vh, 480px);
+}
+
+.figureFrame[data-state="loading"] > img,
+.figureFrame[data-state="error"] > img {
+  visibility: hidden;
+}
+
+.figureSkeleton {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #e4e9e6;
+}
+
+.figureSkeleton[hidden],
+.figureError[hidden],
+.figureRetry[hidden] {
+  display: none;
+}
+
+.figureError {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: #fafbf9;
+  text-align: center;
+}
+
+.figureError::before {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid #d6ded8;
+  border-radius: 50%;
+  color: #7a4d3a;
+  content: "!";
+}
+
+.figureError strong {
+  font-size: 0.9375rem;
+}
+
+.figureError p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.figureRetry {
+  min-height: 40px;
+  margin-top: 7px;
+  padding: 0 15px;
+  background: var(--foreground);
+  color: var(--background);
+  font-size: 0.75rem;
+}
+
+.figureRetry:disabled {
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imageSkeleton::after,
+  .figureSkeleton::after {
+    animation: none;
+  }
+}

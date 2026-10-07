@@ -8,14 +8,56 @@ import { TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { PostCard } from "../post-card";
+import { PostCardSkeleton } from "../post-card";
 import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
 import { PostCover } from "./post-cover";
+import { PublicApiErrorState } from "../public-feedback";
 import { EmptyState } from "@repo/ui/feedback";
-import { LoadingState } from "@repo/ui/skeleton";
+import { Skeleton } from "@repo/ui/skeleton";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
 import { CommentSection } from "./comment-section";
 import styles from "./post-detail.module.css";
+
+export function PostDetailSkeleton() {
+  return (
+    <main
+      className={styles.page}
+      role="status"
+      aria-label="여행 기록을 불러오는 중"
+    >
+      <span className="sr-only">여행 기록을 불러오는 중입니다.</span>
+      <div className={styles.skeletonPage} aria-hidden="true">
+        <Skeleton className={styles.skeletonBack} />
+        <div className={styles.skeletonHeader}>
+          <Skeleton className={styles.skeletonEyebrow} />
+          <Skeleton className={styles.skeletonTitle} />
+          <Skeleton className={styles.skeletonTitleShort} />
+          <Skeleton className={styles.skeletonSummary} />
+          <div className={styles.skeletonMeta}>
+            <Skeleton className={styles.skeletonMetaLine} />
+            <Skeleton className={styles.skeletonMetaAction} />
+          </div>
+        </div>
+        <Skeleton className={styles.skeletonCover} />
+        <Skeleton className={styles.skeletonCaption} />
+        <div className={styles.skeletonBody}>
+          {[95, 91, 97, 81, 93, 62].map((width, index) => (
+            <Skeleton key={index} style={{ width: `${width}%` }} />
+          ))}
+        </div>
+        <div className={styles.skeletonRelated}>
+          <Skeleton className={styles.skeletonRelatedTitle} />
+          <ul className={styles.relatedGrid}>
+            <PostCardSkeleton />
+            <PostCardSkeleton />
+          </ul>
+        </div>
+      </div>
+    </main>
+  );
+}
+
 export function PostDetail({
   slug,
   initialSite,
@@ -208,8 +250,9 @@ export function PostDetail({
     );
   if (!post.data && (readError || initialError)) {
     return (
-      <main className="mx-auto w-full max-w-3xl px-5 py-12">
-        <ApiErrorState
+      <main className={styles.readErrorPage}>
+        <PublicApiErrorState
+          size="tall"
           error={readError ?? initialError}
           title="여행 기록에 연결하지 못했어요"
           description={readError ? undefined : initialError}
@@ -219,12 +262,7 @@ export function PostDetail({
       </main>
     );
   }
-  if (!post.data)
-    return (
-      <main className="mx-auto w-full max-w-3xl px-5 py-12">
-        <LoadingState label="여행 기록을 불러오고 있어요…" />
-      </main>
-    );
+  if (!post.data) return <PostDetailSkeleton />;
   const article = post.data.category_code !== "itinerary-pdf";
   const metadata = post.data.metadata as Record<string, unknown>;
   const categoryLabel =
@@ -294,7 +332,8 @@ export function PostDetail({
       </Link>
       {readError && (
         <div className={styles.status}>
-          <ApiErrorState
+          <PublicApiErrorState
+            size="small"
             error={readError}
             title="여행 기록을 새로 확인하지 못했어요"
             onRetry={retryPost}
@@ -444,9 +483,29 @@ export function PostDetail({
           />
         </div>
       )}
+      {post.data.category_code !== "itinerary-pdf" &&
+        related.isPending &&
+        !related.data && (
+          <section
+            className={styles.afterArticle}
+            role="status"
+            aria-label="관련 여행 기록을 불러오는 중"
+          >
+            <span className="sr-only">관련 여행 기록을 불러오는 중입니다.</span>
+            <div aria-hidden="true">
+              <p className={styles.sectionKicker}>KEEP READING</p>
+              <h2 className={styles.relatedHeading}>다음 여행 읽기</h2>
+              <ul className={styles.relatedGrid}>
+                <PostCardSkeleton />
+                <PostCardSkeleton />
+              </ul>
+            </div>
+          </section>
+        )}
       {post.data.category_code !== "itinerary-pdf" && related.error && (
         <div className={styles.afterArticle}>
-          <ApiErrorState
+          <PublicApiErrorState
+            size="small"
             error={related.error}
             title="같은 분류의 여행을 확인하지 못했어요"
             onRetry={() => void related.refetch()}
