@@ -9,6 +9,7 @@ const nextConfig = {
     "@repo/constants",
     "@repo/observability",
     "@repo/analytics",
+    "@repo/pdf-reader",
   ],
 };
 export default withSentryConfig(nextConfig, {
