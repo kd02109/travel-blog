@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { describeApiError } from "@repo/api-client";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { ApiErrorState } from "@repo/api-client/feedback";
 import Image from "next/image";
 import dynamic from "next/dynamic";
+import { PublicApiErrorState } from "../public-feedback";
+import styles from "./post-media.module.css";
 
 const PdfReader = dynamic(() => import("./pdf-reader"), {
   ssr: false,
@@ -26,15 +27,7 @@ const PdfReader = dynamic(() => import("./pdf-reader"), {
   ),
 });
 
-export function PrivateImage({
-  assetId,
-  siteId,
-  title,
-  className,
-  eager = false,
-  allowRetry = true,
-  reserveSpace = false,
-}: {
+type PrivateImageProps = {
   assetId: string;
   siteId: string;
   title: string;
@@ -42,34 +35,70 @@ export function PrivateImage({
   eager?: boolean;
   allowRetry?: boolean;
   reserveSpace?: boolean;
-}) {
+  compactError?: boolean;
+};
+
+export function PrivateImage(props: PrivateImageProps) {
+  return (
+    <PrivateImageForAsset key={`${props.siteId}:${props.assetId}`} {...props} />
+  );
+}
+
+function PrivateImageForAsset({
+  assetId,
+  siteId,
+  title,
+  className,
+  eager = false,
+  allowRetry = true,
+  reserveSpace = false,
+  compactError = false,
+}: PrivateImageProps) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [retry, setRetry] = useState(0);
+  const loadedUrl = useRef("");
+  const currentUrl = useRef("");
   useEffect(() => {
     let disposed = false;
     let timer: ReturnType<typeof setTimeout>;
+    let failures = 0;
     const refresh = async () => {
-      setLoading(true);
       try {
         const asset = await api.call("asset.access", {
           id: assetId,
           site_id: siteId,
         });
         if (disposed) return;
+        if (loadedUrl.current && asset.url !== currentUrl.current) {
+          const nextImage = new window.Image();
+          nextImage.src = asset.url;
+          await nextImage.decode();
+          if (disposed) return;
+        }
+        currentUrl.current = asset.url;
         setUrl(asset.url);
         setError(null);
-        setLoading(false);
+        if (!loadedUrl.current) setPhase("loading");
+        failures = 0;
         timer = setTimeout(
           () => void refresh(),
           Math.max(30, asset.expires_in - 45) * 1000,
         );
       } catch (cause) {
         if (disposed) return;
-        setError(cause ?? new Error("asset_access_failed"));
-        setLoading(false);
+        if (!loadedUrl.current) {
+          setError(cause ?? new Error("asset_access_failed"));
+          setPhase("error");
+        } else {
+          failures += 1;
+          timer = setTimeout(
+            () => void refresh(),
+            Math.min(60, 5 * 2 ** Math.min(failures, 4)) * 1000,
+          );
+        }
       }
     };
     void refresh();
@@ -78,15 +107,61 @@ export function PrivateImage({
       clearTimeout(timer);
     };
   }, [api, assetId, siteId, retry]);
-  const content = (
-    <>
-      {error != null && (
+  const retryImage = () => {
+    loadedUrl.current = "";
+    currentUrl.current = "";
+    setUrl("");
+    setError(null);
+    setPhase("loading");
+    setRetry((current) => current + 1);
+  };
+  return (
+    <div
+      className={`${styles.imageFrame} ${reserveSpace ? styles.reserveFrame : ""}`}
+      data-state={phase}
+    >
+      {url && phase !== "error" && (
+        <Image
+          src={url}
+          alt={title}
+          width={1600}
+          height={1200}
+          unoptimized
+          loading={eager ? "eager" : "lazy"}
+          fetchPriority={eager ? "high" : undefined}
+          className={`${className ?? "h-full w-full object-contain"} ${phase === "loading" ? styles.imagePending : ""}`}
+          onLoad={() => {
+            loadedUrl.current = url;
+            setPhase("ready");
+          }}
+          onError={() => {
+            if (loadedUrl.current && loadedUrl.current !== url) {
+              currentUrl.current = loadedUrl.current;
+              setUrl(loadedUrl.current);
+              return;
+            }
+            setError(new Error("image_load_failed"));
+            setPhase("error");
+          }}
+        />
+      )}
+      {phase === "loading" && (
+        <div className={styles.imageSkeleton} role="status">
+          <span className="sr-only">사진을 불러오는 중입니다.</span>
+        </div>
+      )}
+      {phase === "error" && compactError && (
         <div
-          className={
-            reserveSpace
-              ? "bg-surface/90 relative z-10 flex min-h-full items-center justify-center p-4"
-              : undefined
-          }
+          className={styles.compactImageError}
+          role="alert"
+          aria-label="사진을 불러오지 못했어요"
+        >
+          <span aria-hidden="true">!</span>
+        </div>
+      )}
+      {phase === "error" && !compactError && (
+        <div
+          className={styles.imageError}
           onClick={
             allowRetry
               ? (event) => {
@@ -96,66 +171,37 @@ export function PrivateImage({
               : undefined
           }
         >
-          <ApiErrorState
+          <PublicApiErrorState
+            size="small"
             error={error}
             title="사진을 불러오지 못했어요"
-            onRetry={
-              allowRetry ? () => setRetry((current) => current + 1) : undefined
-            }
-            isRetrying={loading}
+            onRetry={allowRetry ? retryImage : undefined}
           />
         </div>
       )}
-      {url && (!reserveSpace || error == null) ? (
-        <Image
-          src={url}
-          alt={title}
-          width={1600}
-          height={1200}
-          unoptimized
-          loading={eager ? "eager" : "lazy"}
-          fetchPriority={eager ? "high" : undefined}
-          className={
-            className ??
-            (reserveSpace
-              ? "absolute inset-0 h-full w-full object-contain"
-              : "h-auto max-h-[70vh] max-w-full rounded object-contain")
-          }
-        />
-      ) : error == null ? (
-        <p
-          role="status"
-          className={
-            reserveSpace
-              ? "text-muted-foreground flex h-full items-center justify-center text-sm"
-              : undefined
-          }
-        >
-          사진을 여는 중…
-        </p>
-      ) : null}
-    </>
-  );
-  return reserveSpace ? (
-    <div className="bg-muted/30 relative aspect-[3/2] max-h-[70vh] w-full overflow-auto rounded">
-      {content}
     </div>
-  ) : (
-    content
   );
 }
 
-export function PdfCover({
-  assetId,
-  siteId,
-  title,
-  allowRetry = true,
-}: {
+type PdfCoverProps = {
   assetId: string;
   siteId: string;
   title: string;
   allowRetry?: boolean;
-}) {
+};
+
+export function PdfCover(props: PdfCoverProps) {
+  return (
+    <PdfCoverForAsset key={`${props.siteId}:${props.assetId}`} {...props} />
+  );
+}
+
+function PdfCoverForAsset({
+  assetId,
+  siteId,
+  title,
+  allowRetry = true,
+}: PdfCoverProps) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>();
   const [error, setError] = useState<unknown>(null);
@@ -188,7 +234,7 @@ export function PdfCover({
   if (error != null)
     return (
       <div
-        className="flex aspect-[3/2] items-center justify-center p-2"
+        className={styles.pdfCover}
         onClick={
           allowRetry
             ? (event) => {
@@ -198,35 +244,48 @@ export function PdfCover({
             : undefined
         }
       >
-        <ApiErrorState
+        <PublicApiErrorState
+          size="small"
           error={error}
           title="PDF 표지를 불러오지 못했어요"
           onRetry={
-            allowRetry ? () => setRetry((current) => current + 1) : undefined
+            allowRetry
+              ? () => {
+                  setError(null);
+                  setPreviewAssetId(undefined);
+                  setRetry((current) => current + 1);
+                }
+              : undefined
           }
           isRetrying={loading}
-          className="w-full"
         />
       </div>
     );
   if (previewAssetId)
     return (
-      <PrivateImage
-        assetId={previewAssetId}
-        siteId={siteId}
-        title={`${title} 표지`}
-        className="h-full max-h-none w-full rounded-none object-cover"
-        allowRetry={allowRetry}
-      />
+      <div className={styles.pdfCover}>
+        <PrivateImage
+          assetId={previewAssetId}
+          siteId={siteId}
+          title={`${title} 표지`}
+          className="h-full max-h-none w-full rounded-none object-cover"
+          allowRetry={allowRetry}
+        />
+      </div>
     );
   return (
     <div
-      className="bg-muted text-muted-foreground flex aspect-[3/2] flex-col items-center justify-center gap-2 px-4 text-center text-sm"
-      role="status"
+      className={styles.pdfCover}
+      role={previewAssetId === undefined ? "status" : undefined}
     >
-      {previewAssetId === null
-        ? "PDF 표지가 제공되지 않아요."
-        : "PDF 표지를 여는 중…"}
+      {previewAssetId === null ? (
+        <p className={styles.pdfUnavailable}>PDF 표지가 제공되지 않아요.</p>
+      ) : (
+        <>
+          <span className="sr-only">PDF 표지를 불러오는 중입니다.</span>
+          <span className={styles.imageSkeleton} aria-hidden="true" />
+        </>
+      )}
     </div>
   );
 }
@@ -244,8 +303,10 @@ export function PostAssetFigures({
     let disposed = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     const mounted: Array<{
+      frame: HTMLDivElement;
       image: HTMLImageElement;
-      errorMessage: HTMLParagraphElement;
+      onLoad: () => void;
+      onError: () => void;
       retryButton: HTMLButtonElement;
       onRetry: () => void;
     }> = [];
@@ -257,83 +318,154 @@ export function PostAssetFigures({
     for (const figure of figures) {
       const id = figure.dataset.assetId;
       if (!id) continue;
+      const frame = document.createElement("div");
+      frame.className = styles.figureFrame ?? "";
+      frame.dataset.state = "loading";
+      frame.setAttribute("role", "status");
+      frame.setAttribute("aria-label", "사진을 불러오는 중");
       const image = document.createElement("img");
       image.alt =
         figure.querySelector("figcaption")?.textContent?.trim() || "여행 사진";
       image.loading = "lazy";
-      figure.prepend(image);
-      const errorMessage = document.createElement("p");
-      errorMessage.className = "m-3 text-sm text-destructive";
+      frame.append(image);
+      const skeleton = document.createElement("span");
+      skeleton.className = styles.figureSkeleton ?? "";
+      skeleton.setAttribute("aria-hidden", "true");
+      frame.append(skeleton);
+      const errorMessage = document.createElement("div");
+      errorMessage.className = styles.figureError ?? "";
       errorMessage.setAttribute("role", "alert");
       errorMessage.hidden = true;
-      figure.append(errorMessage);
+      const errorTitle = document.createElement("strong");
+      errorTitle.textContent = "사진을 불러오지 못했어요";
+      const errorDescription = document.createElement("p");
+      errorMessage.append(errorTitle, errorDescription);
       const retryButton = document.createElement("button");
       retryButton.type = "button";
-      retryButton.className =
-        "my-2 min-h-12 rounded border px-4 underline underline-offset-4";
+      retryButton.className = styles.figureRetry ?? "";
       retryButton.textContent = "사진 다시 불러오기";
-      retryButton.hidden = true;
-      figure.append(retryButton);
+      errorMessage.append(retryButton);
+      frame.append(errorMessage);
+      figure.prepend(frame);
+      let loadedUrl = "";
+      let currentUrl = "";
+      let expiryTimer: ReturnType<typeof setTimeout> | undefined;
+      let failures = 0;
+      const setLoading = () => {
+        if (loadedUrl) return;
+        frame.dataset.state = "loading";
+        frame.setAttribute("role", "status");
+        frame.setAttribute("aria-label", "사진을 불러오는 중");
+        skeleton.hidden = false;
+        errorMessage.hidden = true;
+      };
+      const showError = (cause: unknown) => {
+        const guidance = describeApiError(cause, "read");
+        frame.dataset.state = "error";
+        frame.removeAttribute("role");
+        frame.removeAttribute("aria-label");
+        skeleton.hidden = true;
+        errorDescription.textContent = guidance.description;
+        errorMessage.hidden = false;
+        retryButton.hidden = !guidance.canRetry;
+        const waitMs = Math.max(0, (guidance.retryAt ?? 0) - Date.now());
+        retryButton.disabled = waitMs > 0;
+        retryButton.textContent =
+          waitMs > 0
+            ? `${Math.ceil(waitMs / 1000)}초 후 다시 시도`
+            : "사진 다시 불러오기";
+        if (waitMs > 0) {
+          timers.push(
+            setTimeout(() => {
+              if (disposed) return;
+              retryButton.disabled = false;
+              retryButton.textContent = "사진 다시 불러오기";
+            }, waitMs),
+          );
+        }
+      };
+      const onLoad = () => {
+        loadedUrl = image.src;
+        frame.dataset.state = "ready";
+        frame.removeAttribute("role");
+        frame.removeAttribute("aria-label");
+        skeleton.hidden = true;
+        errorMessage.hidden = true;
+      };
+      const onError = () => {
+        if (loadedUrl && loadedUrl !== image.src) {
+          image.src = loadedUrl;
+          return;
+        }
+        showError(new Error("image_load_failed"));
+      };
+      image.addEventListener("load", onLoad);
+      image.addEventListener("error", onError);
       const refresh = async () => {
+        clearTimeout(expiryTimer);
         retryButton.disabled = true;
+        setLoading();
         try {
           const asset = await api.call("asset.access", { id, site_id: siteId });
           if (disposed) return;
+          if (loadedUrl && asset.url !== currentUrl) {
+            const nextImage = new window.Image();
+            nextImage.src = asset.url;
+            await nextImage.decode();
+            if (disposed) return;
+          }
+          currentUrl = asset.url;
           image.src = asset.url;
           image.alt =
             figure.querySelector("figcaption")?.textContent?.trim() ||
             "여행 사진";
-          errorMessage.hidden = true;
-          retryButton.hidden = true;
-          timers.push(
-            setTimeout(
-              () => void refresh(),
-              Math.max(30, asset.expires_in - 45) * 1000,
-            ),
+          failures = 0;
+          expiryTimer = setTimeout(
+            () => void refresh(),
+            Math.max(30, asset.expires_in - 45) * 1000,
           );
+          timers.push(expiryTimer);
         } catch (cause) {
           if (disposed) return;
-          const guidance = describeApiError(cause, "read");
-          image.alt = guidance.title;
-          errorMessage.textContent = `${guidance.title} ${guidance.description}`;
-          errorMessage.hidden = false;
-          retryButton.hidden = !guidance.canRetry;
-          const waitMs = Math.max(0, (guidance.retryAt ?? 0) - Date.now());
-          retryButton.disabled = waitMs > 0;
-          if (waitMs > 0) {
-            retryButton.textContent = `${Math.ceil(waitMs / 1000)}초 후 다시 시도`;
-            timers.push(
-              setTimeout(() => {
-                if (disposed) return;
-                retryButton.disabled = false;
-                retryButton.textContent = "사진 다시 불러오기";
-              }, waitMs),
+          if (loadedUrl) {
+            failures += 1;
+            expiryTimer = setTimeout(
+              () => void refresh(),
+              Math.min(60, 5 * 2 ** Math.min(failures, 4)) * 1000,
             );
+            timers.push(expiryTimer);
           } else {
-            retryButton.textContent = "사진 다시 불러오기";
+            showError(cause);
           }
         }
       };
       const onRetry = () => void refresh();
       retryButton.addEventListener("click", onRetry);
-      mounted.push({ image, errorMessage, retryButton, onRetry });
+      mounted.push({ frame, image, onLoad, onError, retryButton, onRetry });
       void refresh();
     }
     return () => {
       disposed = true;
       timers.forEach(clearTimeout);
-      for (const { image, errorMessage, retryButton, onRetry } of mounted) {
+      for (const {
+        frame,
+        image,
+        onLoad,
+        onError,
+        retryButton,
+        onRetry,
+      } of mounted) {
+        image.removeEventListener("load", onLoad);
+        image.removeEventListener("error", onError);
         retryButton.removeEventListener("click", onRetry);
-        image.remove();
-        errorMessage.remove();
-        retryButton.remove();
+        frame.remove();
       }
     };
   }, [api, html, siteId]);
   return (
     <div
       ref={root}
-      className="post-body-media"
+      className={`post-body-media ${styles.assetFigures}`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

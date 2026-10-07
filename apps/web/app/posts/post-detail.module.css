@@ -4,6 +4,123 @@
   padding: clamp(28px, 4vw, 56px) 0 96px;
 }
 
+.readErrorPage {
+  width: min(calc(100% - 40px), 720px);
+  margin: clamp(28px, 4vw, 56px) auto 96px;
+}
+
+.skeletonPage {
+  width: 100%;
+}
+
+.skeletonPage
+  :is(
+    .skeletonBack,
+    .skeletonEyebrow,
+    .skeletonTitle,
+    .skeletonTitleShort,
+    .skeletonSummary,
+    .skeletonMetaLine,
+    .skeletonMetaAction,
+    .skeletonCover,
+    .skeletonCaption,
+    .skeletonRelatedTitle
+  ),
+.skeletonBody > div {
+  border-radius: 2px;
+}
+
+.skeletonBack {
+  width: 124px;
+  height: 13px;
+  margin-left: max(20px, calc((100% - 1064px) / 2));
+}
+
+.skeletonHeader {
+  width: min(calc(100% - 40px), 720px);
+  margin: clamp(32px, 4vw, 44px) auto 0;
+}
+
+.skeletonEyebrow {
+  width: 24%;
+  height: 10px;
+}
+
+.skeletonTitle {
+  width: 86%;
+  height: 37px;
+  margin-top: 24px;
+}
+
+.skeletonTitleShort {
+  width: 59%;
+  height: 37px;
+  margin-top: 12px;
+}
+
+.skeletonSummary {
+  width: 72%;
+  height: 15px;
+  margin-top: 20px;
+}
+
+.skeletonMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-top: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.skeletonMetaLine {
+  width: 44%;
+  height: 11px;
+}
+
+.skeletonMetaAction {
+  width: 105px;
+  height: 14px;
+}
+
+.skeletonCover {
+  width: 100%;
+  height: 100svh;
+  min-height: 420px;
+  margin-top: 48px;
+  background: #e1e9e5;
+}
+
+.skeletonCaption {
+  width: min(28%, 200px);
+  height: 10px;
+  margin: 10px max(20px, calc((100% - 1160px) / 2)) 0 auto;
+}
+
+.skeletonBody {
+  display: grid;
+  width: min(calc(100% - 40px), 670px);
+  gap: 13px;
+  margin: 70px auto 0;
+}
+
+.skeletonBody > div {
+  height: 12px;
+}
+
+.skeletonRelated {
+  width: min(calc(100% - 40px), 720px);
+  margin: 102px auto 0;
+  padding-top: 30px;
+  border-top: 1px solid var(--border);
+}
+
+.skeletonRelatedTitle {
+  width: 36%;
+  height: 27px;
+}
+
 .head,
 .reading,
 .tags,
@@ -426,6 +543,23 @@
 }
 
 @media (max-width: 640px) {
+  .skeletonTitle,
+  .skeletonTitleShort {
+    height: 30px;
+  }
+
+  .skeletonCover {
+    margin-top: 40px;
+  }
+
+  .skeletonBody {
+    margin-top: 46px;
+  }
+
+  .skeletonRelated {
+    margin-top: 72px;
+  }
+
   .page {
     padding-bottom: 72px;
   }

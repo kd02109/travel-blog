@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserDatabase } from "@repo/database/browser";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
+import { ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
+import { Skeleton } from "@repo/ui/skeleton";
+import { PublicApiErrorState } from "../public-feedback";
 import styles from "./comment-section.module.css";
 
 type Comment = ActionOutput<"comments.list">[number];
@@ -645,8 +647,30 @@ export function CommentSection({
         {typeof commentCount === "number" ? ` · ${commentCount}` : ""}
       </h2>
       {notice && <p role="status">{notice}</p>}
+      {comments.isPending && !comments.data && (
+        <div
+          className={styles.commentSkeletonList}
+          role="status"
+          aria-label="댓글을 불러오는 중"
+        >
+          <span className="sr-only">댓글을 불러오는 중입니다.</span>
+          <div aria-hidden="true">
+            {[0, 1, 2].map((item) => (
+              <div className={styles.commentSkeletonRow} key={item}>
+                <Skeleton className={styles.commentSkeletonAvatar} />
+                <div className={styles.commentSkeletonCopy}>
+                  <Skeleton className={styles.commentSkeletonName} />
+                  <Skeleton className={styles.commentSkeletonLine} />
+                  <Skeleton className={styles.commentSkeletonShortLine} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {comments.error && (
-        <ApiErrorState
+        <PublicApiErrorState
+          size={allComments.length ? "small" : "default"}
           error={comments.error}
           title="댓글을 불러오지 못했어요"
           onRetry={() => void comments.refetch()}
@@ -654,7 +678,8 @@ export function CommentSection({
         />
       )}
       {me.error && (
-        <ApiErrorState
+        <PublicApiErrorState
+          size="small"
           error={me.error}
           title="계정 이름을 확인하지 못했어요"
           onRetry={() => void me.refetch()}
@@ -675,7 +700,8 @@ export function CommentSection({
         )
       )}
       {moreError != null && (
-        <ApiErrorState
+        <PublicApiErrorState
+          size="small"
           error={moreError}
           title="추가 댓글을 불러오지 못했어요"
           onRetry={() => void loadMore()}

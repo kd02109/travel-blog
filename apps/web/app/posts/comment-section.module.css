@@ -28,3 +28,46 @@
 .textarea {
   resize: none;
 }
+
+.commentSkeletonList {
+  border-bottom: 1px solid var(--border);
+}
+
+.commentSkeletonRow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding: 19px 0;
+  border-top: 1px solid var(--border);
+}
+
+.commentSkeletonAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+.commentSkeletonCopy {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.commentSkeletonName,
+.commentSkeletonLine,
+.commentSkeletonShortLine {
+  height: 10px;
+  border-radius: 2px;
+}
+
+.commentSkeletonName {
+  width: 22%;
+}
+
+.commentSkeletonLine {
+  width: 78%;
+}
+
+.commentSkeletonShortLine {
+  width: 55%;
+}

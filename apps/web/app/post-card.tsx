@@ -1,9 +1,30 @@
 import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES } from "@repo/constants";
+import { Skeleton } from "@repo/ui/skeleton";
 import { PdfCover, PrivateImage } from "./posts/post-media";
 
 export type PublicPostCard = ActionOutput<"posts.list">[number];
+
+/** The same media and copy proportions as a public post card. */
+export function PostCardSkeleton({ featured = false }: { featured?: boolean }) {
+  return (
+    <li aria-hidden="true" className="min-w-0">
+      <div className="rounded-panel border-border bg-surface flex h-full min-h-72 flex-col overflow-hidden border">
+        <Skeleton className="aspect-[3/2] w-full rounded-none" />
+        <div className="flex flex-1 flex-col p-5">
+          <Skeleton className="h-3 w-1/3" />
+          <Skeleton className="mt-4 h-6 w-4/5" />
+          <Skeleton className="mt-2 h-6 w-2/3" />
+          <Skeleton className="mt-4 h-3 w-3/5" />
+          <Skeleton className="mt-auto h-3 w-2/5" />
+          <Skeleton className="mt-2 h-3 w-1/3" />
+          {featured && <Skeleton className="mt-7 h-3 w-1/4" />}
+        </div>
+      </div>
+    </li>
+  );
+}
 
 export function PostCard({
   post,
