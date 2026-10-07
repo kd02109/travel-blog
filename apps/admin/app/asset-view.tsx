@@ -1,8 +1,8 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { ApiErrorState } from "@repo/api-client/feedback";
-import type { ActionOutput } from "@repo/contracts";
+import { useTravelQuery } from "@repo/api-client/hooks";
 import Image from "next/image";
 
 export function PrivateAssetView({
@@ -19,53 +19,39 @@ export function PrivateAssetView({
   className?: string;
 }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
-  const [asset, setAsset] = useState<ActionOutput<"asset.access">>();
-  const [error, setError] = useState<unknown>(null);
-  const [retryKey, setRetryKey] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
+  const asset = useTravelQuery(
+    api,
+    "asset.access",
+    { id: assetId, site_id: siteId },
+    { siteId, actor: "session" },
+    { enabled: !!assetId && !!siteId, staleTime: 60_000 },
+  );
+  const { data, dataUpdatedAt, refetch } = asset;
   useEffect(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const load = async () => {
-      setRefreshing(true);
-      try {
-        const value = await api.call("asset.access", {
-          id: assetId,
-          site_id: siteId,
-        });
-        if (disposed) return;
-        setAsset(value);
-        setError(null);
-        timer = setTimeout(
-          () => void load(),
-          Math.max(30, value.expires_in - 45) * 1000,
-        );
-      } catch (failure) {
-        if (!disposed) setError(failure);
-      } finally {
-        if (!disposed) setRefreshing(false);
-      }
-    };
-    void load();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [api, assetId, siteId, retryKey]);
-  if (error)
+    if (!data) return;
+    const timer = window.setTimeout(
+      () => void refetch({ cancelRefetch: false }),
+      Math.max(
+        0,
+        dataUpdatedAt + Math.max(30, data.expires_in - 45) * 1000 - Date.now(),
+      ),
+    );
+    return () => window.clearTimeout(timer);
+  }, [data, dataUpdatedAt, refetch]);
+  if (asset.isError)
     return (
       <ApiErrorState
-        error={error}
-        onRetry={() => setRetryKey((current) => current + 1)}
-        isRetrying={refreshing}
+        error={asset.error}
+        onRetry={() => void refetch()}
+        isRetrying={asset.isFetching}
         title="파일을 열지 못했어요"
       />
     );
-  if (!asset) return <p role="status">파일을 여는 중…</p>;
+  if (!data) return <p role="status">파일을 여는 중…</p>;
   if (kind === "image")
     return (
       <Image
-        src={asset.url}
+        src={data.url}
         alt={title}
         width={1200}
         height={900}
@@ -77,24 +63,24 @@ export function PrivateAssetView({
     );
   return (
     <div className="space-y-3">
-      {asset.preview_asset_id ? (
+      {data.preview_asset_id ? (
         <div>
           <p className="text-muted-foreground mb-2 text-sm">
             첫 페이지 미리보기
           </p>
           <PrivateAssetView
-            assetId={asset.preview_asset_id}
+            assetId={data.preview_asset_id}
             siteId={siteId}
             kind="image"
             title={`${title} 첫 페이지`}
           />
         </div>
       ) : null}
-      <a href={asset.url} target="_blank" rel="noreferrer">
+      <a href={data.url} target="_blank" rel="noreferrer">
         PDF 다운로드
       </a>
       <iframe
-        src={asset.url}
+        src={data.url}
         title={title}
         className="h-[75vh] w-full rounded border"
       />

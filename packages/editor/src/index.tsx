@@ -174,7 +174,6 @@ function AssetImage({
   const {
     renderPreview,
     editable = true,
-    documentVersion,
     pairDrafts = {},
     setPairDraft,
   } = useContext(ImagePreviewContext) ?? {};
@@ -225,14 +224,25 @@ function AssetImage({
     draftLayout?.widthPct ?? (hasCustomLayout ? widthPct : null);
 
   useLayoutEffect(() => {
-    const outer = slotRef.current?.closest<HTMLElement>(".bn-block-outer");
-    if (!outer) return;
-    if (paired) outer.style.setProperty("--pair-share", `${ownPairSharePct}%`);
-    else outer.style.removeProperty("--pair-share");
+    if (
+      !paired ||
+      typeof CSSStyleSheet === "undefined" ||
+      !("adoptedStyleSheets" in document)
+    )
+      return;
+    // Keep layout rules outside ProseMirror's DOM observer. Mutating the block
+    // wrapper's style attribute feeds back into editor change notifications.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(
+      `.writer-editor .bn-block-outer:has(.writer-image[data-pair-token="${hintId}"]) { --pair-share: ${ownPairSharePct}%; }`,
+    );
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     return () => {
-      outer.style.removeProperty("--pair-share");
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (entry) => entry !== sheet,
+      );
     };
-  }, [documentVersion, ownPairSharePct, paired]);
+  }, [hintId, ownPairSharePct, paired]);
 
   useEffect(() => {
     const draftShare = pairDrafts[blockId];
@@ -513,6 +523,7 @@ function AssetImage({
     <div className="writer-image-slot" ref={slotRef}>
       <figure
         className="writer-image"
+        data-pair-token={hintId}
         data-image-width={width}
         data-image-layout={activeLayout}
         data-image-pair-side={paired ? side : undefined}
