@@ -196,6 +196,7 @@ export function Composer({ postId }: { postId?: string }) {
     useState<(typeof CATEGORIES)[number]["code"]>("day-walk");
   const [metadata, setMetadata] = useState<Record<string, unknown>>({});
   const [metadataError, setMetadataError] = useState("");
+  const [commentsEnabled, setCommentsEnabled] = useState(true);
   const [document, setDocument] = useState<EditorDocument>([
     { type: "paragraph", content: "여행의 첫 장면을 적어 보세요." },
   ]);
@@ -290,6 +291,7 @@ export function Composer({ postId }: { postId?: string }) {
         ? (content.metadata as Record<string, unknown>)
         : {},
     );
+    setCommentsEnabled(content.comments_enabled !== false);
     if (Array.isArray(content.blocks))
       setDocument(content.blocks as EditorDocument);
     setEditorEpoch((current) => current + 1);
@@ -411,7 +413,11 @@ export function Composer({ postId }: { postId?: string }) {
                     post.kind === "pdf" ? "itinerary-pdf" : category,
                   metadata,
                   ...(post.kind === "article"
-                    ? { blocks: document, cover_asset_id: coverAssetId || null }
+                    ? {
+                        blocks: document,
+                        cover_asset_id: coverAssetId || null,
+                        comments_enabled: commentsEnabled,
+                      }
                     : { pdf_asset_id: pdfAssetId || null }),
                 }),
               )
@@ -469,6 +475,7 @@ export function Composer({ postId }: { postId?: string }) {
     [
       api,
       category,
+      commentsEnabled,
       coverAssetId,
       dirty,
       document,
@@ -1169,6 +1176,34 @@ export function Composer({ postId }: { postId?: string }) {
             </SelectContent>
           </Select>
         </label>
+      )}
+      {post.kind === "article" && (
+        <fieldset className="rounded-panel border p-5">
+          <legend className="px-2 font-semibold">댓글 설정</legend>
+          <label className="flex cursor-pointer items-start gap-3">
+            <input
+              type="checkbox"
+              checked={commentsEnabled}
+              disabled={busy}
+              className="accent-primary mt-1 size-5 shrink-0 disabled:cursor-not-allowed"
+              onChange={(event) => {
+                setCommentsEnabled(event.currentTarget.checked);
+                markDirty();
+              }}
+            />
+            <span>
+              <strong className="block font-medium">댓글 허용</strong>
+              <span className="text-muted-foreground block text-sm">
+                끄면 새 댓글 작성을 막고, 기존 댓글은 계속 읽을 수 있습니다.
+              </span>
+            </span>
+          </label>
+          <p className="text-muted-foreground mt-3 text-sm">
+            {post.status === "published"
+              ? "변경한 댓글 설정은 공개본 업데이트를 눌러야 방문자 화면에 반영됩니다."
+              : "발행할 때 선택한 댓글 설정이 방문자 화면에 적용됩니다."}
+          </p>
+        </fieldset>
       )}
       {post.kind === "article" && (
         <fieldset className="rounded-panel space-y-4 border p-5">
