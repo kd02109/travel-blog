@@ -788,11 +788,12 @@ export function createMockEngine(options: MockOptions = {}) {
             : "";
         const filtered = state.posts.filter((post) => {
           const category = post.draft_content.category_code ?? null;
+          const published = publication(post.id);
           return (
             (!input.status || post.status === input.status) &&
             (!input.category || category === input.category) &&
             (!search ||
-              `${post.draft_content.title ?? ""} ${post.draft_content.slug ?? ""}`
+              `${post.draft_content.title ?? ""} ${post.draft_content.slug ?? ""} ${published?.title ?? ""} ${published?.slug ?? ""}`
                 .toLocaleLowerCase()
                 .includes(search))
           );
@@ -810,6 +811,8 @@ export function createMockEngine(options: MockOptions = {}) {
           status: p.status,
           category_code: p.draft_content.category_code ?? null,
           title: p.draft_content.title ?? null,
+          published_slug: publication(p.id)?.slug ?? null,
+          published_title: publication(p.id)?.title ?? null,
           lock_version: p.lock_version,
           updated_at: p.updated_at,
           first_published_at: p.first_published_at,

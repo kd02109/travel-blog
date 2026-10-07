@@ -180,7 +180,83 @@ it("filters admin posts by status, category and title/slug search before paginat
       category_code: "food-cafe",
       status: "published",
       title: "강릉 골목에서 만난 커피",
+      published_slug: "example-food-cafe",
     },
+  ]);
+});
+it("keeps public post links and search tied to the active publication", () => {
+  const engine = createMockEngine();
+  const id = MOCK_POST_IDS[0];
+  const original = engine.handle(
+    { action: "admin.post.get", input: { id } },
+    owner,
+  );
+  expect(original.status).toBe(200);
+  const post = original.body as {
+    lock_version: number;
+    draft_content: Record<string, unknown>;
+  };
+  expect(
+    engine.handle(
+      {
+        action: "admin.post.save",
+        input: {
+          id,
+          version: post.lock_version,
+          content: {
+            ...post.draft_content,
+            title: "아직 공개하지 않은 제목",
+            slug: "unpublished-draft-address",
+          },
+        },
+      },
+      owner,
+    ).status,
+  ).toBe(200);
+
+  for (const search of [
+    "example-day-walk",
+    "서울숲에서 천천히",
+    "unpublished-draft-address",
+  ]) {
+    const result = engine.handle(
+      { action: "admin.posts", input: { ...site, search } },
+      owner,
+    );
+    expect(result.status).toBe(200);
+    expect(result.body).toMatchObject([
+      {
+        id,
+        title: "아직 공개하지 않은 제목",
+        published_slug: "example-day-walk",
+        published_title: "서울숲에서 천천히 걸었던 하루",
+      },
+    ]);
+  }
+
+  expect(
+    engine.handle(
+      {
+        action: "admin.post.status",
+        input: { id, version: post.lock_version + 1, status: "private" },
+      },
+      owner,
+    ).status,
+  ).toBe(200);
+  const privateResult = engine.handle(
+    { action: "admin.posts", input: { ...site, search: "서울숲에서 천천히" } },
+    owner,
+  );
+  expect(privateResult.body).toEqual([]);
+  const privateDraft = engine.handle(
+    {
+      action: "admin.posts",
+      input: { ...site, search: "unpublished-draft-address" },
+    },
+    owner,
+  );
+  expect(privateDraft.body).toMatchObject([
+    { id, published_slug: null, published_title: null },
   ]);
 });
 it("maps invalid PostgreSQL date input to the same safe API validation code", () => {

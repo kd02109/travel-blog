@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@repo/ui/select";
 import { Pagination } from "@repo/ui/pagination";
+import { publicPostUrl } from "../../lib/public-post-url";
 import {
   Table,
   TableBody,
@@ -38,7 +39,38 @@ const statusLabel: Record<string, string> = Object.fromEntries(
   statuses.slice(1).map((item) => [item.value, item.label]),
 );
 
-export function PostList({ siteId }: { siteId: string }) {
+function PublicPostLink({
+  origin,
+  slug,
+  title,
+}: {
+  origin: string | null;
+  slug: string | null;
+  title: string;
+}) {
+  const href = publicPostUrl(origin, slug);
+  if (!href) return null;
+  return (
+    <Button asChild variant="outline">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${title} 공개 글 보기 (새 창)`}
+      >
+        공개 글 보기
+      </a>
+    </Button>
+  );
+}
+
+export function PostList({
+  siteId,
+  publicSiteOrigin,
+}: {
+  siteId: string;
+  publicSiteOrigin: string | null;
+}) {
   const api = useMemo(() => createBrowserTravelApi(), []);
   const me = useTravelQuery(api, "me", {}, { siteId, actor: "session" });
   const [category, setCategory] = useState("");
@@ -244,6 +276,15 @@ export function PostList({ siteId }: { siteId: string }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-2">
+                    {post.status === "published" && (
+                      <PublicPostLink
+                        origin={publicSiteOrigin}
+                        slug={post.published_slug}
+                        title={
+                          post.published_title || post.title || "제목 없는 글"
+                        }
+                      />
+                    )}
                     {post.status === "trashed" ? (
                       <Button
                         variant="outline"

@@ -57,7 +57,7 @@ const cards = await api("posts.list", { site_id: site.id, limit: 12 });
 
 | action | input | 반환 |
 | --- | --- | --- |
-| `admin.posts` | `site_id`, 선택 `limit`, `offset`, `category`, `status`, `search` | 분류·상태·제목/주소 검색이 적용된 글 목록과 `category_code` |
+| `admin.posts` | `site_id`, 선택 `limit`, `offset`, `category`, `status`, `search` | 분류·상태·편집본 및 공개본 제목/주소 검색이 적용된 글 목록. `category_code`, 현재 공개본의 `published_slug`·`published_title`을 포함하며 공개본이 없으면 두 필드는 null |
 | `admin.post.create` | `site_id`, `kind: article 또는 pdf`, 선택 `content` | 새 글과 lock_version |
 | `admin.post.get` | `id`, 선택 `site_id` | 편집본 |
 | `admin.post.published` | `id`, 선택 `site_id` | 현재 공개 중인 revision ID·원문 snapshot·발행 시각. 공개본이 없으면 null |

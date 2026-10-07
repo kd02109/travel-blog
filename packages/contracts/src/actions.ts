@@ -109,6 +109,8 @@ const adminCard = z.object({
   status,
   category_code: categorySchema.nullable(),
   title: z.string().nullable(),
+  published_slug: z.string().nullable(),
+  published_title: z.string().nullable(),
   lock_version: version,
   updated_at: timestamp,
   first_published_at: timestamp.nullable(),
