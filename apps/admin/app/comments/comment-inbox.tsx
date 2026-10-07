@@ -33,44 +33,14 @@ export function CommentInbox({ siteId }: { siteId: string }) {
   const comments = useTravelQuery(
     api,
     "admin.comments",
-    { site_id: siteId, limit: 50, offset },
-    scope,
-    { enabled: !!me.data },
-  );
-  const reports = useTravelQuery(
-    api,
-    "admin.reports",
-    { site_id: siteId, limit: 50, offset },
+    { site_id: siteId, limit: 50, offset, filter },
     scope,
     { enabled: !!me.data },
   );
   const moderate = useTravelMutation(api, "admin.comment.moderate", scope);
   const resolve = useTravelMutation(api, "admin.report.resolve", scope);
   const create = useTravelMutation(api, "comment.create", scope);
-  const reportByComment = new Map(
-    (reports.data ?? [])
-      .filter((report) => report.status === "open")
-      .map((report) => [report.comment_id, report]),
-  );
-  const unansweredIds = new Set(
-    (comments.data ?? [])
-      .filter(
-        (comment) => comment.parent_id === null && comment.status === "visible",
-      )
-      .filter(
-        (comment) =>
-          !(comments.data ?? []).some(
-            (reply) => reply.parent_id === comment.id && reply.is_staff,
-          ),
-      )
-      .map((comment) => comment.id),
-  );
-  const visible = (comments.data ?? []).filter((comment) => {
-    if (filter === "hidden") return comment.status === "hidden";
-    if (filter === "reported") return reportByComment.has(comment.id);
-    if (filter === "unanswered") return unansweredIds.has(comment.id);
-    return true;
-  });
+  const visible = comments.data ?? [];
 
   async function moderateComment(
     comment: NonNullable<typeof comments.data>[number],
@@ -144,6 +114,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
             onClick={() => {
               setFilter(key);
               setOffset(0);
+              setReplyTo(null);
             }}
           >
             {labels[key]}
@@ -156,25 +127,20 @@ export function CommentInbox({ siteId }: { siteId: string }) {
         </p>
       )}
       {mutationError !== null && <ApiMutationError error={mutationError} />}
-      {me.isPending ||
-      (me.isSuccess && (comments.isPending || reports.isPending)) ? (
+      {me.isPending || (me.isSuccess && comments.isPending) ? (
         <p role="status">댓글을 불러오고 있어요…</p>
-      ) : me.isError || comments.isError || reports.isError ? (
+      ) : me.isError || comments.isError ? (
         <ApiErrorState
-          error={me.error ?? comments.error ?? reports.error}
+          error={me.error ?? comments.error}
           onRetry={() => {
             void me.refetch();
             void comments.refetch();
-            void reports.refetch();
           }}
-          isRetrying={
-            me.isFetching || comments.isFetching || reports.isFetching
-          }
+          isRetrying={me.isFetching || comments.isFetching}
         />
       ) : visible.length ? (
         <ul className="space-y-4">
           {visible.map((comment) => {
-            const report = reportByComment.get(comment.id);
             return (
               <li key={comment.id} className="rounded-panel border p-5">
                 <article className="space-y-3">
@@ -201,8 +167,9 @@ export function CommentInbox({ siteId }: { siteId: string }) {
                   <p className="break-words whitespace-pre-wrap">
                     {comment.body || "삭제된 댓글입니다."}
                   </p>
-                  {report && (
+                  {comment.open_reports.map((report) => (
                     <aside
+                      key={report.id}
                       className="bg-muted rounded-lg p-3"
                       aria-label="열린 신고"
                     >
@@ -236,7 +203,7 @@ export function CommentInbox({ siteId }: { siteId: string }) {
                         </Button>
                       </div>
                     </aside>
-                  )}
+                  ))}
                   <div className="flex flex-wrap gap-2">
                     {comment.status !== "deleted" && (
                       <Button
@@ -253,7 +220,8 @@ export function CommentInbox({ siteId }: { siteId: string }) {
                       </Button>
                     )}
                     {comment.parent_id === null &&
-                      comment.status === "visible" && (
+                      comment.status === "visible" &&
+                      comment.comments_enabled && (
                         <Button
                           variant="outline"
                           onClick={() => {
@@ -265,6 +233,13 @@ export function CommentInbox({ siteId }: { siteId: string }) {
                         >
                           {replyTo === comment.id ? "답글 닫기" : "답글 작성"}
                         </Button>
+                      )}
+                    {comment.parent_id === null &&
+                      comment.status === "visible" &&
+                      !comment.comments_enabled && (
+                        <span className="text-muted-foreground self-center text-sm">
+                          이 글은 새 댓글을 받지 않습니다.
+                        </span>
                       )}
                   </div>
                   {replyTo === comment.id && (

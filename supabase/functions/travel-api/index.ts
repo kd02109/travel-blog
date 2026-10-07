@@ -54,7 +54,7 @@ async function rpc(
     action === "admin.posts"
       ? "travel_admin_posts"
       : action === "admin.comments"
-      ? "travel_admin_comments"
+      ? "travel_admin_comment_inbox"
       : action === "account.delete.request"
       ? "travel_account_delete_request"
       : action === "admin.account.deletions"
@@ -70,6 +70,7 @@ async function rpc(
       ? {
         p_actor: actor,
         p_site_id: input.site_id,
+        p_filter: input.filter,
         p_limit: input.limit,
         p_offset: input.offset,
       }

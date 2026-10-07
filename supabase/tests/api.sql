@@ -20,6 +20,9 @@ begin
  r:=public.travel_admin_account_deletion_anonymize(t.owner_id,t.site_id,(d->>'request_id')::uuid); assert r->>'status'='anonymized';
  begin perform public.travel_admin_account_deletion_complete(t.owner_id,t.site_id,(d->>'request_id')::uuid); raise exception 'auth deletion skipped'; exception when sqlstate 'PT409' then null; end;
  r:=public.travel_admin_comments(t.owner_id,t.site_id,50,0); assert jsonb_typeof(r)='array';
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'all',50,0); assert r='[]'::jsonb;
+ begin perform public.travel_admin_comment_inbox(t.owner_id,t.site_id,'invalid',50,0); raise exception 'invalid inbox filter accepted'; exception when sqlstate 'PT422' then null; end;
+ begin perform public.travel_admin_comment_inbox(t.outsider_id,t.site_id,'all',50,0); raise exception 'outsider read inbox'; exception when sqlstate 'PT403' then null; end;
  perform public.travel_api('profile.save',t.owner_id,'{"display_name":"테스트"}');
  begin perform public.travel_api('admin.post.create',t.outsider_id,jsonb_build_object('site_id',t.site_id,'kind','article')); raise exception 'cross-site authorization failed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('admin.post.create',t.editor_id,jsonb_build_object('site_id',t.site_id,'kind','article')); pid:=(r->>'id')::uuid;
@@ -58,12 +61,14 @@ begin
  r:=public.travel_api('admin.post.save',t.editor_id,jsonb_build_object('id',base_pid,'version',2,'content',base_d||'{"title":"아직 비공개 수정"}'::jsonb));
  r:=public.travel_api('post.get',null,jsonb_build_object('site_id',t.site_id,'slug','test-post')); assert r->>'title'='테스트 글';
  r:=public.travel_api('comment.create',null,jsonb_build_object('id',base_pid,'body','댓글','guest_name','방문자','password_hash',hash,'actor_hash',repeat('a',64),'request_hash','abc','request_key',req)); cid:=(r->>'id')::uuid;
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'unanswered',50,0); assert jsonb_array_length(r)=1 and r->0->>'id'=cid::text and (r->0->>'comments_enabled')::boolean and r->0->'open_reports'='[]'::jsonb;
  r:=public.travel_api('comment.create',null,jsonb_build_object('id',base_pid,'body','댓글','guest_name','방문자','password_hash',hash,'actor_hash',repeat('a',64),'request_hash','abc','request_key',req)); assert (r->>'duplicate')::boolean;
  r:=public.travel_api('comments.list',null,jsonb_build_object('id',base_pid)); assert jsonb_array_length(r)=1; assert not (r->0 ? 'request_hash');
  begin perform public.travel_api('comment.edit',t.outsider_id,jsonb_build_object('id',cid,'version',0,'body','bad')); raise exception 'comment hijack allowed'; exception when sqlstate 'PT403' then null; end;
  begin perform public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','비밀번호 없는 수정','guest_verified',false)); raise exception 'guest password bypass allowed'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('comment.edit',null,jsonb_build_object('id',cid,'version',0,'body','수정','guest_verified',true)); assert (r->>'version')::int=1;
  r:=public.travel_api('comment.create',t.outsider_id,jsonb_build_object('id',base_pid,'body','회원 답글','parent_id',cid,'request_hash','member-reply','request_key',gen_random_uuid())); member_reply_id:=(r->>'id')::uuid;
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'unanswered',50,0); assert jsonb_array_length(r)=1 and r->0->>'id'=cid::text;
  r:=public.travel_api('comments.list',t.outsider_id,jsonb_build_object('id',base_pid));
  select value into d from jsonb_array_elements(r) value where value->>'id'=member_reply_id::text;
  assert (d->>'can_manage')::boolean and not (d->>'is_guest')::boolean;
@@ -79,8 +84,12 @@ begin
  begin perform public.travel_api('comment.delete',t.outsider_id,jsonb_build_object('id',guest_reply_id,'version',0)); raise exception 'guest reply deleted without password verification'; exception when sqlstate 'PT403' then null; end;
  r:=public.travel_api('comment.delete',t.outsider_id,jsonb_build_object('id',guest_reply_id,'version',0,'guest_verified',true)); assert (r->>'version')::int=1;
  r:=public.travel_api('comment.report',t.outsider_id,jsonb_build_object('id',cid,'reason','spam'));
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'reported',50,0); assert jsonb_array_length(r)=1 and r->0->>'id'=cid::text and jsonb_array_length(r->0->'open_reports')=1;
  r:=public.travel_api('admin.reports',t.owner_id,jsonb_build_object('site_id',t.site_id)); assert jsonb_array_length(r)=1;
  perform public.travel_api('admin.report.resolve',t.owner_id,jsonb_build_object('site_id',t.site_id,'id',r->0->>'id','status','resolved'));
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'reported',50,0); assert r='[]'::jsonb;
+ perform public.travel_api('comment.create',t.owner_id,jsonb_build_object('id',base_pid,'body','관리자 답글','parent_id',cid,'request_hash','staff-reply','request_key',gen_random_uuid()));
+ r:=public.travel_admin_comment_inbox(t.owner_id,t.site_id,'unanswered',50,0); assert r='[]'::jsonb;
  r:=public.travel_api('like.set',t.outsider_id,jsonb_build_object('id',base_pid,'liked',true)); assert (r->>'count')::int=1;
  r:=public.travel_like_get(base_pid,t.outsider_id,null); assert (r->>'liked')::boolean and (r->>'count')::int=1;
  r:=public.travel_api('like.set',t.outsider_id,jsonb_build_object('id',base_pid,'liked',true)); assert (r->>'count')::int=1;
@@ -139,6 +148,7 @@ do $$ begin
  begin perform public.travel_like_get(gen_random_uuid(),null,repeat('a',64)); raise exception 'like lookup RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_posts(gen_random_uuid(),'{}'); raise exception 'admin listing RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_comments(gen_random_uuid(),gen_random_uuid(),50,0); raise exception 'admin comments RPC exposed'; exception when insufficient_privilege then null; end;
+ begin perform public.travel_admin_comment_inbox(gen_random_uuid(),gen_random_uuid(),'all',50,0); raise exception 'filtered inbox RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_account_delete_request(gen_random_uuid()); raise exception 'account request RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform public.travel_admin_account_deletions(gen_random_uuid(),gen_random_uuid()); raise exception 'account queue RPC exposed'; exception when insufficient_privilege then null; end;
  begin perform 1 from public.comments; raise exception 'comments exposed'; exception when insufficient_privilege then null; end;
