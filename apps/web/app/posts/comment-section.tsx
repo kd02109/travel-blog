@@ -925,28 +925,20 @@ function CommentFields({
           className={`${styles.field} ${styles.textarea} rounded-control mt-2 min-h-32 w-full p-3 leading-relaxed font-normal`}
         />
       </label>
-      {signedIn ? (
-        profileName ? (
-          <p className="text-muted-foreground text-xs">
-            작성자{" "}
-            <strong className="text-foreground font-medium">
-              {profileName}
-            </strong>
-          </p>
-        ) : (
-          <label className="block text-sm font-medium">
-            표시 이름
-            <input
-              name="name"
-              required
-              minLength={2}
-              maxLength={30}
-              autoComplete="nickname"
-              className={`${styles.field} rounded-control mt-2 min-h-12 w-full max-w-sm px-3 font-normal`}
-            />
-          </label>
-        )
-      ) : (
+      {signedIn && !profileName && (
+        <label className="block text-sm font-medium">
+          표시 이름
+          <input
+            name="name"
+            required
+            minLength={2}
+            maxLength={30}
+            autoComplete="nickname"
+            className={`${styles.field} rounded-control mt-2 min-h-12 w-full max-w-sm px-3 font-normal`}
+          />
+        </label>
+      )}
+      {!signedIn && (
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="block text-sm font-medium">
             이름
