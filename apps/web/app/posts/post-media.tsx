@@ -7,7 +7,7 @@ import dynamic from "next/dynamic";
 import { PublicApiErrorState } from "../public-feedback";
 import styles from "./post-media.module.css";
 
-const PdfReader = dynamic(() => import("./pdf-reader"), {
+const PdfReader = dynamic(() => import("@repo/pdf-reader"), {
   ssr: false,
   loading: () => (
     <div

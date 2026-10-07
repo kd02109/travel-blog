@@ -1,0 +1,29 @@
+{
+  "name": "@repo/pdf-reader",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/api-client": "workspace:*",
+    "pdfjs-dist": "6.3.289",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-pdf": "^11.0.0"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "26.4.1",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "eslint": "10.9.1",
+    "typescript": "6.0.3"
+  }
+}
