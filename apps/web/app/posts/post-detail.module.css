@@ -261,21 +261,14 @@
 }
 
 .body :global(.post-body-media [data-image-pair]) {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 26px;
   margin-block: 42px 46px;
 }
 
-.body
-  :global(.post-body-media [data-image-pair] > figure[data-asset-id] > img) {
-  max-height: min(70vh, 760px);
-}
-
 .body :global(.post-body-media figure[data-asset-id] > figcaption) {
-  padding-top: 10px;
+  padding: 5px 0 0;
   color: var(--muted-foreground);
   font-size: 0.75rem;
-  text-align: left;
+  text-align: center;
 }
 
 .tags {
