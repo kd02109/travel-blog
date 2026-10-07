@@ -51,11 +51,15 @@ const usageLabels: Record<string, string> = {
   "post-cover": "대표 사진",
   "post-body": "본문",
   "pdf-preview": "PDF 미리보기",
+  "post-pdf": "일정표 글",
 };
 const noProtectedAssetIds: readonly string[] = [];
 
-function libraryAssetName(asset: LibraryAsset) {
-  return `사진 ${asset.id.slice(0, 8)}`;
+function libraryAssetName(
+  asset: LibraryAsset,
+  kind: "image" | "pdf" = "image",
+) {
+  return `${kind === "pdf" ? "PDF" : "사진"} ${asset.id.slice(0, 8)}`;
 }
 
 function formatAssetDate(value: string) {
@@ -100,11 +104,13 @@ function isUnusedAsset(
 function isUnusedLibraryAsset(
   asset: LibraryAsset,
   protectedAssetIds: readonly string[],
+  includeAllUnused = false,
 ) {
   return (
     asset.usage.length === 0 &&
     !protectedAssetIds.includes(asset.id) &&
-    (asset.deletion_pending ||
+    (includeAllUnused ||
+      asset.deletion_pending ||
       asset.can_delete ||
       asset.delete_available_at !== null)
   );
@@ -292,9 +298,17 @@ export function MediaUpload({
   const visibleLibraryAssets = useMemo(() => {
     const source = library.items.filter((asset) => {
       if (libraryFilter === "used")
-        return !isUnusedLibraryAsset(asset, protectedAssetIds);
+        return !isUnusedLibraryAsset(
+          asset,
+          protectedAssetIds,
+          kindFilter === "pdf",
+        );
       if (libraryFilter === "unused")
-        return isUnusedLibraryAsset(asset, protectedAssetIds);
+        return isUnusedLibraryAsset(
+          asset,
+          protectedAssetIds,
+          kindFilter === "pdf",
+        );
       return true;
     });
     return [...source].sort((left, right) => {
@@ -315,34 +329,47 @@ export function MediaUpload({
         left.id.localeCompare(right.id)
       );
     });
-  }, [library.items, libraryFilter, librarySort, protectedAssetIds]);
+  }, [
+    library.items,
+    libraryFilter,
+    librarySort,
+    protectedAssetIds,
+    kindFilter,
+  ]);
   useEffect(() => {
-    if (kindFilter !== "image" || !siteId) return;
+    if ((kindFilter !== "image" && kindFilter !== "pdf") || !siteId) return;
     const requestRef = libraryRequest;
     const request = ++requestRef.current;
-    void api.call("asset.list", { site_id: siteId, limit: 24, offset: 0 }).then(
-      (result) => {
-        if (requestRef.current === request)
-          setLibraryState(libraryResult(siteId, result));
-      },
-      (error: unknown) => {
-        if (requestRef.current === request)
-          setLibraryState({
-            siteId,
-            items: [],
-            nextOffset: null,
-            isLoading: false,
-            isLoadingMore: false,
-            error,
-          });
-      },
-    );
+    void api
+      .call("asset.list", {
+        site_id: siteId,
+        kind: kindFilter,
+        limit: 24,
+        offset: 0,
+      })
+      .then(
+        (result) => {
+          if (requestRef.current === request)
+            setLibraryState(libraryResult(siteId, result));
+        },
+        (error: unknown) => {
+          if (requestRef.current === request)
+            setLibraryState({
+              siteId,
+              items: [],
+              nextOffset: null,
+              isLoading: false,
+              isLoadingMore: false,
+              error,
+            });
+        },
+      );
     return () => {
       requestRef.current++;
     };
   }, [api, kindFilter, siteId]);
   function refreshLibrary() {
-    if (kindFilter !== "image" || !siteId) return;
+    if ((kindFilter !== "image" && kindFilter !== "pdf") || !siteId) return;
     const request = ++libraryRequest.current;
     setLibraryState({
       siteId,
@@ -358,28 +385,35 @@ export function MediaUpload({
     for (const timer of thumbnailTimers.current.values())
       window.clearTimeout(timer);
     thumbnailTimers.current.clear();
-    void api.call("asset.list", { site_id: siteId, limit: 24, offset: 0 }).then(
-      (result) => {
-        if (libraryRequest.current === request)
-          setLibraryState(libraryResult(siteId, result));
-      },
-      (error: unknown) => {
-        if (libraryRequest.current === request)
-          setLibraryState({
-            siteId,
-            items: [],
-            nextOffset: null,
-            isLoading: false,
-            isLoadingMore: false,
-            error,
-          });
-      },
-    );
+    void api
+      .call("asset.list", {
+        site_id: siteId,
+        kind: kindFilter,
+        limit: 24,
+        offset: 0,
+      })
+      .then(
+        (result) => {
+          if (libraryRequest.current === request)
+            setLibraryState(libraryResult(siteId, result));
+        },
+        (error: unknown) => {
+          if (libraryRequest.current === request)
+            setLibraryState({
+              siteId,
+              items: [],
+              nextOffset: null,
+              isLoading: false,
+              isLoadingMore: false,
+              error,
+            });
+        },
+      );
   }
   function loadMore() {
     const offset = library.nextOffset;
     if (
-      kindFilter !== "image" ||
+      (kindFilter !== "image" && kindFilter !== "pdf") ||
       !siteId ||
       offset === null ||
       library.isLoading ||
@@ -394,35 +428,42 @@ export function MediaUpload({
       isLoadingMore: true,
       error: undefined,
     }));
-    void api.call("asset.list", { site_id: siteId, limit: 24, offset }).then(
-      (result) => {
-        if (libraryRequest.current !== request) return;
-        loadingMoreOffset.current = null;
-        setLibraryState((current) => {
-          if (current.siteId !== siteId || current.nextOffset !== offset)
-            return current;
-          return {
-            siteId,
-            items: uniqueAssets([...current.items, ...result.items]),
-            nextOffset:
-              result.next_offset !== null && result.next_offset > offset
-                ? result.next_offset
-                : null,
-            isLoading: false,
-            isLoadingMore: false,
-          };
-        });
-      },
-      (error: unknown) => {
-        if (libraryRequest.current !== request) return;
-        loadingMoreOffset.current = null;
-        setLibraryState((current) =>
-          current.siteId === siteId
-            ? { ...current, isLoadingMore: false, error }
-            : current,
-        );
-      },
-    );
+    void api
+      .call("asset.list", {
+        site_id: siteId,
+        kind: kindFilter,
+        limit: 24,
+        offset,
+      })
+      .then(
+        (result) => {
+          if (libraryRequest.current !== request) return;
+          loadingMoreOffset.current = null;
+          setLibraryState((current) => {
+            if (current.siteId !== siteId || current.nextOffset !== offset)
+              return current;
+            return {
+              siteId,
+              items: uniqueAssets([...current.items, ...result.items]),
+              nextOffset:
+                result.next_offset !== null && result.next_offset > offset
+                  ? result.next_offset
+                  : null,
+              isLoading: false,
+              isLoadingMore: false,
+            };
+          });
+        },
+        (error: unknown) => {
+          if (libraryRequest.current !== request) return;
+          loadingMoreOffset.current = null;
+          setLibraryState((current) =>
+            current.siteId === siteId
+              ? { ...current, isLoadingMore: false, error }
+              : current,
+          );
+        },
+      );
   }
   function requestDelete(asset: LibraryAsset) {
     if (
@@ -495,7 +536,7 @@ export function MediaUpload({
     );
     try {
       const access = await api.call("asset.access", {
-        id: asset.id,
+        id: asset.preview_asset_id ?? asset.id,
         site_id: siteId,
       });
       if (libraryRequest.current === request && access.url !== currentUrl) {
@@ -556,8 +597,8 @@ export function MediaUpload({
           patch(item.id, { state: "ready", progress: 100 });
           if (item.kind === "image") {
             onImageReady?.(assetId);
-            refreshLibrary();
           }
+          refreshLibrary();
         } else if (state === "failed")
           patch(item.id, {
             state: "failed",
@@ -634,8 +675,8 @@ export function MediaUpload({
       patch(item.id, { state: "ready", assetId, progress: 100 });
       if (item.kind === "image") {
         onImageReady?.(assetId);
-        refreshLibrary();
       }
+      refreshLibrary();
     } catch (error) {
       if (controller.signal.aborted && controller.signal.reason === "unmount")
         return;
@@ -754,10 +795,20 @@ export function MediaUpload({
   return (
     <section
       className="space-y-4 rounded-lg border p-5"
-      aria-label={kindFilter === "image" ? "사진 업로드" : "사진과 PDF 파일"}
+      aria-label={
+        kindFilter === "image"
+          ? "사진 업로드"
+          : kindFilter === "pdf"
+            ? "PDF 파일"
+            : "사진과 PDF 파일"
+      }
     >
       <h2 className="text-lg font-semibold">
-        {kindFilter === "image" ? "사진 업로드" : "사진과 PDF"}
+        {kindFilter === "image"
+          ? "사진 업로드"
+          : kindFilter === "pdf"
+            ? "PDF 파일"
+            : "사진과 PDF"}
       </h2>
       <div className="flex flex-wrap gap-3">
         {kindFilter !== "pdf" && kindFilter !== "image" && (
@@ -924,7 +975,7 @@ export function MediaUpload({
           </li>
         ))}
       </ul>
-      {kindFilter === "image" && (
+      {(kindFilter === "image" || kindFilter === "pdf") && (
         <section
           aria-labelledby="media-library-heading"
           className="rounded-panel space-y-5 border bg-white p-5"
@@ -932,11 +983,12 @@ export function MediaUpload({
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h2 id="media-library-heading" className="text-lg font-semibold">
-                사진 보관함
+                {kindFilter === "pdf" ? "PDF 보관함" : "사진 보관함"}
               </h2>
               <p className="text-muted-foreground mt-1 text-sm">
-                한 번 저장한 사진을 홈 표지와 글에 다시 사용할 수 있어요. 사진을
-                누르면 원본을 확인합니다.
+                {kindFilter === "pdf"
+                  ? "처리가 끝난 PDF 일정표를 다시 선택할 수 있어요. 첫 장을 눌러 문서를 확인합니다."
+                  : "한 번 저장한 사진을 홈 표지와 글에 다시 사용할 수 있어요. 사진을 누르면 원본을 확인합니다."}
               </p>
               {deleteFeedback?.siteId === siteId && (
                 <p role="status" className="mt-2 text-sm text-green-800">
@@ -958,7 +1010,7 @@ export function MediaUpload({
             <div
               className="flex flex-wrap gap-2"
               role="group"
-              aria-label="사진 보기"
+              aria-label={kindFilter === "pdf" ? "PDF 보기" : "사진 보기"}
             >
               {(
                 [
@@ -984,7 +1036,9 @@ export function MediaUpload({
                 value={librarySort}
                 onValueChange={(value) => setLibrarySort(value as LibrarySort)}
               >
-                <SelectTrigger aria-label="사진 정렬">
+                <SelectTrigger
+                  aria-label={kindFilter === "pdf" ? "PDF 정렬" : "사진 정렬"}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -1001,8 +1055,8 @@ export function MediaUpload({
               error={library.error}
               title={
                 library.items.length > 0
-                  ? "다음 사진을 불러오지 못했어요"
-                  : "사진 보관함을 불러오지 못했어요"
+                  ? `다음 ${kindFilter === "pdf" ? "PDF 파일" : "사진"}을 불러오지 못했어요`
+                  : `${kindFilter === "pdf" ? "PDF" : "사진"} 보관함을 불러오지 못했어요`
               }
               onRetry={library.items.length > 0 ? loadMore : refreshLibrary}
               isRetrying={library.isLoading || library.isLoadingMore}
@@ -1010,11 +1064,12 @@ export function MediaUpload({
           )}
           {library.items.length === 0 && library.isLoading && (
             <p role="status" className="text-muted-foreground text-sm">
-              저장된 사진을 불러오고 있어요…
+              저장된 {kindFilter === "pdf" ? "PDF 파일" : "사진"}을 불러오고
+              있어요…
             </p>
           )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {imageUploadCard}
+            {kindFilter === "image" && imageUploadCard}
             {visibleLibraryAssets.map((asset) => (
               <article
                 key={asset.id}
@@ -1025,16 +1080,16 @@ export function MediaUpload({
                     type="button"
                     className="group relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden bg-stone-100 text-left"
                     onClick={() => setPreviewSelection({ siteId, asset })}
-                    aria-label={`${libraryAssetName(asset)} 원본 확대`}
+                    aria-label={`${libraryAssetName(asset, kindFilter)} 원본 확대`}
                   >
                     {asset.thumbnail_url ? (
                       <Image
                         src={thumbnailUrls[asset.id] ?? asset.thumbnail_url}
-                        alt={libraryAssetName(asset)}
+                        alt={libraryAssetName(asset, kindFilter)}
                         fill
                         unoptimized
                         sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px"
-                        className="object-cover transition-transform duration-300 group-hover:scale-105"
+                        className={`${kindFilter === "pdf" ? "object-contain" : "object-cover"} transition-transform duration-300 group-hover:scale-105`}
                         onError={() => void renewThumbnail(asset)}
                       />
                     ) : (
@@ -1064,7 +1119,7 @@ export function MediaUpload({
                 <div className="space-y-3 p-3">
                   <div>
                     <p className="truncate font-medium">
-                      {libraryAssetName(asset)}
+                      {libraryAssetName(asset, kindFilter)}
                     </p>
                     <p className="text-muted-foreground text-xs">
                       {formatAssetDate(asset.created_at)} ·{" "}
@@ -1091,6 +1146,10 @@ export function MediaUpload({
                       <span className="text-muted-foreground text-xs">
                         현재 편집 중 사용 중
                       </span>
+                    ) : kindFilter === "pdf" ? (
+                      <span className="text-muted-foreground text-xs">
+                        아직 사용 안 함
+                      </span>
                     ) : asset.can_delete ? (
                       <span className="text-muted-foreground text-xs">
                         아직 사용 안 함
@@ -1106,6 +1165,17 @@ export function MediaUpload({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    {kindFilter === "pdf" &&
+                      onSelectPdf &&
+                      isAvailableAsset(asset) && (
+                        <button
+                          type="button"
+                          className="rounded-control border px-3 py-2 text-xs"
+                          onClick={() => onSelectPdf(asset.id)}
+                        >
+                          일정 PDF로 선택
+                        </button>
+                      )}
                     {onSetCoverImage && isAvailableAsset(asset) && (
                       <button
                         type="button"
@@ -1148,10 +1218,10 @@ export function MediaUpload({
             visibleLibraryAssets.length === 0 && (
               <p className="text-muted-foreground text-sm">
                 {libraryFilter === "unused"
-                  ? "현재 불러온 사진 중 삭제할 수 있는 미사용 사진이 없습니다."
+                  ? `현재 불러온 ${kindFilter === "pdf" ? "PDF" : "사진"} 중 미사용 파일이 없습니다.`
                   : libraryFilter === "used"
-                    ? "현재 불러온 사진 중 사용 중인 사진이 없습니다."
-                    : "저장된 사진이 없습니다. 첫 사진을 올려 보세요."}
+                    ? `현재 불러온 ${kindFilter === "pdf" ? "PDF" : "사진"} 중 사용 중인 파일이 없습니다.`
+                    : `저장된 ${kindFilter === "pdf" ? "PDF" : "사진"}이 없습니다.`}
               </p>
             )}
           {library.nextOffset !== null && !library.isLoading && (
@@ -1162,7 +1232,9 @@ export function MediaUpload({
                 onClick={loadMore}
                 disabled={library.isLoadingMore || library.error !== undefined}
               >
-                {library.isLoadingMore ? "사진을 불러오는 중…" : "사진 더 보기"}
+                {library.isLoadingMore
+                  ? "파일을 불러오는 중…"
+                  : `${kindFilter === "pdf" ? "PDF" : "사진"} 더 보기`}
               </button>
             </div>
           )}
@@ -1173,19 +1245,37 @@ export function MediaUpload({
         onOpenChange={(open) => {
           if (!open) setPreviewSelection(undefined);
         }}
-        title={previewAsset ? libraryAssetName(previewAsset) : "원본 미리보기"}
-        description="저장된 사진을 크게 확인할 수 있습니다."
+        title={
+          previewAsset
+            ? libraryAssetName(previewAsset, kindFilter)
+            : "원본 미리보기"
+        }
+        description={
+          kindFilter === "pdf"
+            ? "저장된 PDF를 확인할 수 있습니다."
+            : "저장된 사진을 크게 확인할 수 있습니다."
+        }
         className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[min(94vw,56rem)] overflow-y-auto"
       >
         {previewAsset && (
           <div className="space-y-4">
-            <div className="flex h-[min(60dvh,38rem)] items-center justify-center">
+            <div
+              className={
+                kindFilter === "pdf"
+                  ? "w-full"
+                  : "flex h-[min(60dvh,38rem)] items-center justify-center"
+              }
+            >
               <PrivateAssetView
                 assetId={previewAsset.id}
                 siteId={siteId}
-                kind="image"
-                title={libraryAssetName(previewAsset)}
-                className="h-full w-full rounded object-contain object-center"
+                kind={kindFilter === "pdf" ? "pdf" : "image"}
+                title={libraryAssetName(previewAsset, kindFilter)}
+                className={
+                  kindFilter === "pdf"
+                    ? undefined
+                    : "h-full w-full rounded object-contain object-center"
+                }
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -1194,6 +1284,15 @@ export function MediaUpload({
                 {formatBytes(assetBytes(previewAsset))}
               </span>
               <div className="flex flex-wrap gap-2">
+                {kindFilter === "pdf" && onSelectPdf && (
+                  <button
+                    type="button"
+                    className="rounded-control border px-3 py-2"
+                    onClick={() => onSelectPdf(previewAsset.id)}
+                  >
+                    일정 PDF로 선택
+                  </button>
+                )}
                 {onSetCoverImage && (
                   <button
                     type="button"

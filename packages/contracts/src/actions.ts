@@ -25,11 +25,18 @@ const settings = json;
 // Draft content and category metadata are versioned JSON documents. Publication
 // validation remains authoritative on the server, allowing incomplete drafts.
 const content = json;
-const assetUsage = z.enum(["home", "post-cover", "post-body", "pdf-preview"]);
+const assetUsage = z.enum([
+  "home",
+  "post-cover",
+  "post-body",
+  "pdf-preview",
+  "post-pdf",
+]);
 const assetListItem = z.object({
   id: uuid,
   created_at: timestamp,
   metadata: json,
+  preview_asset_id: uuid.nullable().optional(),
   thumbnail_url: z.url().nullable(),
   original_url: z.url().nullable(),
   usage: z.array(assetUsage),
@@ -401,7 +408,11 @@ export const actionContracts = {
     z.object({ deleted: z.literal(true) }),
   ),
   "asset.list": contract(
-    z.strictObject({ ...scoped, ...page }),
+    z.strictObject({
+      ...scoped,
+      ...page,
+      kind: z.enum(["image", "pdf"]).default("image"),
+    }),
     z.object({
       items: z.array(assetListItem),
       next_offset: z.number().int().nonnegative().nullable(),
