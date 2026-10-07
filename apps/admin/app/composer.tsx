@@ -31,6 +31,7 @@ import {
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { MediaUpload, uploadEditorImage } from "./media-upload";
 import { PrivateAssetView } from "./asset-view";
+import { PostPreview } from "./post-preview";
 import {
   hasUnpublishedChanges,
   publicationChecklist,
@@ -598,6 +599,7 @@ export function Composer({ postId }: { postId?: string }) {
       .filter((check) => !check.valid)
       .map((check) => check.label);
     if (missing.length) {
+      setPreview(true);
       if (post.kind === "article") {
         setMetadataError(
           validatePublishedMetadata(
@@ -608,7 +610,6 @@ export function Composer({ postId }: { postId?: string }) {
             metadata,
           ) ?? "",
         );
-        setPreview(true);
       }
       setMessage(`발행 전에 확인해 주세요: ${missing.join(", ")}`);
       return;
@@ -876,11 +877,9 @@ export function Composer({ postId }: { postId?: string }) {
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          {post.kind === "article" && (
-            <Button variant="outline" onClick={() => setPreview(!preview)}>
-              {preview ? "이어서 쓰기" : "미리보기"}
-            </Button>
-          )}
+          <Button variant="outline" onClick={() => setPreview(true)}>
+            미리보기
+          </Button>
           <Button
             variant="outline"
             disabled={busy}
@@ -1510,90 +1509,54 @@ export function Composer({ postId }: { postId?: string }) {
       {post.kind === "article" && (
         <section
           className="rounded-panel space-y-3 border p-4"
-          aria-label={preview ? "공개 미리보기" : "본문 편집기"}
+          aria-label="본문 편집기"
         >
-          {preview ? (
-            <article className="mx-auto max-w-2xl space-y-5 py-6">
-              <p className="text-muted-foreground text-sm">
-                {CATEGORIES.find((item) => item.code === category)?.label} ·{" "}
-                {typeof metadata.region === "string"
-                  ? metadata.region
-                  : "지역 미입력"}
-              </p>
-              <h2 className="font-editorial text-3xl font-semibold">
-                {title || "제목을 입력해 주세요"}
-              </h2>
-              {coverAssetId && siteId && (
-                <PrivateAssetView
-                  assetId={coverAssetId}
-                  siteId={siteId}
-                  kind="image"
-                  title="대표 사진 미리보기"
-                />
-              )}
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <span
-                    className="rounded-full bg-stone-100 px-3 py-1 text-sm"
-                    key={tag}
-                  >
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-              <Editor
-                key={`${post.id}-preview`}
-                initialContent={document}
-                editable={false}
-                renderImage={renderEditorImage}
-              />
-            </article>
-          ) : (
-            <>
-              <Editor
-                key={`${post.id}-edit-${editorEpoch}`}
-                initialContent={document}
-                editable={!busy}
-                onChange={(nextDocument) => {
-                  if (JSON.stringify(nextDocument) === JSON.stringify(document))
-                    return;
-                  setDocument(nextDocument);
-                  markDirty();
-                }}
-                onReady={onEditorReady}
-                onUploadImage={handleEditorImageUpload}
-                renderImage={renderEditorImage}
-                onError={setEditorError}
-              />
-              {editorError && (
-                <p role="alert" className="text-sm text-red-700">
-                  {editorError}
-                </p>
-              )}
-            </>
+          <Editor
+            key={`${post.id}-edit-${editorEpoch}`}
+            initialContent={document}
+            editable={!busy}
+            onChange={(nextDocument) => {
+              if (JSON.stringify(nextDocument) === JSON.stringify(document))
+                return;
+              setDocument(nextDocument);
+              markDirty();
+            }}
+            onReady={onEditorReady}
+            onUploadImage={handleEditorImageUpload}
+            renderImage={renderEditorImage}
+            onError={setEditorError}
+          />
+          {editorError && (
+            <p role="alert" className="text-sm text-red-700">
+              {editorError}
+            </p>
           )}
         </section>
       )}
-      {post.kind === "article" && preview && (
-        <section
-          className="rounded-panel space-y-2 border p-4"
-          aria-label="발행 전 확인"
-        >
-          <h2 className="font-semibold">발행 전 확인</h2>
-          <ul>
-            {publishChecks.map((check) => (
-              <li key={check.label}>
-                {check.valid ? "✓" : "○"} {check.label}
-              </li>
-            ))}
-          </ul>
-          <p>
-            {publishChecks.every((check) => check.valid)
-              ? "필수 항목이 준비되었습니다. 발행은 별도 확인 후 진행합니다."
-              : "비어 있는 항목을 채우면 발행할 수 있습니다."}
-          </p>
-        </section>
-      )}
+      <PostPreview
+        open={preview}
+        onClose={() => setPreview(false)}
+        kind={post.kind}
+        category={post.kind === "pdf" ? "itinerary-pdf" : category}
+        title={title}
+        metadata={metadata}
+        tags={tags}
+        coverAssetId={coverAssetId}
+        pdfAssetId={pdfAssetId}
+        siteId={siteId}
+        publishedAt={post.first_published_at}
+        checks={publishChecks}
+        body={
+          post.kind === "article" ? (
+            <Editor
+              key={`${post.id}-preview-${editorEpoch}`}
+              initialContent={document}
+              editable={false}
+              renderImage={renderEditorImage}
+            />
+          ) : undefined
+        }
+      />
       {siteId &&
         (post.kind === "pdf" ? (
           <MediaUpload
