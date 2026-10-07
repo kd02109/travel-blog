@@ -266,9 +266,13 @@ export function SiteFrame({ children }: { children: React.ReactNode }) {
             ) : (
               <span
                 role="status"
-                className="text-muted-foreground px-2 text-sm"
+                aria-label="계정 확인 중"
+                className="inline-flex min-h-12 w-[92px] items-center px-2"
               >
-                계정 확인 중
+                <span
+                  aria-hidden="true"
+                  className="bg-muted h-4 w-full animate-pulse motion-reduce:animate-none"
+                />
               </span>
             )}
             <button

@@ -46,7 +46,7 @@ export function LoginForm({ next }: { next?: string }) {
             fill="#000000"
           />
         </svg>
-        <span>카카오 로그인</span>
+        <span>{pending ? "카카오로 이동 중…" : "카카오 로그인"}</span>
       </button>
       {pending && (
         <span role="status" className="sr-only">
@@ -54,7 +54,7 @@ export function LoginForm({ next }: { next?: string }) {
         </span>
       )}
       {error && (
-        <p role="alert" className="mt-4">
+        <p role="alert" className="mt-4 text-xs leading-relaxed text-[#7a4d3a]">
           {error}
         </p>
       )}
