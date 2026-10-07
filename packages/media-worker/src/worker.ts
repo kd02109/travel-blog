@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import { createCanvas } from "@napi-rs/canvas";
 import { createClient } from "@supabase/supabase-js";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import sharp from "sharp";
+import { processPdf } from "./pdf.ts";
 import { createWorkerFetch, workerApiKeyHeaders } from "./request-auth.ts";
 
 const base = process.env.SUPABASE_URL?.replace(/\/$/, "");
@@ -13,7 +12,6 @@ if (!base || !key)
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const MAX_PIXELS = 40_000_000;
-const MAX_PAGES = 200;
 const headers = workerApiKeyHeaders(key);
 const workerFetch = createWorkerFetch(key);
 const supabase = createClient(base, key, {
@@ -130,65 +128,6 @@ async function image(source: Uint8Array) {
   };
 }
 
-async function pdf(source: Uint8Array) {
-  if (new TextDecoder().decode(source.subarray(0, 5)) !== "%PDF-")
-    throw new Error("invalid_pdf");
-  const document = await getDocument({
-    data: source,
-    stopAtErrors: true,
-    isEvalSupported: false,
-  }).promise;
-  try {
-    if (document.numPages < 1 || document.numPages > MAX_PAGES)
-      throw new Error("invalid_page_count");
-    const page = await document.getPage(1);
-    const baseViewport = page.getViewport({ scale: 1 });
-    if (
-      !Number.isFinite(baseViewport.width) ||
-      !Number.isFinite(baseViewport.height) ||
-      baseViewport.width <= 0 ||
-      baseViewport.height <= 0
-    )
-      throw new Error("invalid_page_size");
-    const scale = Math.min(
-      1200 / baseViewport.width,
-      1600 / baseViewport.height,
-    );
-    const viewport = page.getViewport({ scale });
-    const canvas = createCanvas(
-      Math.ceil(viewport.width),
-      Math.ceil(viewport.height),
-    );
-    const context = canvas.getContext("2d");
-    await page.render({
-      canvas: canvas as unknown as HTMLCanvasElement,
-      canvasContext: context as never,
-      viewport,
-    }).promise;
-    const preview = new Uint8Array(await canvas.encode("png"));
-    page.cleanup();
-    return {
-      preview,
-      pages: document.numPages,
-      metadata: {
-        mime: "application/pdf",
-        bytes: source.length,
-        checksum: digest(source),
-        page_count: document.numPages,
-      },
-      previewMetadata: {
-        mime: "image/png",
-        bytes: preview.length,
-        checksum: digest(preview),
-        width: canvas.width,
-        height: canvas.height,
-      },
-    };
-  } finally {
-    await document.destroy();
-  }
-}
-
 async function handle(item: ClaimedJob) {
   const { job, asset } = item;
   const proof = {
@@ -208,7 +147,7 @@ async function handle(item: ClaimedJob) {
       object_path: path,
     });
   } else {
-    const result = await pdf(source);
+    const result = await processPdf(source);
     const documentPath = `${prefix}/document.pdf`;
     const previewPath = `${prefix}/first-page.png`;
     await upload(asset.bucket, documentPath, source, "application/pdf");
