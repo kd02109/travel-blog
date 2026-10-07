@@ -1042,25 +1042,78 @@ export function createMockEngine(options: MockOptions = {}) {
         audit(actor, action, MOCK_SITE_ID);
         return { version: state.settingsVersion };
       }
-      if (action === "admin.comments")
-        return paginate(state.comments.slice().reverse(), input).map((c) => ({
-          id: c.id,
-          post_id: c.post_id,
-          parent_id: c.parent_id,
-          body: c.body,
-          status: c.status,
-          version: c.version,
-          created_at: c.created_at,
-          author_kind: c.author_kind,
-          display_name: publicComment(c).display_name,
+      if (action === "admin.comments") {
+        const filter = input.filter ?? "all";
+        if (
+          !["all", "unanswered", "reported", "hidden"].includes(String(filter))
+        )
+          throw new ApiError(422, "invalid_filter");
+        const isStaff = (comment: Comment) =>
+          state.members.some(
+            (member) =>
+              member.active &&
+              member.role !== "reader" &&
+              member.user_id === comment.author_id,
+          );
+        const openReports = (comment: Comment) =>
+          state.reports
+            .filter(
+              (report) =>
+                report.comment_id === comment.id && report.status === "open",
+            )
+            .sort(
+              (a, b) =>
+                b.created_at.localeCompare(a.created_at) ||
+                b.id.localeCompare(a.id),
+            )
+            .map(({ id, reason, created_at }) => ({ id, reason, created_at }));
+        return paginate(
+          state.comments
+            .filter((comment) => {
+              if (filter === "hidden") return comment.status === "hidden";
+              if (filter === "reported") return openReports(comment).length > 0;
+              if (filter === "unanswered")
+                return (
+                  comment.parent_id === null &&
+                  comment.status === "visible" &&
+                  !state.comments.some(
+                    (reply) =>
+                      reply.post_id === comment.post_id &&
+                      reply.parent_id === comment.id &&
+                      reply.status === "visible" &&
+                      isStaff(reply),
+                  )
+                );
+              return true;
+            })
+            .sort(
+              (a, b) =>
+                b.created_at.localeCompare(a.created_at) ||
+                b.id.localeCompare(a.id),
+            ),
+          input,
+        ).map((comment) => ({
+          id: comment.id,
+          post_id: comment.post_id,
+          parent_id: comment.parent_id,
+          body: comment.body,
+          status: comment.status,
+          version: comment.version,
+          created_at: comment.created_at,
+          author_kind: comment.author_kind,
+          display_name: publicComment(comment).display_name,
           post_title:
-            state.publications.find((p) => p.post_id === c.post_id)?.title ??
-            state.posts.find((p) => p.id === c.post_id)?.draft_content.title ??
+            state.publications.find((p) => p.post_id === comment.post_id)
+              ?.title ??
+            state.posts.find((p) => p.id === comment.post_id)?.draft_content
+              .title ??
             "제목 없는 글",
-          is_staff: state.members.some(
-            (member) => member.active && member.user_id === c.author_id,
-          ),
+          is_staff: isStaff(comment),
+          comments_enabled:
+            publication(comment.post_id)?.comments_enabled ?? false,
+          open_reports: openReports(comment),
         }));
+      }
       if (action === "admin.account.deletions") {
         if (!(["owner", "admin"] as Role[]).includes(actor.role))
           throw new ApiError(403, "forbidden");

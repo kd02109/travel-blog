@@ -319,7 +319,13 @@ export const actionContracts = {
     changed,
   ),
   "admin.comments": contract(
-    z.strictObject({ ...scoped, ...page }),
+    z.strictObject({
+      ...scoped,
+      ...page,
+      filter: z
+        .enum(["all", "unanswered", "reported", "hidden"])
+        .default("all"),
+    }),
     z.array(
       z.object({
         id: uuid,
@@ -333,6 +339,14 @@ export const actionContracts = {
         display_name: z.string(),
         post_title: z.string(),
         is_staff: z.boolean(),
+        comments_enabled: z.boolean(),
+        open_reports: z.array(
+          z.object({
+            id: uuid,
+            reason,
+            created_at: timestamp,
+          }),
+        ),
       }),
     ),
   ),

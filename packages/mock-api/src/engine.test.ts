@@ -577,6 +577,138 @@ describe("draft and published content", () => {
   });
 });
 describe("reactions and authorization", () => {
+  it("filters the complete comment inbox before pagination and keeps every open report", () => {
+    const engine = createMockEngine();
+    const rootId = mockId(5, 1);
+    for (let index = 0; index < 55; index++) {
+      expect(
+        call(
+          engine,
+          "comment.create",
+          {
+            id: first,
+            parent_id: rootId,
+            body: `독자 답글 ${index}`,
+            request_key: mockId(6, index + 100),
+          },
+          reader,
+        ).status,
+      ).toBe(200);
+    }
+    const firstPage = call(
+      engine,
+      "admin.comments",
+      { ...site, limit: 50, offset: 0 },
+      owner,
+    ).body as { id: string }[];
+    expect(firstPage).toHaveLength(50);
+    expect(firstPage.some((comment) => comment.id === rootId)).toBe(false);
+
+    const unanswered = call(
+      engine,
+      "admin.comments",
+      { ...site, filter: "unanswered", limit: 50, offset: 0 },
+      owner,
+    ).body as { id: string; is_staff: boolean }[];
+    expect(unanswered).toMatchObject([{ id: rootId, is_staff: false }]);
+    expect(
+      call(engine, "comment.report", { id: rootId, reason: "spam" }, owner)
+        .status,
+    ).toBe(200);
+    expect(
+      call(
+        engine,
+        "comment.report",
+        { id: rootId, reason: "abuse" },
+        {
+          Authorization: "Bearer mock-editor",
+        },
+      ).status,
+    ).toBe(200);
+    const reported = call(
+      engine,
+      "admin.comments",
+      { ...site, filter: "reported" },
+      owner,
+    ).body as {
+      id: string;
+      comments_enabled: boolean;
+      open_reports: { id: string; reason: string }[];
+    }[];
+    expect(reported).toHaveLength(1);
+    expect(reported[0]).toMatchObject({
+      id: rootId,
+      comments_enabled: true,
+      open_reports: [{ reason: "abuse" }, { reason: "spam" }],
+    });
+
+    expect(
+      call(
+        engine,
+        "comment.create",
+        {
+          id: first,
+          parent_id: rootId,
+          body: "관리자 답글",
+          request_key: mockId(6, 200),
+        },
+        owner,
+      ).status,
+    ).toBe(200);
+    expect(
+      call(engine, "admin.comments", { ...site, filter: "unanswered" }, owner)
+        .body,
+    ).toEqual([]);
+
+    expect(
+      call(
+        engine,
+        "admin.comment.moderate",
+        { ...site, id: rootId, version: 1, status: "hidden" },
+        owner,
+      ).status,
+    ).toBe(200);
+    const hidden = call(
+      engine,
+      "admin.comments",
+      { ...site, filter: "hidden" },
+      owner,
+    ).body as { id: string }[];
+    expect(hidden).toMatchObject([{ id: rootId }]);
+
+    for (const report of reported[0]!.open_reports) {
+      expect(
+        call(
+          engine,
+          "admin.report.resolve",
+          { ...site, id: report.id, status: "resolved" },
+          owner,
+        ).status,
+      ).toBe(200);
+    }
+    expect(
+      call(engine, "admin.comments", { ...site, filter: "reported" }, owner)
+        .body,
+    ).toEqual([]);
+    expect(
+      call(engine, "admin.comments", { ...site, filter: "invalid" }, owner)
+        .status,
+    ).toBe(422);
+    const post = call(engine, "admin.post.get", { id: first }, owner)
+      .body as Post;
+    expect(
+      call(
+        engine,
+        "admin.post.status",
+        { id: first, version: post.lock_version, status: "private" },
+        owner,
+      ).status,
+    ).toBe(200);
+    expect(
+      call(engine, "admin.comments", { ...site, filter: "hidden" }, owner).body,
+    ).toMatchObject([{ id: rootId, comments_enabled: false }]);
+  });
+
   it("requires explicit identities and enforces editor/owner permissions", () => {
     const engine = createMockEngine();
     expect(call(engine, "admin.posts", site).status).toBe(401);

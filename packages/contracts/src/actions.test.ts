@@ -164,6 +164,8 @@ const samples = {
       display_name: "독자",
       post_title: "여행 기록",
       is_staff: false,
+      comments_enabled: true,
+      open_reports: [],
     },
   ],
   "admin.comment.moderate": { version: 1 },
@@ -375,6 +377,15 @@ describe("deployed action boundaries", () => {
       actionContracts["posts.list"].input.safeParse({
         site_id: id,
         offset: 100001,
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["admin.comments"].input.parse({ site_id: id }).filter,
+    ).toBe("all");
+    expect(
+      actionContracts["admin.comments"].input.safeParse({
+        site_id: id,
+        filter: "invalid",
       }).success,
     ).toBe(false);
   });
