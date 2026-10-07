@@ -4,15 +4,16 @@ import Link from "next/link";
 import type { ActionOutput } from "@repo/contracts";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { ApiErrorState } from "@repo/api-client/feedback";
 import { pageOffset } from "@repo/api-client/query";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { Button } from "@repo/ui/button";
 import { Pagination } from "@repo/ui/pagination";
-import { LoadingState } from "@repo/ui/skeleton";
 import { PostCard } from "../post-card";
+import { PublicApiErrorState } from "../public-feedback";
 import { CatalogEmpty } from "./catalog-empty";
+import { CatalogSkeleton } from "./catalog-loading";
 import styles from "./catalog.module.css";
+
 export function Catalog({
   initialSite,
   initialPosts,
@@ -76,14 +77,20 @@ export function Catalog({
       staleTime: 0,
     },
   );
-  const loadError = site.error ?? posts.error;
   const visiblePosts = posts.data?.slice(0, 12) ?? [];
   const showInitialError =
     Boolean(initialError) &&
     (!site.data || !posts.data) &&
     !site.isFetching &&
     !posts.isFetching &&
-    !loadError;
+    !site.error &&
+    !posts.error;
+  const siteFailure = !site.data && Boolean(site.error);
+  const loadFailure =
+    !posts.data && (siteFailure || Boolean(posts.error) || showInitialError);
+  const catalogLoading = !posts.data && !loadFailure;
+  const refreshError =
+    posts.data && (posts.error ?? (site.data ? site.error : null));
   const retryContent = () => {
     if (!site.data || site.error) void site.refetch();
     if (site.data && (posts.error || !posts.data)) void posts.refetch();
@@ -138,21 +145,33 @@ export function Catalog({
         </nav>
       </header>
       <div className={styles.catalogContent}>
-        {(loadError || showInitialError) && (
-          <ApiErrorState
-            error={loadError ?? initialError}
-            title="공개 기록을 확인하지 못했어요"
-            description={loadError ? undefined : initialError}
+        {loadFailure && (
+          <PublicApiErrorState
+            error={siteFailure ? site.error : (posts.error ?? initialError)}
+            title={
+              siteFailure
+                ? "여행 기록에 연결하지 못했어요"
+                : category === "all"
+                  ? "여행 기록을 확인하지 못했어요"
+                  : "이 분류의 기록을 확인하지 못했어요"
+            }
+            description={site.error || posts.error ? undefined : initialError}
             onRetry={retryContent}
             isRetrying={site.isFetching || posts.isFetching}
+            size="tall"
           />
         )}
-        {!loadError &&
-          !showInitialError &&
-          (site.isPending || posts.isPending) && (
-            <LoadingState label="여행 기록을 불러오고 있어요…" />
-          )}
-        {visiblePosts.length > 0 && (
+        {refreshError && (
+          <PublicApiErrorState
+            error={refreshError}
+            title="여행 기록을 새로 확인하지 못했어요"
+            onRetry={retryContent}
+            isRetrying={site.isFetching || posts.isFetching}
+            size="small"
+          />
+        )}
+        {catalogLoading && <CatalogSkeleton />}
+        {!loadFailure && visiblePosts.length > 0 && (
           <section aria-label="여행 기록 목록">
             <p className={styles.listNote} aria-live="polite">
               {page > 1 ? `${page}번째 페이지` : "최근 기록"} ·{" "}
@@ -176,7 +195,7 @@ export function Catalog({
             </ul>
           </section>
         )}
-        {posts.data?.length === 0 && !posts.error && (
+        {!loadFailure && posts.data?.length === 0 && (
           <CatalogEmpty
             title={
               page > 1

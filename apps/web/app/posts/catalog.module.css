@@ -54,6 +54,12 @@
   font-weight: 700;
 }
 
+.categoryLoadingLink {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .catalogContent {
   display: grid;
   gap: 2rem;
@@ -65,6 +71,12 @@
   color: var(--muted-foreground);
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+.listNoteSkeleton {
+  width: 7.5rem;
+  height: 0.8125rem;
+  margin-bottom: 1rem;
 }
 
 .postList,
