@@ -4,6 +4,27 @@ import { describeApiError } from "@repo/api-client";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { ApiErrorState } from "@repo/api-client/feedback";
 import Image from "next/image";
+import dynamic from "next/dynamic";
+
+const PdfReader = dynamic(() => import("./pdf-reader"), {
+  ssr: false,
+  loading: () => (
+    <div
+      aria-label="PDF 문서를 불러오는 중"
+      className="bg-muted/30 border-border my-6 flex min-h-[560px] items-center justify-center border p-6"
+      role="status"
+    >
+      <div className="bg-background/70 aspect-[3/4] w-full max-w-[420px] animate-pulse p-8">
+        <div className="bg-muted h-3 w-1/3" />
+        <div className="bg-muted mt-12 h-7 w-3/4" />
+        <div className="bg-muted mt-8 h-3 w-full" />
+        <div className="bg-muted mt-3 h-3 w-5/6" />
+        <div className="bg-muted mt-16 h-3 w-full" />
+        <div className="bg-muted mt-3 h-3 w-4/5" />
+      </div>
+    </div>
+  ),
+});
 
 export function PrivateImage({
   assetId,
@@ -327,79 +348,7 @@ export function PrivatePdf({
   siteId: string;
   title: string;
 }) {
-  const api = useMemo(() => createBrowserTravelApi(), []);
-  const [asset, setAsset] = useState<{
-    url: string;
-    expires_in: number;
-    metadata: Record<string, unknown>;
-    preview_asset_id: string | null;
-  }>();
-  const [error, setError] = useState<unknown>(null);
-  const [loading, setLoading] = useState(false);
-  const [retry, setRetry] = useState(0);
-  useEffect(() => {
-    let disposed = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const refresh = async () => {
-      setLoading(true);
-      try {
-        const next = await api.call("asset.access", {
-          id: assetId,
-          site_id: siteId,
-        });
-        if (disposed) return;
-        setAsset(next);
-        setError(null);
-        setLoading(false);
-        timer = setTimeout(
-          () => void refresh(),
-          Math.max(30, next.expires_in - 45) * 1000,
-        );
-      } catch (cause) {
-        if (disposed) return;
-        setError(cause ?? new Error("asset_access_failed"));
-        setLoading(false);
-      }
-    };
-    void refresh();
-    return () => {
-      disposed = true;
-      clearTimeout(timer);
-    };
-  }, [api, assetId, siteId, retry]);
   return (
-    <section className="my-6 space-y-2" aria-label="PDF 일정표">
-      <h2>{title}</h2>
-      {error != null && (
-        <ApiErrorState
-          error={error}
-          title="PDF를 열지 못했어요"
-          onRetry={() => setRetry((current) => current + 1)}
-          isRetrying={loading}
-        />
-      )}
-      {asset ? (
-        <>
-          <p>{String(asset.metadata.page_count ?? "")}쪽</p>
-          {asset.preview_asset_id ? (
-            <PrivateImage
-              assetId={asset.preview_asset_id}
-              siteId={siteId}
-              title={`${title} 첫 페이지`}
-            />
-          ) : null}
-          <a href={asset.url} target="_blank" rel="noreferrer">
-            PDF 다운로드
-          </a>
-          <iframe
-            src={asset.url}
-            title={title}
-            className="h-[80vh] w-full rounded border"
-          />
-        </>
-      ) : error == null ? (
-        <p role="status">PDF를 여는 중…</p>
-      ) : null}
-    </section>
+    <PdfReader key={assetId} assetId={assetId} siteId={siteId} title={title} />
   );
 }
