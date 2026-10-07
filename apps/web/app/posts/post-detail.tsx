@@ -46,6 +46,7 @@ export function PostDetail({
   const [contents, setContents] = useState<
     Array<{ id: string; title: string }>
   >([]);
+  const [activeHeadingId, setActiveHeadingId] = useState("");
   const [optimisticLike, setOptimisticLike] = useState<{
     liked: boolean;
     count: number;
@@ -72,6 +73,7 @@ export function PostDetail({
   );
   const setLike = useTravelMutation(api, "like.set", scope);
   const articleBody = useRef<HTMLDivElement>(null);
+  const mobileToc = useRef<HTMLDetailsElement>(null);
   const related = useTravelQuery(
     api,
     "posts.list",
@@ -105,6 +107,32 @@ export function PostDetail({
       return { id, title: heading.textContent?.trim() || `본문 ${index + 1}` };
     });
     setContents(next);
+    setActiveHeadingId(next[0]?.id ?? "");
+    const firstHeading = headings[0];
+    if (!firstHeading || headings.length < 3) return;
+
+    let animationFrame = 0;
+    const updateActiveHeading = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const threshold = 140;
+        const current =
+          [...headings]
+            .reverse()
+            .find(
+              (heading) => heading.getBoundingClientRect().top <= threshold,
+            ) ?? firstHeading;
+        setActiveHeadingId(current.id);
+      });
+    };
+    updateActiveHeading();
+    window.addEventListener("scroll", updateActiveHeading, { passive: true });
+    window.addEventListener("resize", updateActiveHeading);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener("scroll", updateActiveHeading);
+      window.removeEventListener("resize", updateActiveHeading);
+    };
   }, [articleHtml, slug]);
   async function toggleLike() {
     const current = optimisticLike ?? likeState.data;
@@ -233,6 +261,28 @@ export function PostDetail({
         .filter(Boolean)
         .join(" · ")
     : "";
+  const relatedPosts =
+    related.data
+      ?.filter((item) => item.post_id !== post.data.post_id)
+      .slice(0, 4) ?? [];
+  const hasToc = contents.length >= 3;
+  const tocLinks = (closeOnSelect: boolean) =>
+    contents.map((item) => (
+      <li key={item.id}>
+        <a
+          href={`#${item.id}`}
+          aria-current={activeHeadingId === item.id ? "location" : undefined}
+          onClick={() => {
+            setActiveHeadingId(item.id);
+            if (closeOnSelect && mobileToc.current) {
+              mobileToc.current.open = false;
+            }
+          }}
+        >
+          {item.title}
+        </a>
+      </li>
+    ));
   return (
     <main className={styles.page}>
       <Link
@@ -262,6 +312,7 @@ export function PostDetail({
           <div className={styles.metaBar}>
             <p className={styles.meta}>
               <span>
+                게시{" "}
                 <time dateTime={post.data.published_at}>
                   {new Intl.DateTimeFormat("ko-KR", {
                     dateStyle: "long",
@@ -335,7 +386,7 @@ export function PostDetail({
               assetId={post.data.cover_asset_id}
               siteId={siteId}
               title={coverCaption || `${post.data.title} 대표 사진`}
-              className="absolute inset-0 h-full w-full object-cover"
+              className={styles.coverImage}
               reserveSpace
             />
             {coverCaption && <figcaption>{coverCaption}</figcaption>}
@@ -351,22 +402,28 @@ export function PostDetail({
           </div>
         )}
         {articleHtml && (
-          <section className={styles.reading} aria-label="여행 이야기">
-            {contents.length > 1 && (
-              <nav aria-label="이 글의 목차" className={styles.toc}>
-                <h2>이 글의 목차</h2>
-                <ol>
-                  {contents.map((item) => (
-                    <li key={item.id}>
-                      <a href={`#${item.id}`}>{item.title}</a>
-                    </li>
-                  ))}
-                </ol>
-              </nav>
+          <section
+            className={styles.reading}
+            data-has-toc={hasToc}
+            aria-label="여행 이야기"
+          >
+            {hasToc && (
+              <details ref={mobileToc} className={styles.mobileToc}>
+                <summary>이 글의 목차</summary>
+                <nav aria-label="이 글의 목차">
+                  <ol>{tocLinks(true)}</ol>
+                </nav>
+              </details>
             )}
             <div ref={articleBody} className={styles.body}>
               <PostAssetFigures html={articleHtml} siteId={siteId} />
             </div>
+            {hasToc && (
+              <nav aria-label="이 글의 목차" className={styles.desktopToc}>
+                <h2>이 글의 목차</h2>
+                <ol>{tocLinks(false)}</ol>
+              </nav>
+            )}
           </section>
         )}
         {article && post.data.tags.length > 0 && (
@@ -377,37 +434,6 @@ export function PostDetail({
           </div>
         )}
       </article>
-      {post.data.category_code !== "itinerary-pdf" && related.error && (
-        <div className={styles.afterArticle}>
-          <ApiErrorState
-            error={related.error}
-            title="같은 분류의 여행을 확인하지 못했어요"
-            onRetry={() => void related.refetch()}
-            isRetrying={related.isFetching}
-          />
-        </div>
-      )}
-      {post.data.category_code !== "itinerary-pdf" &&
-        related.data &&
-        related.data.filter((item) => item.post_id !== post.data?.post_id)
-          .length > 0 && (
-          <section
-            aria-labelledby="related-heading"
-            className={styles.afterArticle}
-          >
-            <h2 id="related-heading" className="font-serif text-2xl">
-              같은 분류의 여행
-            </h2>
-            <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-              {related.data
-                .filter((item) => item.post_id !== post.data?.post_id)
-                .slice(0, 4)
-                .map((item) => (
-                  <PostCard key={item.post_id} post={item} siteId={siteId} />
-                ))}
-            </ul>
-          </section>
-        )}
       {post.data.category_code !== "itinerary-pdf" && (
         <div className={styles.comments}>
           <CommentSection
@@ -420,6 +446,80 @@ export function PostDetail({
           />
         </div>
       )}
+      {post.data.category_code !== "itinerary-pdf" && related.error && (
+        <div className={styles.afterArticle}>
+          <ApiErrorState
+            error={related.error}
+            title="같은 분류의 여행을 확인하지 못했어요"
+            onRetry={() => void related.refetch()}
+            isRetrying={related.isFetching}
+          />
+        </div>
+      )}
+      {post.data.category_code !== "itinerary-pdf" &&
+        relatedPosts.length > 0 && (
+          <section
+            aria-labelledby="related-heading"
+            className={styles.afterArticle}
+          >
+            <p className={styles.sectionKicker}>KEEP READING</p>
+            <h2 id="related-heading" className={styles.relatedHeading}>
+              다음 여행 읽기
+            </h2>
+            {relatedPosts.length === 1 ? (
+              <ul className={styles.relatedSingle}>
+                {relatedPosts.map((item) => (
+                  <li key={item.post_id}>
+                    <Link
+                      href={`/posts/${encodeURIComponent(item.slug)}`}
+                      className={styles.relatedLink}
+                      data-has-image={Boolean(item.cover_asset_id)}
+                    >
+                      {item.cover_asset_id && (
+                        <div className={styles.relatedMedia}>
+                          <PrivateImage
+                            assetId={item.cover_asset_id}
+                            siteId={siteId}
+                            title={`${item.title} 대표 사진`}
+                            className="h-full w-full object-cover"
+                            allowRetry={false}
+                          />
+                        </div>
+                      )}
+                      <span className={styles.relatedCopy}>
+                        <span className={styles.relatedCategory}>
+                          {CATEGORIES.find(
+                            (category) => category.code === item.category_code,
+                          )?.label ?? "여행 기록"}
+                        </span>
+                        <strong className={styles.relatedTitle}>
+                          {item.title}
+                        </strong>
+                        <time
+                          dateTime={item.published_at}
+                          className={styles.relatedDate}
+                        >
+                          {new Intl.DateTimeFormat("ko-KR", {
+                            dateStyle: "long",
+                          }).format(new Date(item.published_at))}
+                        </time>
+                      </span>
+                      <span className={styles.relatedArrow} aria-hidden="true">
+                        ↗
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className={styles.relatedGrid}>
+                {relatedPosts.map((item) => (
+                  <PostCard key={item.post_id} post={item} siteId={siteId} />
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       <Dialog
         open={shareOpen}
         onOpenChange={setShareOpen}
