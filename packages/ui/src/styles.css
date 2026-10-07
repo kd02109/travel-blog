@@ -130,10 +130,10 @@
 }
 
 @layer utilities {
-  :is(input, textarea, select):focus-visible {
-    outline: 3px solid var(--ring);
-    outline-offset: 2px;
-    background-color: var(--muted);
+  :is(input, textarea, select, button[role="combobox"]):focus {
+    outline: none;
+    outline-offset: 0;
+    box-shadow: none;
   }
 }
 
