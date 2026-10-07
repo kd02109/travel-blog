@@ -440,6 +440,10 @@ Deno.serve(async (req: Request) => {
       }
     }
     if (action === "asset.list") {
+      const kind = input.kind ?? "image";
+      if (kind !== "image" && kind !== "pdf") {
+        throw new ApiError(422, "invalid_kind");
+      }
       const limit = Math.min(
         50,
         Math.max(1, Number.isInteger(input.limit) ? Number(input.limit) : 12),
@@ -448,7 +452,9 @@ Deno.serve(async (req: Request) => {
         100000,
         Math.max(0, Number.isInteger(input.offset) ? Number(input.offset) : 0),
       );
-      const { data, error } = await client.rpc("travel_asset_list", {
+      const { data, error } = await client.rpc(kind === "pdf"
+        ? "travel_pdf_asset_list"
+        : "travel_asset_list", {
         p_actor: actor,
         p_site_id: input.site_id,
         p_limit: limit,
@@ -483,6 +489,35 @@ Deno.serve(async (req: Request) => {
             .createSignedUrl(objectPath, 300);
           if (signedError || !signed?.signedUrl) {
             throw new ApiError(502, "download_url_failed");
+          }
+          if (kind === "pdf") {
+            const previewBucket = typeof row.preview_bucket === "string"
+              ? row.preview_bucket
+              : "";
+            const previewPath = typeof row.preview_object_path === "string"
+              ? row.preview_object_path
+              : "";
+            if (!previewBucket || !previewPath) {
+              throw new ApiError(502, "download_url_failed");
+            }
+            const { data: preview, error: previewError } = await client.storage
+              .from(previewBucket)
+              .createSignedUrl(previewPath, 300);
+            if (previewError || !preview?.signedUrl) {
+              throw new ApiError(502, "download_url_failed");
+            }
+            return {
+              id: row.id,
+              created_at: row.created_at,
+              metadata: row.metadata ?? {},
+              preview_asset_id: row.preview_asset_id,
+              thumbnail_url: preview.signedUrl,
+              original_url: signed.signedUrl,
+              usage: Array.isArray(row.usage) ? row.usage : [],
+              can_delete: false,
+              deletion_pending: false,
+              delete_available_at: null,
+            };
           }
           return {
             id: row.id,

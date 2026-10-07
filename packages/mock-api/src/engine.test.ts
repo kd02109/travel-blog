@@ -837,6 +837,36 @@ describe("settings, assets, and failures", () => {
       status: 501,
       body: { error: "mock_upload_not_implemented" },
     });
+    const imageList = call(engine, "asset.list", site, owner).body as {
+      items: { id: string }[];
+    };
+    expect(imageList.items.some((asset) => asset.id === pdf.id)).toBe(false);
+    const pdfList = call(
+      engine,
+      "asset.list",
+      {
+        ...site,
+        kind: "pdf",
+      },
+      owner,
+    ).body as {
+      items: {
+        id: string;
+        thumbnail_url: string;
+        original_url: string;
+        usage: string[];
+        can_delete: boolean;
+      }[];
+    };
+    expect(pdfList.items).toEqual([
+      expect.objectContaining({
+        id: pdf.id,
+        thumbnail_url: "http://localhost:3000/mock-assets/placeholder.svg",
+        original_url: "http://localhost:3000/mock-assets/itinerary.pdf",
+        usage: ["post-pdf"],
+        can_delete: false,
+      }),
+    ]);
   });
   it("deletes only unused ready images for site admins", () => {
     const used = mockId(4, 2);

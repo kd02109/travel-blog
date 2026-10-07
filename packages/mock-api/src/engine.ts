@@ -684,35 +684,65 @@ export function createMockEngine(options: MockOptions = {}) {
         };
         blocks.forEach(visit);
       }
-      const images = state.assets
-        .filter((asset) => asset.kind === "image" && asset.state === "ready")
+      const kind = input.kind ?? "image";
+      const libraryAssets = state.assets
+        .filter(
+          (asset) =>
+            asset.kind === kind &&
+            asset.state === "ready" &&
+            (kind !== "pdf" ||
+              state.assets.some(
+                (preview) =>
+                  preview.id === asset.preview_asset_id &&
+                  preview.kind === "image" &&
+                  preview.state === "ready",
+              )),
+        )
         .sort(
           (left, right) =>
             (right.created_at ?? MOCK_NOW).localeCompare(
               left.created_at ?? MOCK_NOW,
             ) || left.id.localeCompare(right.id),
         );
-      const page = images.slice(offset, offset + limit);
+      const page = libraryAssets.slice(offset, offset + limit);
       return {
         items: page.map((asset) => ({
           id: asset.id,
           created_at: asset.created_at ?? MOCK_NOW,
           metadata: asset.metadata,
+          preview_asset_id: kind === "pdf" ? asset.preview_asset_id : null,
           thumbnail_url: new URL(
-            asset.url,
+            kind === "pdf"
+              ? state.assets.find((item) => item.id === asset.preview_asset_id)!
+                  .url
+              : asset.url,
             options.origin ?? "http://localhost:3000",
           ).href,
           original_url: new URL(
             asset.url,
             options.origin ?? "http://localhost:3000",
           ).href,
-          usage: [
-            ...(usedInHome.has(asset.id) ? ["home"] : []),
-            ...(usedAsCover.has(asset.id) ? ["post-cover"] : []),
-            ...(usedInBody.has(asset.id) ? ["post-body"] : []),
-          ],
-          can_delete: !assetReferenced(asset.id) && !deleteAvailableAt(asset),
-          delete_available_at: deleteAvailableAt(asset),
+          usage:
+            kind === "pdf"
+              ? state.publications.some(
+                  (publication) => publication.pdf_asset_id === asset.id,
+                ) ||
+                state.posts.some(
+                  (post) => post.draft_content.pdf_asset_id === asset.id,
+                )
+                ? ["post-pdf"]
+                : []
+              : [
+                  ...(usedInHome.has(asset.id) ? ["home"] : []),
+                  ...(usedAsCover.has(asset.id) ? ["post-cover"] : []),
+                  ...(usedInBody.has(asset.id) ? ["post-body"] : []),
+                ],
+          can_delete:
+            kind === "image" &&
+            !assetReferenced(asset.id) &&
+            !deleteAvailableAt(asset),
+          delete_available_at:
+            kind === "image" ? deleteAvailableAt(asset) : null,
           deletion_pending: false,
         })),
         next_offset: page.length === limit ? offset + limit : null,
