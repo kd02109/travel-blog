@@ -9,6 +9,7 @@ import { TravelApiError } from "@repo/api-client";
 import type { ActionOutput } from "@repo/contracts";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
+import styles from "./comment-section.module.css";
 
 type Comment = ActionOutput<"comments.list">[number];
 type CommentAction = "reply" | "edit" | "report" | "delete";
@@ -59,6 +60,25 @@ export function CommentSection({
   const [reportReason, setReportReason] = useState<
     "spam" | "abuse" | "personal_information" | "other"
   >("spam");
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const focusAttribute = "data-comment-field-keyboard-focus";
+    const showKeyboardFocus = (event: KeyboardEvent) => {
+      if (event.key === "Tab") root.setAttribute(focusAttribute, "");
+    };
+    const hideKeyboardFocus = () => root.removeAttribute(focusAttribute);
+
+    root.setAttribute(focusAttribute, "");
+    window.addEventListener("keydown", showKeyboardFocus, true);
+    window.addEventListener("pointerdown", hideKeyboardFocus, true);
+    return () => {
+      window.removeEventListener("keydown", showKeyboardFocus, true);
+      window.removeEventListener("pointerdown", hideKeyboardFocus, true);
+      root.removeAttribute(focusAttribute);
+    };
+  }, []);
+
   const comments = useTravelQuery(
     api,
     "comments.list",
@@ -382,24 +402,26 @@ export function CommentSection({
     const children = commentsByParent.get(item.id) ?? [];
     const deleted = item.status === "deleted";
     const canManage = item.can_manage || item.is_guest;
-    const actions: CommentAction[] = ["reply"];
+    const actions: CommentAction[] = [];
     if (canManage) actions.push("edit");
     if (!item.can_manage) actions.push("report");
     if (canManage) actions.push("delete");
     return (
       <li
         key={item.id}
-        className="border-border space-y-3 border-b py-5"
+        className="border-border space-y-3 border-b py-6"
         style={{ marginLeft: depth ? Math.min(depth, 2) * 16 : 0 }}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1 pt-1">
-            <strong>{item.display_name}</strong>
+            <strong className="text-sm font-semibold">
+              {item.display_name}
+            </strong>
             {item.is_staff && (
               <span className="text-primary text-xs">운영자</span>
             )}
             <time
-              className="text-muted-foreground text-sm"
+              className="text-muted-foreground text-xs"
               dateTime={item.created_at}
             >
               {new Intl.DateTimeFormat("ko-KR", {
@@ -417,9 +439,9 @@ export function CommentSection({
                 onClick={() =>
                   setMenuOpen(menuOpen === item.id ? null : item.id)
                 }
-                className="group inline-flex size-12 items-center justify-center rounded-full"
+                className="group inline-flex size-11 items-center justify-center rounded-full"
               >
-                <span className="bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-foreground inline-flex size-8 items-center justify-center rounded-full transition-colors">
+                <span className="text-muted-foreground group-hover:text-foreground inline-flex size-8 items-center justify-center rounded-full transition-colors">
                   <ActionIcon action="more" />
                 </span>
               </button>
@@ -427,17 +449,15 @@ export function CommentSection({
                 <div
                   id={`comment-actions-${item.id}`}
                   aria-label={`${item.display_name} 댓글 작업`}
-                  className={`border-border bg-surface rounded-panel absolute top-full right-0 z-20 mt-2 border p-2 shadow-[0_12px_32px_rgb(23_60_66_/_16%)] ${actions.length > 2 ? "w-48" : "w-28"}`}
+                  className="border-border bg-surface rounded-control absolute top-full right-0 z-20 mt-1 w-36 border p-1 shadow-[0_8px_24px_rgb(23_60_66_/_10%)]"
                 >
-                  <div
-                    className={`grid gap-1.5 ${actions.length > 2 ? "grid-cols-2" : "grid-cols-1"}`}
-                  >
+                  <div className="grid gap-0.5">
                     {actions.map((action) => (
                       <button
                         key={action}
                         type="button"
                         onClick={() => chooseAction(action, item)}
-                        className="border-border bg-background text-foreground hover:border-primary/30 hover:bg-muted rounded-control inline-flex min-h-12 items-center justify-between gap-1 border px-2 text-sm transition-colors"
+                        className="text-foreground hover:bg-muted rounded-control inline-flex min-h-11 items-center justify-between gap-2 px-3 text-sm transition-colors"
                       >
                         <span>{actionLabels[action]}</span>
                         <ActionIcon action={action} />
@@ -450,13 +470,13 @@ export function CommentSection({
           )}
         </div>
         {deleted ? (
-          <p className="text-muted-foreground">삭제된 댓글입니다.</p>
+          <p className="text-muted-foreground text-sm">삭제된 댓글입니다.</p>
         ) : editing === item.id ? (
           <form
-            className="space-y-3"
+            className="space-y-4"
             onSubmit={(event) => void submitEdit(event, item)}
           >
-            <label className="block">
+            <label className="block text-sm font-medium">
               댓글 수정
               <textarea
                 name="body"
@@ -464,11 +484,11 @@ export function CommentSection({
                 minLength={1}
                 maxLength={1000}
                 defaultValue={item.body}
-                className="rounded-control bg-background mt-1 min-h-24 w-full border p-3"
+                className={`${styles.field} ${styles.textarea} rounded-control mt-2 min-h-24 w-full p-3 font-normal`}
               />
             </label>
             {item.is_guest && (
-              <label className="block">
+              <label className="block text-sm font-medium">
                 작성 시 비밀번호
                 <input
                   name="password"
@@ -477,7 +497,7 @@ export function CommentSection({
                   minLength={8}
                   maxLength={128}
                   autoComplete="current-password"
-                  className="rounded-control mt-1 min-h-11 border p-2"
+                  className={`${styles.field} rounded-control mt-2 min-h-11 w-full max-w-sm px-3 font-normal`}
                 />
               </label>
             )}
@@ -511,7 +531,18 @@ export function CommentSection({
               )}
           </form>
         ) : (
-          <p className="leading-relaxed whitespace-pre-wrap">{item.body}</p>
+          <p className="text-base leading-[1.7] whitespace-pre-wrap">
+            {item.body}
+          </p>
+        )}
+        {!deleted && editing !== item.id && (
+          <button
+            type="button"
+            onClick={() => chooseAction("reply", item)}
+            className="text-muted-foreground hover:text-foreground inline-flex min-h-10 items-center text-xs underline underline-offset-4"
+          >
+            답글
+          </button>
         )}
         {!deleted && reporting === item.id && (
           <form
@@ -554,7 +585,7 @@ export function CommentSection({
         {!deleted && replyTo === item.id && (
           <form
             onSubmit={(event) => void submit(event, item.parent_id ?? item.id)}
-            className="rounded-panel bg-surface space-y-3 p-4"
+            className="border-border ml-1 space-y-4 border-l pl-4"
           >
             <h3 className="font-medium">
               {item.parent_id
@@ -567,6 +598,13 @@ export function CommentSection({
             />
             <Button type="submit" disabled={create.isPending}>
               {create.isPending ? "등록 중…" : "답글 등록"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setReplyTo(null)}
+            >
+              취소
             </Button>
             {create.error && createTarget === "reply" && (
               <ApiMutationError
@@ -588,7 +626,7 @@ export function CommentSection({
           </form>
         )}
         {children.length > 0 && (
-          <ul className="border-border ml-2 border-l-2 pl-3 sm:ml-6 sm:pl-5">
+          <ul className="border-border ml-2 border-l pl-3 sm:ml-6 sm:pl-5">
             {children.map((child) => renderComment(child, depth + 1))}
           </ul>
         )}
@@ -624,7 +662,7 @@ export function CommentSection({
         />
       )}
       {allComments.length ? (
-        <ul>
+        <ul className="border-border border-t">
           {(commentsByParent.get(null) ?? []).map((item) =>
             renderComment(item),
           )}
@@ -658,37 +696,35 @@ export function CommentSection({
         <form
           ref={composer}
           onSubmit={(event) => void submit(event)}
-          className="rounded-panel border-border bg-surface space-y-3 border p-5"
+          aria-label="댓글 작성"
+          className={`space-y-5 pt-5 ${replyTo ? "hidden" : ""}`}
         >
-          <h3 className="font-serif text-xl">편지 남기기</h3>
           <CommentFields
             signedIn={signedIn}
             profileName={me.data?.profile?.display_name}
           />
-          {!signedIn && (
-            <p className="text-muted-foreground text-sm">
-              카카오 로그인 전에 입력한 이름과 댓글은 이 탭에서 복원됩니다.
-              비회원 관리 비밀번호는 저장되지 않아 다시 입력해야 합니다.
-            </p>
-          )}
-          {!signedIn && (
-            <button
-              type="button"
-              onClick={() => {
-                saveDraftBeforeLogin();
-                openLogin();
-              }}
-              className="inline-flex min-h-11 items-center underline underline-offset-4"
-            >
-              카카오 로그인 후 댓글 남기기
-            </button>
-          )}
-          <Button
-            type="submit"
-            disabled={create.isPending || saveProfile.isPending}
-          >
-            {create.isPending ? "등록 중…" : "댓글 등록"}
-          </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {!signedIn && (
+              <button
+                type="button"
+                onClick={() => {
+                  saveDraftBeforeLogin();
+                  openLogin();
+                }}
+                className="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center text-sm underline underline-offset-4"
+              >
+                카카오로 로그인하고 작성하기
+              </button>
+            )}
+            <span className="ml-auto">
+              <Button
+                type="submit"
+                disabled={create.isPending || saveProfile.isPending}
+              >
+                {create.isPending ? "등록 중…" : "댓글 등록"}
+              </Button>
+            </span>
+          </div>
           {create.error && createTarget === "composer" && (
             <ApiMutationError
               error={create.error}
@@ -745,7 +781,7 @@ export function CommentSection({
                 minLength={8}
                 maxLength={128}
                 autoComplete="current-password"
-                className="rounded-control bg-background mt-2 min-h-12 w-full border px-3"
+                className={`${styles.field} rounded-control mt-2 min-h-12 w-full px-3 font-normal`}
               />
             </label>
           )}
@@ -852,13 +888,27 @@ function CommentFields({
 }) {
   return (
     <>
+      <label className="block text-sm font-medium">
+        댓글
+        <textarea
+          name="body"
+          required
+          minLength={1}
+          maxLength={1000}
+          placeholder="여행의 한 장면에 대해 이야기해 주세요."
+          className={`${styles.field} ${styles.textarea} rounded-control mt-2 min-h-32 w-full p-3 leading-relaxed font-normal`}
+        />
+      </label>
       {signedIn ? (
         profileName ? (
-          <p className="text-muted-foreground text-sm">
-            작성자 <strong className="text-foreground">{profileName}</strong>
+          <p className="text-muted-foreground text-xs">
+            작성자{" "}
+            <strong className="text-foreground font-medium">
+              {profileName}
+            </strong>
           </p>
         ) : (
-          <label className="block">
+          <label className="block text-sm font-medium">
             표시 이름
             <input
               name="name"
@@ -866,13 +916,13 @@ function CommentFields({
               minLength={2}
               maxLength={30}
               autoComplete="nickname"
-              className="rounded-control bg-background mt-1 min-h-11 w-full max-w-sm border px-3"
+              className={`${styles.field} rounded-control mt-2 min-h-12 w-full max-w-sm px-3 font-normal`}
             />
           </label>
         )
       ) : (
-        <>
-          <label className="block">
+        <div className="grid gap-5 sm:grid-cols-2">
+          <label className="block text-sm font-medium">
             이름
             <input
               name="name"
@@ -880,10 +930,10 @@ function CommentFields({
               minLength={2}
               maxLength={30}
               autoComplete="nickname"
-              className="rounded-control bg-background mt-1 min-h-11 w-full max-w-sm border px-3"
+              className={`${styles.field} rounded-control mt-2 min-h-12 w-full px-3 font-normal`}
             />
           </label>
-          <label className="block">
+          <label className="block text-sm font-medium">
             댓글 관리 비밀번호
             <input
               name="password"
@@ -892,24 +942,14 @@ function CommentFields({
               minLength={8}
               maxLength={128}
               autoComplete="new-password"
-              className="rounded-control bg-background mt-1 min-h-11 w-full max-w-sm border px-3"
+              className={`${styles.field} rounded-control mt-2 min-h-12 w-full px-3 font-normal`}
             />
-            <span className="text-muted-foreground mt-1 block text-sm">
-              비밀번호는 서버에서 확인하며 저장하거나 공개하지 않습니다.
+            <span className="text-muted-foreground mt-1 block text-xs font-normal">
+              댓글 수정·삭제에 사용합니다.
             </span>
           </label>
-        </>
+        </div>
       )}
-      <label className="block">
-        댓글
-        <textarea
-          name="body"
-          required
-          minLength={1}
-          maxLength={1000}
-          className="rounded-control bg-background mt-1 min-h-28 w-full border p-3"
-        />
-      </label>
     </>
   );
 }
