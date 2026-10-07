@@ -1,0 +1,368 @@
+.cover {
+  margin: 48px 0 0;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100svh;
+  min-height: 420px;
+  overflow: hidden;
+  background: #e5ebe7;
+}
+
+.photoTrigger {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: #173c42;
+  cursor: zoom-in;
+}
+
+.photoTrigger:disabled {
+  cursor: default;
+}
+
+.photoTrigger:focus-visible {
+  outline: 3px solid #f6f5ef;
+  outline-offset: -8px;
+}
+
+.coverImage {
+  object-fit: cover;
+  object-position: center;
+}
+
+.openHint {
+  position: absolute;
+  right: clamp(18px, 4vw, 60px);
+  bottom: clamp(18px, 4vw, 45px);
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  background: rgb(246 245 239 / 95%);
+  color: #173c42;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  transition:
+    background-color 180ms ease,
+    color 180ms ease;
+}
+
+.photoTrigger:hover .openHint,
+.photoTrigger:focus-visible .openHint {
+  background: #173c42;
+  color: #f6f5ef;
+}
+
+.caption {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 10px clamp(20px, 4vw, 48px) 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.skeleton,
+.error {
+  position: absolute;
+  inset: 0;
+}
+
+.skeleton {
+  overflow: hidden;
+  background: #e4e9e6;
+}
+
+.skeleton::after,
+.viewerSkeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    rgb(255 255 255 / 48%) 50%,
+    transparent 72%
+  );
+  transform: translateX(-100%);
+  animation: sweep 1.55s ease-in-out infinite;
+  content: "";
+}
+
+.error {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.errorContent,
+.viewerError {
+  display: flex;
+  max-width: 340px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.errorContent svg {
+  color: #637b7c;
+}
+
+.errorContent strong,
+.viewerError strong {
+  font-size: 0.9375rem;
+}
+
+.errorContent p,
+.viewerError p {
+  margin: 0;
+  color: #596d70;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.errorContent button,
+.viewerError button {
+  min-height: 42px;
+  margin-top: 5px;
+  padding: 0 16px;
+  border: 1px solid currentColor;
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.viewer {
+  width: min(calc(100% - 24px), 1320px);
+  height: min(calc(100dvh - 24px), 970px);
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid #4c5e62;
+  background: #111c1f;
+  color: #f6f5ef;
+  box-shadow: 0 28px 90px rgb(0 0 0 / 30%);
+}
+
+.viewer::backdrop {
+  background: rgb(4 13 15 / 80%);
+}
+
+.viewer[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewerBar {
+  display: flex;
+  min-height: 61px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 10px 20px;
+  border-bottom: 1px solid rgb(255 255 255 / 16%);
+}
+
+.viewerHeading {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.viewerHeading strong {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewerHeading span {
+  color: #b8c8c8;
+  font-size: 0.6875rem;
+}
+
+.viewerActions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.viewerActions button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid rgb(255 255 255 / 30%);
+  background: transparent;
+  color: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.viewerActions button[aria-pressed="true"] {
+  border-color: #f6f5ef;
+  background: #f6f5ef;
+  color: #111c1f;
+}
+
+.viewerActions button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.viewerActions .close {
+  min-width: 36px;
+  margin-left: 6px;
+  padding: 0 7px;
+  font-size: 1.375rem;
+  line-height: 1;
+}
+
+.viewerActions button:focus-visible,
+.viewerError button:focus-visible {
+  outline: 2px solid #f6f5ef;
+  outline-offset: 3px;
+}
+
+.viewerCanvas {
+  position: relative;
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  place-items: center;
+  overflow: auto;
+  padding: 28px;
+}
+
+.viewerImage {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: min(calc(100dvh - 180px), 820px);
+  object-fit: contain;
+}
+
+.viewerCanvas[data-state="loading"] .viewerImage {
+  visibility: hidden;
+}
+
+.viewer[data-zoom="actual"] .viewerCanvas[data-state="ready"] {
+  display: block;
+  text-align: center;
+}
+
+.viewer[data-zoom="actual"] .viewerImage {
+  max-width: none;
+  max-height: none;
+  margin: auto;
+}
+
+.viewerSkeleton {
+  position: absolute;
+  width: min(calc(100% - 56px), 850px);
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  background: #324447;
+}
+
+.viewerSkeleton::after {
+  background: linear-gradient(
+    105deg,
+    transparent 28%,
+    rgb(255 255 255 / 13%) 50%,
+    transparent 72%
+  );
+}
+
+.viewerError {
+  color: #f6f5ef;
+  text-align: center;
+}
+
+.viewerError p {
+  color: #b8c8c8;
+}
+
+.viewerCaption {
+  margin: 0;
+  padding: 11px 20px 14px;
+  border-top: 1px solid rgb(255 255 255 / 16%);
+  color: #c1cdcd;
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 640px) {
+  .cover {
+    margin-top: 30px;
+  }
+
+  .stage {
+    min-height: 320px;
+  }
+
+  .viewer {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+  }
+
+  .viewerBar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 11px 14px;
+  }
+
+  .viewerActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .viewerCanvas {
+    padding: 15px;
+  }
+
+  .viewerCaption {
+    padding-inline: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after,
+  .viewerSkeleton::after {
+    animation: none;
+    transform: none;
+  }
+
+  .openHint {
+    transition: none;
+  }
+}

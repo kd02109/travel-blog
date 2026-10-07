@@ -1,13 +1,23 @@
 .page {
-  width: min(100%, 1160px);
+  width: 100%;
   margin-inline: auto;
-  padding: clamp(28px, 4vw, 56px) clamp(20px, 4vw, 48px) 96px;
+  padding: clamp(28px, 4vw, 56px) 0 96px;
+}
+
+.head,
+.reading,
+.tags,
+.comments,
+.afterArticle,
+.page > .status {
+  width: min(calc(100% - 40px), 720px);
 }
 
 .back {
   display: inline-flex;
   min-height: 48px;
   align-items: center;
+  margin-left: max(20px, calc((100% - 1064px) / 2));
   font-size: 0.875rem;
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -123,32 +133,6 @@
 .status {
   max-width: 720px;
   margin: 20px auto 0;
-}
-
-.cover {
-  margin: 48px 0 0;
-}
-
-.cover > div {
-  overflow: hidden;
-  border-radius: 0;
-  background: var(--background);
-}
-
-.coverImage {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.cover figcaption {
-  padding-top: 10px;
-  color: var(--muted-foreground);
-  font-size: 0.75rem;
-  text-align: right;
 }
 
 .reading {
@@ -465,10 +449,6 @@
 
   .actions {
     margin-left: -8px;
-  }
-
-  .cover {
-    margin-top: 30px;
   }
 
   .reading {
