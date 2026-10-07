@@ -9,6 +9,7 @@ import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, type CategoryCode } from "@repo/constants";
 import { PostCard } from "../post-card";
 import { PostAssetFigures, PrivatePdf, PrivateImage } from "./post-media";
+import { PostCover } from "./post-cover";
 import { EmptyState } from "@repo/ui/feedback";
 import { LoadingState } from "@repo/ui/skeleton";
 import { Button } from "@repo/ui/button";
@@ -381,16 +382,13 @@ export function PostDetail({
           )}
         </header>
         {post.data.cover_asset_id && (
-          <figure className={styles.cover}>
-            <PrivateImage
-              assetId={post.data.cover_asset_id}
-              siteId={siteId}
-              title={coverCaption || `${post.data.title} 대표 사진`}
-              className={styles.coverImage}
-              reserveSpace
-            />
-            {coverCaption && <figcaption>{coverCaption}</figcaption>}
-          </figure>
+          <PostCover
+            key={post.data.cover_asset_id}
+            assetId={post.data.cover_asset_id}
+            siteId={siteId}
+            title={post.data.title}
+            caption={coverCaption}
+          />
         )}
         {post.data.pdf_asset_id && (
           <div className={styles.reading}>
