@@ -24,7 +24,7 @@ pnpm install --frozen-lockfile
 pnpm dev:mock
 ```
 
-블로그는 http://localhost:3000, 관리자는 http://localhost:3002 입니다. 두 앱의 `/mock`에서 예시 API를 체험합니다. 기존 노션형 에디터 체험은 관리자 `/playground`입니다. 에디터 입력은 아직 DB 저장·발행에 연결되지 않았습니다.
+블로그는 http://localhost:3000, 관리자는 http://localhost:3002 입니다. 두 앱의 `/mock`에서 예시 API를 체험합니다. 실제 글 작성과 저장·발행은 관리자 `/write`에서 진행합니다.
 
 ### 실제 Supabase로 개발
 

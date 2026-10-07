@@ -12,7 +12,6 @@ const items = [
   { href: "/account-deletions", label: "계정 삭제 요청" },
   { href: "/write", label: "새 글 작성" },
   { href: "/home-design", label: "홈 디자인" },
-  { href: "/playground", label: "에디터 체험", developmentOnly: true },
 ];
 
 type Account = { name: string; email: string | null };
@@ -149,10 +148,7 @@ function AdminShell({
     setCheckingAccess(true);
     router.refresh();
   }, [router]);
-  const isPublicDemo = pathname === "/mock" || pathname === "/playground";
-  const visibleItems = items.filter(
-    (item) => !item.developmentOnly || process.env.NODE_ENV === "development",
-  );
+  const isMockDemo = pathname === "/mock";
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[var(--admin-sidebar)_minmax(0,1fr)]">
       <a
@@ -175,19 +171,17 @@ function AdminShell({
           className="px-3 pb-3 lg:flex-1 lg:px-4 lg:py-4"
         >
           <ul className="flex gap-2 overflow-x-auto lg:flex-col">
-            {visibleItems.map(({ href, label }) => {
+            {items.map(({ href, label }) => {
               const active =
                 label === "새 글 작성"
                   ? pathname === href
                   : label === "홈 디자인"
                     ? pathname === href
-                    : label === "에디터 체험"
-                      ? pathname === href
-                      : label === "댓글 관리"
-                        ? pathname.startsWith("/comments")
-                        : label === "계정 삭제 요청"
-                          ? pathname.startsWith("/account-deletions")
-                          : pathname === "/" || pathname.startsWith("/posts");
+                    : label === "댓글 관리"
+                      ? pathname.startsWith("/comments")
+                      : label === "계정 삭제 요청"
+                        ? pathname.startsWith("/account-deletions")
+                        : pathname === "/" || pathname.startsWith("/posts");
               return (
                 <li key={label} className="shrink-0">
                   <Link
@@ -202,7 +196,7 @@ function AdminShell({
             })}
           </ul>
         </nav>
-        {!isPublicDemo && <AdminAccount onMissingSession={recheckServer} />}
+        {!isMockDemo && <AdminAccount onMissingSession={recheckServer} />}
       </aside>
       <div id="admin-content" className="min-w-0">
         {checkingAccess ? (
