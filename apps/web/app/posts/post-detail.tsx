@@ -29,17 +29,19 @@ export function PostDetailSkeleton() {
       <span className="sr-only">여행 기록을 불러오는 중입니다.</span>
       <div className={styles.skeletonPage} aria-hidden="true">
         <Skeleton className={styles.skeletonBack} />
-        <div className={styles.skeletonHeader}>
-          <Skeleton className={styles.skeletonEyebrow} />
-          <Skeleton className={styles.skeletonTitle} />
-          <Skeleton className={styles.skeletonTitleShort} />
-          <Skeleton className={styles.skeletonSummary} />
-          <div className={styles.skeletonMeta}>
-            <Skeleton className={styles.skeletonMetaLine} />
-            <Skeleton className={styles.skeletonMetaAction} />
+        <div className={styles.skeletonHero}>
+          <Skeleton className={styles.skeletonCover} />
+          <div className={styles.skeletonHeader}>
+            <Skeleton className={styles.skeletonEyebrow} />
+            <Skeleton className={styles.skeletonTitle} />
+            <Skeleton className={styles.skeletonTitleShort} />
+            <Skeleton className={styles.skeletonSummary} />
+            <div className={styles.skeletonMeta}>
+              <Skeleton className={styles.skeletonMetaLine} />
+              <Skeleton className={styles.skeletonMetaAction} />
+            </div>
           </div>
         </div>
-        <Skeleton className={styles.skeletonCover} />
         <Skeleton className={styles.skeletonCaption} />
         <div className={styles.skeletonBody}>
           {[95, 91, 97, 81, 93, 62].map((width, index) => (
@@ -322,6 +324,99 @@ export function PostDetail({
         </a>
       </li>
     ));
+  const hasCover = Boolean(post.data.cover_asset_id);
+  const currentLike = optimisticLike ?? likeState.data;
+  const likeCount = currentLike?.count ?? post.data.like_count ?? 0;
+  const postHeader = (
+    <header className={hasCover ? styles.coverHead : styles.head}>
+      <p className={styles.eyebrow}>
+        <span>{categoryLabel}</span>
+        {region && <span>{region}</span>}
+      </p>
+      <h1 className={styles.title}>{post.data.title}</h1>
+      {summary && <p className={styles.summary}>{summary}</p>}
+      <div className={styles.metaBar}>
+        <p className={styles.meta}>
+          <span>
+            게시{" "}
+            <time dateTime={post.data.published_at}>
+              {new Intl.DateTimeFormat("ko-KR", {
+                dateStyle: "long",
+              }).format(new Date(post.data.published_at))}
+            </time>
+          </span>
+          {visitInfo && <span>{visitInfo}</span>}
+        </p>
+        <div className={styles.actions}>
+          {article && (
+            <button
+              type="button"
+              onClick={() => void toggleLike()}
+              disabled={
+                setLike.isPending ||
+                likeState.isLoading ||
+                (!likeState.data && !optimisticLike)
+              }
+              aria-label={`${currentLike?.liked ? "좋아요 취소" : "좋아요"}, ${likeCount}개`}
+              aria-pressed={currentLike?.liked ?? false}
+              className={styles.action}
+            >
+              <svg
+                className={styles.heart}
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  d="M12 20.2 3.9 12.3a5 5 0 0 1 7.1-7.1L12 6.3l1-1.1a5 5 0 0 1 7.1 7.1Z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              좋아요 <strong>{likeCount}</strong>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void sharePost()}
+            className={`${styles.action} ${styles.shareAction}`}
+          >
+            <svg
+              className={styles.shareIcon}
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 16 17 7m-7 0h7v7M5 5h5M5 5v14h14v-5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            공유하기
+          </button>
+        </div>
+      </div>
+      {article && (likeState.error || setLike.error) && (
+        <div className={styles.status}>
+          {likeState.error && (
+            <ApiErrorState
+              error={likeState.error}
+              title="좋아요 상태를 확인하지 못했어요"
+              onRetry={() => void likeState.refetch()}
+              isRetrying={likeState.isFetching}
+            />
+          )}
+          {setLike.error && (
+            <ApiMutationError
+              error={setLike.error}
+              title="좋아요를 저장하지 못했어요"
+              onRetry={() => void toggleLike()}
+              isRetrying={setLike.isPending}
+            />
+          )}
+        </div>
+      )}
+    </header>
+  );
   return (
     <main className={styles.page}>
       <Link
@@ -342,92 +437,17 @@ export function PostDetail({
         </div>
       )}
       <article className={styles.article}>
-        <header className={styles.head}>
-          <p className={styles.eyebrow}>
-            <span>{categoryLabel}</span>
-            {region && <span>{region}</span>}
-          </p>
-          <h1 className={styles.title}>{post.data.title}</h1>
-          {summary && <p className={styles.summary}>{summary}</p>}
-          <div className={styles.metaBar}>
-            <p className={styles.meta}>
-              <span>
-                게시{" "}
-                <time dateTime={post.data.published_at}>
-                  {new Intl.DateTimeFormat("ko-KR", {
-                    dateStyle: "long",
-                  }).format(new Date(post.data.published_at))}
-                </time>
-              </span>
-              {visitInfo && <span>{visitInfo}</span>}
-            </p>
-            <div className={styles.actions}>
-              {article && (
-                <button
-                  type="button"
-                  onClick={() => void toggleLike()}
-                  disabled={
-                    setLike.isPending ||
-                    likeState.isLoading ||
-                    (!likeState.data && !optimisticLike)
-                  }
-                  aria-label={
-                    (optimisticLike ?? likeState.data)?.liked
-                      ? "좋아요 취소"
-                      : "좋아요"
-                  }
-                  aria-pressed={
-                    (optimisticLike ?? likeState.data)?.liked ?? false
-                  }
-                  className={styles.action}
-                >
-                  <span className={styles.heart} aria-hidden="true">
-                    {(optimisticLike ?? likeState.data)?.liked ? "♥" : "♡"}
-                  </span>
-                  좋아요{" "}
-                  {(optimisticLike ?? likeState.data)?.count ??
-                    post.data.like_count ??
-                    0}
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => void sharePost()}
-                className={styles.action}
-              >
-                ↗ 공유하기
-              </button>
-            </div>
-          </div>
-          {article && (likeState.error || setLike.error) && (
-            <div className={styles.status}>
-              {likeState.error && (
-                <ApiErrorState
-                  error={likeState.error}
-                  title="좋아요 상태를 확인하지 못했어요"
-                  onRetry={() => void likeState.refetch()}
-                  isRetrying={likeState.isFetching}
-                />
-              )}
-              {setLike.error && (
-                <ApiMutationError
-                  error={setLike.error}
-                  title="좋아요를 저장하지 못했어요"
-                  onRetry={() => void toggleLike()}
-                  isRetrying={setLike.isPending}
-                />
-              )}
-            </div>
-          )}
-        </header>
-        {post.data.cover_asset_id && (
+        {post.data.cover_asset_id ? (
           <PostCover
             key={post.data.cover_asset_id}
             assetId={post.data.cover_asset_id}
             siteId={siteId}
             title={post.data.title}
             caption={coverCaption}
+            overlay={postHeader}
           />
+        ) : (
+          postHeader
         )}
         {post.data.pdf_asset_id && (
           <div className={styles.reading}>
