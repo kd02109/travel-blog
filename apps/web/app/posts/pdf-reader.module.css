@@ -1,0 +1,359 @@
+.reader {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #c5d1ca;
+  background: #dfe6e1;
+  color: var(--foreground);
+}
+
+.header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+.heading {
+  min-width: 0;
+}
+
+.heading strong {
+  display: block;
+  overflow: hidden;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.heading span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.actions,
+.controlGroup {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.actions {
+  flex-shrink: 0;
+}
+
+.actions button,
+.controlGroup button,
+.retryButton {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background-color 160ms ease;
+}
+
+.actions button {
+  gap: 5px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.actions button:hover,
+.controlGroup button:hover,
+.retryButton:hover {
+  background: var(--accent);
+}
+
+.actions button:disabled,
+.controlGroup button:disabled,
+.thumbnail:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.reader button:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 2px;
+}
+
+.actionError {
+  margin: 0;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  background: #fff7f3;
+  color: var(--destructive);
+  font-size: 0.75rem;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 146px minmax(0, 1fr);
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  padding: 20px 12px;
+  border-right: 1px solid #c8d4ce;
+  background: #e8ede8;
+}
+
+.sidebarLabel {
+  align-self: flex-start;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.thumbnail {
+  display: block;
+  width: 96px;
+  height: 136px;
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid #b5c6bc;
+  background: white;
+  box-shadow: 0 2px 7px rgb(16 45 50 / 8%);
+  cursor: pointer;
+}
+
+.thumbnailSkeleton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #eef2ef;
+}
+
+.thumbnailCaption {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.stage {
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  min-height: 56px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 7px 15px;
+  border-bottom: 1px solid #c8d4ce;
+  background: #f2f5f0;
+}
+
+.controlGroup button {
+  width: 38px;
+  padding: 0;
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.pageCount,
+.zoomLabel {
+  min-width: 58px;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.zoomLabel {
+  min-width: 45px;
+}
+
+.canvasArea {
+  position: relative;
+  height: clamp(560px, 75vh, 820px);
+  overflow: auto;
+  padding: 30px 24px 42px;
+  background: #dfe6e1;
+}
+
+.canvasArea > :global(.react-pdf__Document) {
+  width: max-content;
+  margin-inline: auto;
+}
+
+.pdfPage {
+  width: max-content;
+  background: white;
+  box-shadow: 0 5px 23px rgb(16 45 50 / 15%);
+}
+
+.pdfPage :global(.react-pdf__Page__canvas) {
+  display: block;
+}
+
+.stateLayer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #dfe6e1;
+}
+
+.skeletonPage {
+  display: flex;
+  width: min(100%, 405px);
+  min-height: 520px;
+  flex-direction: column;
+  gap: 12px;
+  padding: 42px 36px;
+  background: #fbfcfa;
+  box-shadow: 0 5px 23px rgb(16 45 50 / 9%);
+}
+
+.skeletonPage span:not(.skeletonGap) {
+  display: block;
+  height: 10px;
+  background: linear-gradient(95deg, #e8eee9 10%, #d7e2db 50%, #e8eee9 90%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+.skeletonPage .skeletonEyebrow {
+  width: 29%;
+  height: 7px;
+}
+
+.skeletonPage .skeletonTitle {
+  width: 64%;
+  height: 27px;
+  margin: 28px 0 12px;
+}
+
+.skeletonPage .skeletonLineShort {
+  width: 70%;
+}
+
+.skeletonGap {
+  height: 21px;
+}
+
+.errorContent {
+  max-width: 330px;
+  text-align: center;
+}
+
+.errorMark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  margin: 0 auto 18px;
+  border: 1px solid #a8b9b0;
+  border-radius: 50%;
+  color: #5f7a70;
+  font-size: 1.2rem;
+}
+
+.errorContent strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.errorContent p {
+  margin: 8px 0 20px;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.retryButton {
+  padding: 0 17px;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@media (width <= 700px) {
+  .header {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+
+  .heading {
+    width: 100%;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions button {
+    flex: 1;
+  }
+
+  .main {
+    display: block;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .toolbar {
+    padding: 7px 10px;
+  }
+
+  .canvasArea {
+    height: min(70vh, 650px);
+    min-height: 480px;
+    padding: 18px 10px 28px;
+  }
+
+  .skeletonPage {
+    min-height: 440px;
+    padding: 35px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeletonPage span:not(.skeletonGap) {
+    animation: none;
+  }
+
+  .actions button,
+  .controlGroup button,
+  .retryButton {
+    transition: none;
+  }
+}
