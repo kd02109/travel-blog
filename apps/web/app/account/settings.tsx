@@ -2,11 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
+import { ApiMutationError } from "@repo/api-client/feedback";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { Button } from "@repo/ui/button";
 import { Dialog } from "@repo/ui/dialog";
 import { Input } from "@repo/ui/input";
+import { PublicApiErrorState } from "../public-feedback";
+import { AccountSkeleton } from "./account-skeleton";
 
 export function AccountSettings({
   siteId,
@@ -61,9 +63,10 @@ export function AccountSettings({
         </p>
       )}
       {!me.data && me.isPending ? (
-        <p role="status">계정 정보를 불러오고 있어요…</p>
+        <AccountSkeleton />
       ) : !me.data && me.error ? (
-        <ApiErrorState
+        <PublicApiErrorState
+          size="tall"
           error={me.error}
           title="계정 정보를 확인하지 못했어요"
           onRetry={() => void me.refetch()}
@@ -72,7 +75,8 @@ export function AccountSettings({
       ) : (
         <>
           {me.error && (
-            <ApiErrorState
+            <PublicApiErrorState
+              size="small"
               error={me.error}
               title="계정 정보를 새로 확인하지 못했어요"
               onRetry={() => void me.refetch()}
@@ -101,7 +105,7 @@ export function AccountSettings({
               type="submit"
               disabled={save.isPending || displayName.trim().length < 2}
             >
-              별명 저장
+              {save.isPending ? "저장 중…" : "별명 저장"}
             </Button>
             {save.error && (
               <ApiMutationError
