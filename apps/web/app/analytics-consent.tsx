@@ -21,7 +21,9 @@ export function AnalyticsConsent() {
     let active = true;
     void setAnalyticsConsent(enabled && consent, config)
       .then(() => {
-        if (active && enabled && consent) trackPage(path);
+        if (!active) return;
+        setError(false);
+        if (enabled && consent) trackPage(path);
       })
       .catch(() => {
         if (active) setError(true);
@@ -32,12 +34,26 @@ export function AnalyticsConsent() {
   }, [consent, enabled, path]);
   if (!enabled) return null;
   return (
-    <div className="flex flex-wrap items-center gap-4">
-      <p>방문 통계 수집에 동의하면 블로그 개선에 도움이 됩니다.</p>
-      <Button variant="outline" onClick={() => setConsent(!consent)}>
-        {consent ? "통계 수집 끄기" : "통계 수집 동의"}
-      </Button>
-      {error && <p role="status">통계 서비스를 연결하지 못했습니다.</p>}
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <p>방문 통계 수집에 동의하면 블로그 개선에 도움이 됩니다.</p>
+        <Button variant="outline" onClick={() => setConsent(!consent)}>
+          {consent ? "통계 수집 끄기" : "통계 수집 동의"}
+        </Button>
+      </div>
+      {error && (
+        <div
+          role="alert"
+          className="border-border bg-surface grid min-h-36 place-items-center border px-6 py-5 text-center"
+        >
+          <div>
+            <strong className="text-sm">통계 서비스를 연결하지 못했어요</strong>
+            <p className="text-muted-foreground mt-2 text-xs leading-relaxed">
+              여행 기록은 계속 읽을 수 있습니다. 잠시 뒤 다시 확인해 주세요.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
