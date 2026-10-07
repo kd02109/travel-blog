@@ -408,7 +408,7 @@ export function Composer({ postId }: { postId?: string }) {
                   tags,
                   category_code:
                     post.kind === "pdf" ? "itinerary-pdf" : category,
-                  ...(post.kind === "article" ? { metadata } : {}),
+                  metadata,
                   ...(post.kind === "article"
                     ? { blocks: document, cover_asset_id: coverAssetId || null }
                     : { pdf_asset_id: pdfAssetId || null }),
@@ -1078,6 +1078,25 @@ export function Composer({ postId }: { postId?: string }) {
           }}
         />
       </label>
+      <label className="block space-y-2">
+        글 소개 문구 <span className="text-muted-foreground">(선택)</span>
+        <textarea
+          disabled={busy}
+          value={
+            typeof metadata.description === "string" ? metadata.description : ""
+          }
+          maxLength={160}
+          rows={3}
+          placeholder="여행의 한 장면을 짧게 소개해 주세요"
+          className="rounded-control border-input bg-surface text-foreground placeholder:text-muted-foreground/80 disabled:bg-muted min-h-28 w-full resize-y border px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-80"
+          onChange={(event) =>
+            updateMetadata("description", event.currentTarget.value)
+          }
+        />
+        <span className="text-muted-foreground block text-sm">
+          공개 글 표지와 공유 설명에 표시됩니다. 최대 160자.
+        </span>
+      </label>
       {post.kind === "article" && (
         <label className="block space-y-2">
           태그
@@ -1102,6 +1121,27 @@ export function Composer({ postId }: { postId?: string }) {
               markDirty();
             }}
           />
+        </label>
+      )}
+      {post.kind === "article" && (
+        <label className="block space-y-2">
+          대표 사진 설명 <span className="text-muted-foreground">(선택)</span>
+          <Input
+            disabled={busy}
+            value={
+              typeof metadata.cover_caption === "string"
+                ? metadata.cover_caption
+                : ""
+            }
+            maxLength={160}
+            placeholder="사진을 한 문장으로 설명해 주세요"
+            onChange={(event) =>
+              updateMetadata("cover_caption", event.currentTarget.value)
+            }
+          />
+          <span className="text-muted-foreground block text-sm">
+            공개 글의 대표 사진 아래에 표시됩니다. 최대 160자.
+          </span>
         </label>
       )}
       {post.kind === "article" && (
