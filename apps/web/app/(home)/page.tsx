@@ -1,5 +1,5 @@
 import { createServerTravelApi } from "@repo/api-client/server";
-import { HomeContent } from "./home-content";
+import { HomeContent } from "../home-content";
 
 export const dynamic = "force-dynamic";
 

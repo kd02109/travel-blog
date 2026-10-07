@@ -5,9 +5,8 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import type { ActionOutput } from "@repo/contracts";
 import { CATEGORIES, SITE_NAME } from "@repo/constants";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
-import { ApiErrorState } from "@repo/api-client/feedback";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { LoadingState } from "@repo/ui/skeleton";
+import { Skeleton } from "@repo/ui/skeleton";
 import {
   HomeCover,
   homeCoverActionClassName,
@@ -16,10 +15,38 @@ import {
   resolveHomeTemplate,
 } from "@repo/ui/home-cover";
 import { AnalyticsConsent } from "./analytics-consent";
-import { PostCard } from "./post-card";
+import { HomeHeroSkeleton } from "./home-loading";
+import { PostCard, PostCardSkeleton } from "./post-card";
 import { CatalogEmpty } from "./posts/catalog-empty";
 import { PdfCover, PrivateImage } from "./posts/post-media";
+import { PublicApiErrorState } from "./public-feedback";
 import styles from "./home-content.module.css";
+
+function HomeRecentSkeleton() {
+  return (
+    <div role="status" aria-label="최근 여행 기록을 불러오는 중">
+      <span className="sr-only">최근 여행 기록을 불러오는 중입니다.</span>
+      <div className={styles.latestStorySkeleton} aria-hidden="true">
+        <Skeleton className={styles.latestSkeletonMedia} />
+        <div className={styles.latestCopy}>
+          <Skeleton className="h-3 w-2/5" />
+          <Skeleton className="mt-7 h-8 w-5/6" />
+          <Skeleton className="mt-3 h-8 w-3/4" />
+          <Skeleton className="mt-5 h-3 w-1/2" />
+          <Skeleton className="mt-auto h-3 w-1/3" />
+        </div>
+      </div>
+      <div className="mt-12">
+        <Skeleton className="h-6 w-40" />
+        <ul className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 5 }, (_, index) => (
+            <PostCardSkeleton key={index} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 function LatestStory({
   post,
@@ -202,19 +229,31 @@ export function HomeContent({
     !posts.data &&
     !posts.isFetching &&
     !posts.error;
+  const siteFailure =
+    !site.data && (Boolean(site.error) || showInitialSiteError);
+  const siteLoading = !site.data && !siteFailure;
+  const postsFailure =
+    !posts.data &&
+    (Boolean(posts.error) || showInitialPostsError || siteFailure);
+  const postsLoading = !posts.data && !postsFailure;
+  const refreshError =
+    posts.data && (posts.error ?? (site.data ? site.error : null));
   const renderPhoto = (
     assetId: string | undefined,
     sample: { src: string; alt: string } | undefined,
     position: number,
-  ) =>
-    assetId && site.data ? (
+  ) => {
+    const tinyThumbnail = template === "D" && position > 1;
+    return assetId && site.data ? (
       <div className={styles.heroImage}>
         <PrivateImage
           assetId={assetId}
           siteId={siteId}
           title={`우리의 여행 사진 ${position}`}
           eager={position === 1}
-          className="h-full max-h-none min-h-64 w-full rounded-none object-cover"
+          allowRetry={!tinyThumbnail}
+          compactError={tinyThumbnail}
+          className={`h-full max-h-none w-full rounded-none object-cover ${tinyThumbnail ? "min-h-0" : "min-h-64"}`}
         />
       </div>
     ) : sample ? (
@@ -227,6 +266,7 @@ export function HomeContent({
         className="object-cover"
       />
     ) : undefined;
+  };
   const heroImage = renderPhoto(
     heroAssetIds[0],
     homeDesignSamples[template],
@@ -250,7 +290,13 @@ export function HomeContent({
   );
   const coverAction = (
     <>
-      {featured ? (
+      {postsLoading ||
+      (needsFeaturedLookup && !featuredDetail.data && !featuredDetail.error) ? (
+        <span role="status" aria-label="대표 여행 기록을 확인하는 중">
+          <span className="sr-only">대표 여행 기록을 확인하는 중입니다.</span>
+          <Skeleton className="rounded-control mt-7 h-12 w-48" />
+        </span>
+      ) : featured ? (
         <Link
           href={"/posts/" + encodeURIComponent(featured.slug)}
           className={homeCoverActionClassName}
@@ -264,11 +310,12 @@ export function HomeContent({
       )}
       {needsFeaturedLookup && featuredDetail.error ? (
         <div className="mt-5 max-w-md">
-          <ApiErrorState
+          <PublicApiErrorState
             error={featuredDetail.error}
             title="대표 여행 기록을 확인하지 못했어요"
             onRetry={() => void featuredDetail.refetch()}
             isRetrying={featuredDetail.isFetching}
+            size="small"
           />
         </div>
       ) : null}
@@ -278,16 +325,19 @@ export function HomeContent({
   return (
     <main ref={mainRef} className={styles.homeMain}>
       <div className={styles.heroScreen}>
-        {(site.error && !site.data) || showInitialSiteError ? (
-          <div className="mx-auto flex w-full max-w-2xl items-center px-5 py-16">
-            <ApiErrorState
+        {siteFailure ? (
+          <div className={styles.heroError}>
+            <PublicApiErrorState
               error={site.error ?? initialError}
               title="여행 기록에 연결하지 못했어요"
               description={site.error ? undefined : initialError}
               onRetry={() => void site.refetch()}
               isRetrying={site.isFetching}
+              size="tall"
             />
           </div>
+        ) : siteLoading ? (
+          <HomeHeroSkeleton />
         ) : (
           <HomeCover
             template={template}
@@ -342,18 +392,14 @@ export function HomeContent({
               </div>
               <Link href="/posts">모두 보기</Link>
             </div>
-            {posts.error ||
-            (site.error && site.data) ||
-            showInitialPostsError ? (
+            {postsFailure ? (
               <div className="mt-5">
-                <ApiErrorState
+                <PublicApiErrorState
                   error={posts.error ?? site.error ?? initialError}
                   title={
                     posts.error
                       ? "최근 여행 기록을 확인하지 못했어요"
-                      : site.error
-                        ? "사이트 정보를 새로 확인하지 못했어요"
-                        : "최근 여행 기록을 불러오지 못했어요"
+                      : "최근 여행 기록을 불러오지 못했어요"
                   }
                   description={
                     posts.error || site.error ? undefined : initialError
@@ -363,13 +409,24 @@ export function HomeContent({
                 />
               </div>
             ) : null}
-            {!posts.data &&
-            !site.error &&
-            !posts.error &&
-            !showInitialSiteError &&
-            !showInitialPostsError ? (
+            {refreshError ? (
               <div className="mt-5">
-                <LoadingState label="최근 여행 기록을 불러오고 있어요…" />
+                <PublicApiErrorState
+                  error={refreshError}
+                  title={
+                    posts.error
+                      ? "최근 여행 기록을 새로 확인하지 못했어요"
+                      : "사이트 정보를 새로 확인하지 못했어요"
+                  }
+                  onRetry={retryContent}
+                  isRetrying={site.isFetching || posts.isFetching}
+                  size="small"
+                />
+              </div>
+            ) : null}
+            {postsLoading ? (
+              <div className="mt-5">
+                <HomeRecentSkeleton />
               </div>
             ) : null}
             {posts.data?.length ? (
@@ -392,7 +449,7 @@ export function HomeContent({
                   </div>
                 )}
               </>
-            ) : posts.data && !posts.error ? (
+            ) : posts.data ? (
               <div className="mt-6">
                 <CatalogEmpty
                   title="첫 여행 기록을 준비하고 있어요"
