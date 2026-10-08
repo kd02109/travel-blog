@@ -26,7 +26,11 @@
     "@repo/editor": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/mock-api": "workspace:*",
-    "@repo/pdf-reader": "workspace:*"
+    "@repo/pdf-reader": "workspace:*",
+    "@repo/media-worker": "workspace:*",
+    "@napi-rs/canvas": "0.1.80",
+    "pdfjs-dist": "5.4.149",
+    "sharp": "0.34.5"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",
