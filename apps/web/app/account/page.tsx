@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createTravelApi } from "@repo/api-client";
 import { createServerDatabase } from "@repo/database/server";
 import { AccountSettings } from "./settings";
@@ -30,7 +31,14 @@ async function AccountSiteContent({
 export default async function AccountPage() {
   const db = await createServerDatabase();
   const { data: auth } = await db.auth.getUser();
-  if (!auth.user) redirect("/?login=1&next=%2Faccount");
+  if (!auth.user) {
+    const expired = (await headers()).get("x-travel-session-expired") === "1";
+    redirect(
+      expired
+        ? "/?login=1&error=expired&next=%2Faccount"
+        : "/?login=1&next=%2Faccount",
+    );
+  }
   const { data: session } = await db.auth.getSession();
   if (!session.session) redirect("/?login=1&error=expired&next=%2Faccount");
   return (

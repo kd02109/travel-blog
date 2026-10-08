@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleCallback, handleSignOut, safeReturnPath } from "./auth-flow";
+import {
+  handleCallback,
+  handleRememberedCallback,
+  handleSignOut,
+  rememberOAuthReturn,
+  safeReturnPath,
+} from "./auth-flow";
 
 function client(error: unknown = null) {
   return {
@@ -130,6 +136,76 @@ describe("OAuth callbacks", () => {
 });
 
 describe("OAuth return path", () => {
+  const origin = "https://blog.example";
+  function remember(next: unknown, requestOrigin: string | null = origin) {
+    return rememberOAuthReturn(
+      new Request(`${origin}/auth/return`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(requestOrigin ? { origin: requestOrigin } : {}),
+        },
+        body: JSON.stringify({ next }),
+      }),
+    );
+  }
+  it("keeps a post destination out of redirectTo and consumes its short-lived cookie", async () => {
+    const saved = await remember("/posts/spring-trip#comments");
+    expect(saved.status).toBe(204);
+    const cookie = saved.headers.get("set-cookie")!;
+    expect(cookie).toContain("HttpOnly; SameSite=Lax; Secure");
+    expect(cookie).toContain("Path=/auth/callback; Max-Age=600");
+    const response = await handleRememberedCallback(
+      new Request(`${origin}/auth/callback?code=valid`, {
+        headers: { cookie: cookie.split(";")[0]! },
+      }),
+      async () => client(),
+    );
+    expect(response.headers.get("location")).toBe(
+      `${origin}/posts/spring-trip#comments`,
+    );
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+  it("preserves the return path on cancellation and clears it on every callback", async () => {
+    const saved = await remember("/account");
+    const response = await handleRememberedCallback(
+      new Request(`${origin}/auth/callback?error=access_denied`, {
+        headers: { cookie: saved.headers.get("set-cookie")!.split(";")[0]! },
+      }),
+      vi.fn(),
+    );
+    expect(response.headers.get("location")).toBe(
+      `${origin}/login?error=cancelled&next=%2Faccount`,
+    );
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+  });
+  it("rejects cross-origin and malformed destination writes", async () => {
+    for (const requestOrigin of ["https://evil.example", null]) {
+      const response = await remember("/account", requestOrigin);
+      expect(response.status).toBe(403);
+      expect(response.headers.has("set-cookie")).toBe(false);
+    }
+    expect((await remember({ path: "/account" })).status).toBe(400);
+    expect((await remember("/posts/" + "가".repeat(1000))).status).toBe(400);
+  });
+  it("sanitizes tampered cookies and ignores callback next query overrides", async () => {
+    for (const cookie of [
+      "",
+      "travel_oauth_return=%",
+      "travel_oauth_return=https%3A%2F%2Fevil.example",
+      "travel_oauth_return=%2F%2Fevil.example",
+    ]) {
+      const response = await handleRememberedCallback(
+        new Request(`${origin}/auth/callback?code=valid&next=%2Faccount`, {
+          headers: { cookie },
+        }),
+        async () => client(),
+      );
+      expect(response.headers.get("location")).toBe(`${origin}/`);
+      expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    }
+  });
   it("allows only known local return routes", () => {
     expect(safeReturnPath("/posts/my-trip#comments")).toBe(
       "/posts/my-trip#comments",

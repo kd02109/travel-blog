@@ -1,5 +1,42 @@
 import { expect, test } from "@playwright/test";
 
+test("web callback consumes a same-origin return cookie without a next query", async ({
+  page,
+}) => {
+  const origin = "http://localhost:3000";
+  const saved = await page.request.post(`${origin}/auth/return`, {
+    headers: { origin },
+    data: { next: "/posts?category=day-walk" },
+  });
+  expect(saved.status()).toBe(204);
+  const stored = (await page.context().cookies(`${origin}/auth/callback`)).find(
+    (cookie) => cookie.name === "travel_oauth_return",
+  );
+  expect(stored).toMatchObject({
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/auth/callback",
+  });
+  await page.goto(`${origin}/auth/callback?error=access_denied`);
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/notice" &&
+      url.searchParams.get("next") === "/posts?category=day-walk" &&
+      url.searchParams.get("error") === "cancelled",
+  );
+  expect(
+    (await page.context().cookies()).some(
+      (cookie) => cookie.name === "travel_oauth_return",
+    ),
+  ).toBe(false);
+  await page.goto(
+    `${origin}/auth/callback?error=access_denied&next=https://evil.example`,
+  );
+  await expect(page).toHaveURL(
+    (url) => url.origin === origin && url.pathname === "/notice",
+  );
+});
+
 for (const port of [3000, 3002]) {
   test(`OAuth feedback and logout protection on ${port}`, async ({
     page,
