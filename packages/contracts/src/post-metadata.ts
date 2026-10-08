@@ -11,7 +11,9 @@ function text(metadata: PostMetadata, key: string) {
 export function isIsoDate(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+  return (
+    !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
 /** Checks entered values while still allowing a deliberately incomplete draft. */
@@ -25,7 +27,9 @@ export function validateDraftMetadata(
       : category === "stay-review"
         ? ["check_in", "check_out"]
         : ["visited_on"];
-  if (dates.some((key) => text(metadata, key) && !isIsoDate(text(metadata, key))))
+  if (
+    dates.some((key) => text(metadata, key) && !isIsoDate(text(metadata, key)))
+  )
     return "invalid_date";
   const [startKey, endKey] = dates;
   const start = text(metadata, startKey!);
@@ -35,7 +39,8 @@ export function validateDraftMetadata(
     category === "food-cafe" &&
     text(metadata, "venue_type") &&
     !["cafe", "restaurant"].includes(text(metadata, "venue_type"))
-  ) return "invalid_venue";
+  )
+    return "invalid_venue";
   return null;
 }
 
@@ -54,16 +59,20 @@ export function validatePublishedMetadata(
   } else {
     const startKey = category === "overnight-trip" ? "start_date" : "check_in";
     const endKey = category === "overnight-trip" ? "end_date" : "check_out";
-    if (!text(metadata, startKey) || !text(metadata, endKey)) return "invalid_dates";
-    if (text(metadata, endKey) <= text(metadata, startKey)) return "invalid_dates";
+    if (!text(metadata, startKey) || !text(metadata, endKey))
+      return "invalid_dates";
+    if (text(metadata, endKey) <= text(metadata, startKey))
+      return "invalid_dates";
   }
   if (
     (category === "food-cafe" || category === "stay-review") &&
     !text(metadata, "place_name")
-  ) return "missing_place";
+  )
+    return "missing_place";
   if (
     category === "food-cafe" &&
     !["cafe", "restaurant"].includes(text(metadata, "venue_type"))
-  ) return "invalid_venue";
+  )
+    return "invalid_venue";
   return null;
 }

@@ -20,7 +20,11 @@ export function PdfDocumentCover({ title }: { title: string }) {
         <strong className={styles.title}>{title}</strong>
         <span className={styles.subtitle}>여행의 순서를 기록하다</span>
         <div className={styles.route}>
-          <svg viewBox="0 0 180 70" preserveAspectRatio="none" aria-hidden="true">
+          <svg
+            viewBox="0 0 180 70"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
             <path d="M14 54 C38 52, 44 21, 77 31 S126 49, 166 13" />
             <circle cx="14" cy="54" r="4" />
             <circle cx="77" cy="31" r="4" />
