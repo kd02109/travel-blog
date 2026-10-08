@@ -55,15 +55,16 @@ node --env-file=apps/admin/.env.supabase.local --input-type=module -e 'const res
 ## Vercel 관리자 프로젝트 설정
 
 1. 원격 Git 저장소를 Vercel에 연결하고 admin 프로젝트의 Root Directory를 `apps/admin`으로 지정한다. workspace 루트 lockfile과 공유 `packages/media-worker`를 포함해 설치·빌드되는지 Preview에서 확인한다. admin에는 `sharp`, `pdfjs-dist`, `@napi-rs/canvas`를 서버 런타임 의존성으로 명시했다. 선택 경로 webpack 빌드와 macOS 로컬 실행은 통과했지만, Vercel의 Linux native 바이너리·PDF 글꼴 경로는 Preview에서 실행 확인해야 한다. 기본 Turbopack 빌드는 이 격리 환경에서 CSS loader의 포트 생성 권한 오류로 완료하지 못했다. web은 별도 `apps/web` 프로젝트로 둔다. [Vercel 모노레포 가이드](https://vercel.com/docs/monorepos).
-2. `apps/admin/vercel.mjs`는 Preview의 Cron을 비우고 production에서만 `/api/internal/media-worker`를 매분 등록한다. [Vercel Cron은 production deployment에서 실행](https://vercel.com/docs/cron-jobs)되므로 Preview는 보호된 경로를 직접 요청해 검사한다. **매분 Cron은 Vercel Pro 이상이 필요하다.** 현재 [Hobby Function 최대 시간은 300초](https://vercel.com/docs/plans/hobby)이므로 240초 제한의 Preview 직접 호출은 가능하다. Hobby의 1일 1회 Cron으로는 현재 운영 스케줄을 배포할 수 없다. [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing), [programmatic config](https://vercel.com/docs/project-configuration/vercel-ts).
+2. `apps/admin/vercel.mjs`는 기본적으로 Cron을 비운다. `VERCEL_ENV=production`이면서 빌드 시 `TRAVEL_MEDIA_CRON_ENABLED=true`를 명시한 배포에만 `/api/internal/media-worker`를 매분 등록한다. [Vercel Cron은 production deployment에서 실행](https://vercel.com/docs/cron-jobs)되므로 Preview는 보호된 경로를 직접 요청해 검사한다. flag 변경 뒤에는 새 admin deployment가 필요하다. **매분 Cron은 Vercel Pro 이상이 필요하다.** 현재 [Hobby Function 최대 시간은 300초](https://vercel.com/docs/plans/hobby)이므로 240초 제한의 Preview 직접 호출은 가능하다. Hobby의 1일 1회 Cron으로는 현재 운영 스케줄을 배포할 수 없다. [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing), [programmatic config](https://vercel.com/docs/project-configuration/vercel-ts).
 3. 관리자 프로젝트의 server-only 환경변수를 환경별로 설정한다. 변수 이름은 `apps/admin/.env.example`에도 있다. Preview에는 격리 staging Supabase 값을, Production에는 운영 Supabase 값을 넣는다. 설정 변경 후 대상 deployment가 새 값을 받는지 확인한다.
 
-| 변수                          | Preview                         | Production                   | 주의                                                               |
-| ----------------------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
-| `SUPABASE_URL`                | staging project URL             | 운영 project URL             | `NEXT_PUBLIC_SUPABASE_URL`과 별개로 worker 서버에서 사용           |
-| `SUPABASE_SERVICE_ROLE_KEY`   | staging secret/service-role key | 운영 secret/service-role key | `sb_secret_...` 또는 기존 service_role JWT; 브라우저·로그·Git 금지 |
-| `CRON_SECRET`                 | 독립된 긴 난수                  | 별도 긴 난수                 | 최소 32자; Vercel Cron의 Bearer 헤더와 route 검증값을 일치시킴     |
-| `TRAVEL_MEDIA_WORKER_ENABLED` | Preview 직접 테스트할 때 `true` | canary 준비 후 `true`        | `false`면 보호된 route가 503; Cron 설정 자체를 없애지는 않음       |
+| 변수                          | Preview                         | Production                   | 주의                                                                  |
+| ----------------------------- | ------------------------------- | ---------------------------- | --------------------------------------------------------------------- |
+| `SUPABASE_URL`                | staging project URL             | 운영 project URL             | `NEXT_PUBLIC_SUPABASE_URL`과 별개로 worker 서버에서 사용              |
+| `SUPABASE_SERVICE_ROLE_KEY`   | staging secret/service-role key | 운영 secret/service-role key | `sb_secret_...` 또는 기존 service_role JWT; 브라우저·로그·Git 금지    |
+| `CRON_SECRET`                 | 독립된 긴 난수                  | 별도 긴 난수                 | 최소 32자; Vercel Cron의 Bearer 헤더와 route 검증값을 일치시킴        |
+| `TRAVEL_MEDIA_WORKER_ENABLED` | Preview 직접 테스트할 때 `true` | canary 준비 후 `true`        | `false`면 보호된 route가 503; Cron 설정 자체를 없애지는 않음          |
+| `TRAVEL_MEDIA_CRON_ENABLED`   | `false`                         | 공개 승인 후 `true`          | 빌드 시 Cron 등록 opt-in. 주기 지원 요금제·중복 실행기 확인 후 재배포 |
 
 `CRON_SECRET`과 Supabase secret을 같은 값으로 재사용하지 않는다. secret은 Vercel의 환경변수 UI/비밀 저장소로 관리하고 `NEXT_PUBLIC_` 접두사를 붙이지 않는다. Secret 권한이 있는 관리자만 변경한다. Function 로그에는 job/asset ID와 정해진 오류 코드만 남기고 파일명, 원본 파일, 토큰, secret을 기록하지 않는다. [Vercel Cron 보안](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
 
@@ -75,12 +76,12 @@ Function이 1분에 최대 한 작업만 처리하므로 지속 유입이 1건/�
 2. **staging backend:** staging의 `travel-api`, private Storage bucket, Auth/owner를 준비한다. 실제 signed upload→`asset.complete`→outbox 생성까지 확인한다. `storage.objects` 행을 SQL로 직접 삭제해 성공을 만들지 않는다.
 3. **Vercel Preview:** native 패키지가 Linux에 포함되는지 빌드와 실행으로 확인한다. `CRON_SECRET` 없이/잘못 보내면 401, 기능 flag가 꺼지면 503, 올바른 Bearer와 flag로 빈 큐이면 200과 `idle` 응답이어야 한다. 직접 호출은 실제 큐를 소비하므로 격리 staging에서만 수행한다. 예시: `curl -i -H "Authorization: Bearer ${CRON_SECRET}" "${PREVIEW_URL}/api/internal/media-worker"`.
 4. **실제 파일:** 일반·고화질 이미지와 20MB 이하 PDF로 ready/표지/공개 열람을 확인하고, 20MB 초과·40MP 초과·손상/암호화 PDF·200쪽 초과는 거절되는지 확인한다. `sharp`/Canvas 번들, 함수 메모리·실행시간·Storage 전송량, 처리 대기시간을 측정한다. 함수 중단·30초 네트워크 실패·재호출·겹친 호출·5분 lease 만료·최대 5회 backoff를 반복한다. 7일 격리 후 참조 중/미참조/Storage API 삭제 실패·부분 삭제·재시도를 검증한다.
-5. **운영 canary:** migration → 호환되는 API → admin Function/Cron 순으로 배포한다. 운영 Docker polling을 중지했음을 확인한 뒤 제한된 테스트 자산을 만들고 Vercel Cron의 실제 호출·ready/실패·적체를 본다. Preview의 성공은 production Cron 전달 성공을 뜻하지 않는다. Docker와 Cron을 같은 production 큐에서 함께 켜지 않는다.
+5. **운영 canary:** migration → 호환되는 API → Cron 등록을 끈 admin Function 순으로 배포한다. 보호된 Function을 직접 호출해 제한된 테스트 자산을 확인한다. 운영 Docker polling을 중지했음을 확인하고 지원 요금제를 승인한 뒤 `TRAVEL_MEDIA_CRON_ENABLED=true`로 새 admin deployment를 만들고 Vercel Cron의 실제 호출·ready/실패·적체를 본다. Preview의 성공은 production Cron 전달 성공을 뜻하지 않는다. Docker와 Cron을 같은 production 큐에서 함께 켜지 않는다.
 
 관찰 기준은 미디어 `process_asset`의 queued/running/failed 수, 가장 오래된 queued 시간, 만료 lease, `media_worker_tick_failed`·`media_job_failed`, Function 시간·메모리·비용, Storage 오류율이다. 기존 `travel_queue_health`는 다른 outbox 종류를 포함할 수 있으므로 경고를 원인 작업 종류별로 확인한다. 완료 기준은 staging에서 실제 이미지/PDF와 삭제 재시도까지 통과하고, 운영 Cron canary가 일정 기간 작업을 정상 완료하는 것이다.
 
 ## 중지와 복구
 
-Cron 또는 native Function에 장애가 나면 admin Vercel 프로젝트의 Cron 호출을 중지하거나 Cron 없는 배포를 적용하고, Function의 `TRAVEL_MEDIA_WORKER_ENABLED`를 끈 deployment가 반영됐는지 확인한다. 실행 중이던 lease가 만료되고 새 claim이 멈춘 것을 확인한 뒤 **한 실행기만** Docker polling fallback으로 시작한다. 서비스 키가 노출됐다면 Supabase 키를 회전하고 Vercel·Docker의 값을 함께 갱신한다.
+Cron 또는 native Function에 장애가 나면 `TRAVEL_MEDIA_CRON_ENABLED=false`인 admin deployment로 스케줄을 제거하고, Function의 `TRAVEL_MEDIA_WORKER_ENABLED`를 끈 deployment가 반영됐는지 확인한다. 실행 중이던 lease가 만료되고 새 claim이 멈춘 것을 확인한 뒤 **한 실행기만** Docker polling fallback으로 시작한다. 서비스 키가 노출됐다면 Supabase 키를 회전하고 Vercel·Docker의 값을 함께 갱신한다.
 
 새 migration은 큐 claim 범위와 삭제 lease 재획득을 보정하는 호환성 변경이다. 이미 처리한 Storage 객체와 DB 상태가 있으므로 실패 시 운영 DB를 reset하거나 migration을 무작정 역적용하지 않는다. 중단 시점의 job/asset ID, lease, Storage 경로, Function release와 migration 버전을 기록하고 필요한 경우 앞으로 수정하는 migration을 만든다. [Vercel Function 실행 제한](https://vercel.com/docs/functions/configuring-functions/duration), [Vercel Cron 운영](https://vercel.com/docs/cron-jobs/manage-cron-jobs).

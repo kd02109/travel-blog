@@ -9,7 +9,7 @@
 
 Vercel 경로는 32자 이상 `CRON_SECRET`의 `Authorization: Bearer`를 검증한 뒤, `TRAVEL_MEDIA_WORKER_ENABLED=true`일 때만 실행한다. `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`는 관리자 Vercel 프로젝트의 서버 전용 환경변수다. 브라우저, `NEXT_PUBLIC_` 변수, Git에 넣지 않는다. `sb_secret_...` 키는 JWT가 아니므로 `apikey` 헤더로만 전송한다.
 
-`apps/admin/vercel.json`은 매분 Cron을 요청한다. 이 주기는 [Vercel Pro 이상](https://vercel.com/docs/cron-jobs/usage-and-pricing)이 필요하며, 실제 Cron은 production deployment에서 동작한다. Preview는 보호된 경로를 직접 호출해 검증한다. Function의 `maxDuration`은 240초이고 DB 작업 lease는 5분이다. native `sharp`·`@napi-rs/canvas`·`pdfjs-dist`의 실제 Linux 번들 및 20MB 파일 처리는 Vercel Preview에서 별도로 확인해야 한다.
+`apps/admin/vercel.mjs`는 기본적으로 Cron을 등록하지 않는다. 빌드 시 `TRAVEL_MEDIA_CRON_ENABLED=true`를 지정한 production deployment에서만 매분 Cron을 요청한다. 이 주기는 [Vercel Pro 이상](https://vercel.com/docs/cron-jobs/usage-and-pricing)이 필요하며, flag 변경은 새 배포가 필요하다. Preview는 보호된 경로를 직접 호출해 검증한다. Function의 `maxDuration`은 240초이고 DB 작업 lease는 5분이다. native `sharp`·`@napi-rs/canvas`·`pdfjs-dist`의 실제 Linux 번들 및 20MB 파일 처리는 Vercel Preview에서 별도로 확인해야 한다.
 
 ## 로컬·Docker 실행
 
