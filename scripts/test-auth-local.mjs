@@ -148,7 +148,7 @@ try {
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.ANON_KEY,
           NEXT_PUBLIC_SITE_URL: `http://localhost:${port}`,
           NEXT_PUBLIC_API_MOCKING: "disabled",
-          NEXT_PUBLIC_SENTRY_DSN: "",
+          NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "false",
           NEXT_PUBLIC_ANALYTICS_ENABLED: "false",
         },
       },

@@ -1,9 +1,12 @@
 import {
   ApiError,
   cleanInput,
+  errorCaptureSqlInput,
+  maskedDiagnosticText,
   renderBlocks,
   sniff,
   validateAction,
+  validatedErrorContext,
 } from "./core.ts";
 import { argon2id, argon2Verify } from "npm:hash-wasm@4.12.0";
 function assert(ok: unknown, message = "assertion failed"): asserts ok {
@@ -32,6 +35,72 @@ Deno.test("internal RPC actions cannot be called by clients", () => {
   assert(validateAction("admin.post.published") === "admin.post.published");
   assert(validateAction("admin.revision.get") === "admin.revision.get");
   assert(validateAction("admin.revision.delete") === "admin.revision.delete");
+  assert(validateAction("admin.error.get") === "admin.error.get");
+});
+Deno.test("diagnostic details are bounded and re-masked at the gateway", () => {
+  const diagnostic = "Bearer abc123 token=abc123 user@example.com 192.168.0.1 https://example.com/path?q=secret /Users/person/work/app.ts";
+  const masked = maskedDiagnosticText(diagnostic, 1024);
+  assert(masked?.includes("[credential]"));
+  assert((masked?.match(/\[credential\]/g) ?? []).length >= 2);
+  assert(masked?.includes("[email]"));
+  assert(masked?.includes("[ip]"));
+  assert(masked?.includes("[url]"));
+  assert(masked?.includes("[path]"));
+  for (const privateValue of ["abc123", "user@example.com", "192.168.0.1", "q=secret", "/Users/person"]) {
+    assert(!masked?.includes(privateValue));
+  }
+  assert(maskedDiagnosticText(null, 1024) === null);
+  rejects(() => maskedDiagnosticText("x".repeat(1025), 1024), 400);
+  rejects(() => maskedDiagnosticText("x".repeat(4097), 4096), 400);
+  rejects(() => maskedDiagnosticText(123, 1024), 400);
+});
+Deno.test("safe error context keeps code positions and original request correlation", () => {
+  const origin = "aabbccdd-0000-4000-8000-000000000001";
+  const context = validatedErrorContext({
+    operation: "post.save",
+    dependency: "travel_api",
+    http_status: 409,
+    origin_request_id: origin,
+    stack_frames: [{
+      function_name: "savePost",
+      file: "apps/admin/app/write/page.tsx",
+      line: 147,
+      column: 12,
+    }],
+  });
+  assert(context.operation === "post.save");
+  assert(context.stack_frames[0]?.file === "apps/admin/app/write/page.tsx");
+  const sql = errorCaptureSqlInput(
+    "00000000-0000-0000-0000-000000000001",
+    {
+      app: "admin", environment: "development", source: "browser",
+      route: "/write/:id", error_name: "Error", code: "version_conflict",
+      release: "local", ...context,
+    },
+    "a".repeat(64),
+    "00000000-0000-0000-0000-000000000002",
+  );
+  assert(sql.origin_request_id === origin);
+  assert(sql.request_id !== origin);
+  assert(sql.stack_frames.length === 1);
+});
+Deno.test("safe error context rejects paths, URLs, arbitrary operation values and oversized frames", () => {
+  const frame = {
+    function_name: null, file: "app/page.tsx", line: 1, column: 1,
+  };
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "/Users/me/app.ts" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "app/../secret.ts" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "https://site/app.js" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "app/page.tsx?token=secret" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "private.txt" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, file: "apps/web/private@example.com.js" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, line: 0 }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: [{ ...frame, code: "extra" }] }), 400);
+  rejects(() => validatedErrorContext({ stack_frames: Array(11).fill(frame) }), 400);
+  rejects(() => validatedErrorContext({ operation: "save /posts/123" }), 400);
+  rejects(() => validatedErrorContext({ dependency: "https://example.com" }), 400);
+  rejects(() => validatedErrorContext({ http_status: 99 }), 400);
+  rejects(() => validatedErrorContext({ origin_request_id: "user@example.com" }), 400);
 });
 Deno.test("server-only authorization and render fields are removed", () => {
   const input = cleanInput({

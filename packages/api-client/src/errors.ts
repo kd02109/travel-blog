@@ -15,6 +15,7 @@ export class TravelApiError extends Error {
     public code: string,
     public requestId?: string,
     public retryAfter?: number,
+    public operation?: string,
   ) {
     super(code);
     this.name = "TravelApiError";

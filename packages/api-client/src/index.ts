@@ -35,6 +35,7 @@ export function createTravelApi(options: {
         "rate_limited",
         undefined,
         Math.ceil((retryAt - Date.now()) / 1000),
+        action,
       );
     const token = await options.getAccessToken?.();
     const visitor =
@@ -78,6 +79,7 @@ export function createTravelApi(options: {
           parsed.success ? parsed.data.error : "network_error",
           parsed.success ? parsed.data.request_id : undefined,
           retryAfter,
+          action,
         );
       }
       throw error;
@@ -104,6 +106,10 @@ export function createTravelApi(options: {
     },
     getPost: (input: ActionInput<"post.get">) => call("post.get", input),
     getMe: () => call("me", {}),
+    listAdminErrors: (input: ActionInput<"admin.errors">) =>
+      call("admin.errors", input),
+    getAdminError: (input: ActionInput<"admin.error.get">) =>
+      call("admin.error.get", input),
     createVisitor: () => call("visitor.create", {}),
     listComments: (input: ActionInput<"comments.list">) =>
       call("comments.list", input),

@@ -4,6 +4,5 @@ packages:
   - "packages/*"
 allowBuilds:
   "@firebase/util": true
-  "@sentry/cli": true
   protobufjs: true
   sharp: true

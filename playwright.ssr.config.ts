@@ -23,7 +23,7 @@ export default defineConfig({
         NEXT_PUBLIC_API_MOCKING: "disabled",
         NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:3049",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "test-only-placeholder",
-        NEXT_PUBLIC_SENTRY_DSN: "",
+        NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "false",
         NEXT_PUBLIC_ANALYTICS_ENABLED: "false",
       },
     },

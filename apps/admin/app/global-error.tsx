@@ -1,7 +1,7 @@
 "use client";
 import { useEffect } from "react";
 import Link from "next/link";
-import { captureException } from "@sentry/nextjs";
+import { reportAdminError } from "../lib/error-monitor";
 export default function GlobalError({
   error,
   reset,
@@ -10,7 +10,13 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    captureException(error);
+    if (error.digest) return;
+    void reportAdminError(
+      error,
+      "global_boundary",
+      "browser",
+      window.location.pathname,
+    );
   }, [error]);
   return (
     <html lang="ko">

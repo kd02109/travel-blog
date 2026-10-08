@@ -37,6 +37,37 @@ const card = {
   comment_count: 0,
 };
 const profile = { user_id: id, display_name: "독자", avatar_asset_id: null };
+const errorIssue = {
+  id,
+  site_id: id,
+  app: "web",
+  environment: "production",
+  fingerprint: "a".repeat(64),
+  status: "open",
+  first_seen_at: date,
+  last_seen_at: date,
+  occurrence_count: 2,
+  error_name: "TypeError",
+  message: "render_boundary",
+  route: "/posts/:id",
+  source: "browser",
+  release: "r1",
+  request_id: id,
+};
+const errorContext = {
+  operation: "post.render",
+  dependency: "travel_api",
+  http_status: 503,
+  origin_request_id: id,
+  stack_frames: [
+    {
+      function_name: "PostImage",
+      file: "app/posts/id/page.tsx",
+      line: 42,
+      column: 18,
+    },
+  ],
+};
 // Synthetic values, shaped from the deployed SQL projection and Edge response.
 const samples = {
   "site.get": {
@@ -70,6 +101,7 @@ const samples = {
   ],
   "like.get": { liked: false, count: 0 },
   "visitor.create": { visitor_token: "signed-visitor", expires_at: 1790419200 },
+  "error.capture": { accepted: true },
   me: {
     user_id: id,
     profile,
@@ -209,6 +241,32 @@ const samples = {
       created_at: date,
     },
   ],
+  "admin.errors": [errorIssue],
+  "admin.error.get": {
+    issue: {
+      ...errorIssue,
+      masked_message: "Cannot read properties of undefined",
+      masked_stack:
+        "TypeError: Cannot read properties of undefined\n  at render (page.tsx:42:7)",
+      ...errorContext,
+    },
+    events: [
+      {
+        id,
+        received_at: date,
+        source: "browser",
+        error_name: "TypeError",
+        message: "render_boundary",
+        route: "/posts/:id",
+        release: "r1",
+        request_id: id,
+        masked_message: "Cannot read properties of undefined",
+        masked_stack:
+          "TypeError: Cannot read properties of undefined\n  at render (page.tsx:42:7)",
+        ...errorContext,
+      },
+    ],
+  },
   "asset.create": {
     id,
     bucket: "originals-private",
@@ -272,6 +330,110 @@ describe("deployed action boundaries", () => {
         search: "가".repeat(101),
       }).success,
     ).toBe(false);
+  });
+  it("bounds masked capture fields and requires a scoped detail lookup", () => {
+    const capture = {
+      app: "web" as const,
+      environment: "preview" as const,
+      source: "browser" as const,
+      route: "/posts/:id",
+      error_name: "TypeError",
+      code: "render_boundary",
+      digest: null,
+      release: "r1",
+      masked_message: "An error occurred",
+      masked_stack: "TypeError: An error occurred\n  at render (page.tsx:42:7)",
+      ...errorContext,
+    };
+    expect(
+      actionContracts["error.capture"].input.safeParse(capture).success,
+    ).toBe(true);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        masked_message: "x".repeat(1025),
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        masked_stack: "x".repeat(4097),
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        stack_frames: [
+          { ...errorContext.stack_frames[0], file: "https://host/path" },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        stack_frames: [
+          { ...errorContext.stack_frames[0], file: "unknown/private.js" },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        stack_frames: [
+          {
+            ...errorContext.stack_frames[0],
+            file: "apps/web/private@example.com.js",
+          },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        stack_frames: Array.from(
+          { length: 11 },
+          () => errorContext.stack_frames[0],
+        ),
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["error.capture"].input.safeParse({
+        ...capture,
+        origin_request_id: "Bearer secret",
+      }).success,
+    ).toBe(false);
+    expect(
+      actionContracts["admin.error.get"].input.safeParse({ site_id: id, id })
+        .success,
+    ).toBe(true);
+    expect(
+      actionContracts["admin.error.get"].input.safeParse({ id }).success,
+    ).toBe(false);
+    expect(() =>
+      parseActionOutput("admin.error.get", samples["admin.error.get"]),
+    ).not.toThrow();
+    expect(() =>
+      parseActionOutput("admin.error.get", {
+        ...samples["admin.error.get"],
+        events: [
+          {
+            ...(
+              samples["admin.error.get"] as {
+                events: Record<string, unknown>[];
+              }
+            ).events[0],
+            stack_frames: [
+              {
+                function_name: "PostImage",
+                file: "https://example.com/private?token=secret",
+                line: 42,
+                column: 18,
+              },
+            ],
+          },
+        ],
+      }),
+    ).toThrow();
   });
   it("covers exactly the Edge allowlist, without internal-only actions", () => {
     const source = readFileSync(

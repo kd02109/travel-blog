@@ -31,8 +31,8 @@ test("mock ignores profile files and clears live credentials and telemetry", () 
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_real",
       SUPABASE_SECRET_KEY: "sb_secret_private",
       NEXT_PUBLIC_ANALYTICS_ENABLED: "true",
-      NEXT_PUBLIC_SENTRY_DSN: "private",
-      SENTRY_AUTH_TOKEN: "private",
+      NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "true",
+      TRAVEL_ERROR_REPORT_KEY: "private",
     },
   });
   assert.equal(env.NEXT_PUBLIC_API_MOCKING, "enabled");
@@ -40,8 +40,8 @@ test("mock ignores profile files and clears live credentials and telemetry", () 
   assert.equal(env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, "");
   assert.equal(env.SUPABASE_SECRET_KEY, "");
   assert.equal(env.NEXT_PUBLIC_ANALYTICS_ENABLED, "false");
-  assert.equal(env.NEXT_PUBLIC_SENTRY_DSN, "");
-  assert.equal(env.SENTRY_AUTH_TOKEN, "");
+  assert.equal(env.NEXT_PUBLIC_ERROR_MONITORING_ENABLED, "");
+  assert.equal(env.TRAVEL_ERROR_REPORT_KEY, "");
 });
 test("supabase forces mock off even when shell or profile enables it", () => {
   const root = fixture(valid + "NEXT_PUBLIC_API_MOCKING=enabled\n");
@@ -57,8 +57,8 @@ test("supabase forces mock off even when shell or profile enables it", () => {
 test("precedence is shell > app profile > shared profile", () => {
   const root = fixture(
     valid +
-      "SENTRY_PROJECT=shared\nNEXT_PUBLIC_SITE_URL=https://shared.example\n",
-    "SENTRY_PROJECT=web\nNEXT_PUBLIC_SITE_URL=https://web.example\n",
+      "NEXT_PUBLIC_DEPLOY_ENV=preview\nNEXT_PUBLIC_SITE_URL=https://shared.example\n",
+    "NEXT_PUBLIC_DEPLOY_ENV=production\nNEXT_PUBLIC_SITE_URL=https://web.example\n",
   );
   const env = createAppEnvironment({
     root,
@@ -66,7 +66,7 @@ test("precedence is shell > app profile > shared profile", () => {
     mode: "supabase",
     inherited: { NEXT_PUBLIC_SITE_URL: "https://shell.example" },
   });
-  assert.equal(env.SENTRY_PROJECT, "web");
+  assert.equal(env.NEXT_PUBLIC_DEPLOY_ENV, "production");
   assert.equal(env.NEXT_PUBLIC_SITE_URL, "https://shell.example");
 });
 test("missing credentials fail with variable names, never values", () => {

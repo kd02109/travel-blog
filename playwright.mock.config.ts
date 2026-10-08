@@ -13,7 +13,7 @@ export default defineConfig({
       env: {
         NEXT_PUBLIC_API_MOCKING: "enabled",
         TRAVEL_NEXT_DIST_DIR: ".next-test-mock",
-        NEXT_PUBLIC_SENTRY_DSN: "",
+        NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "false",
         NEXT_PUBLIC_ANALYTICS_ENABLED: "false",
         NEXT_PUBLIC_SUPABASE_URL: "https://mock-test.supabase.co",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "mock-not-a-real-key",
@@ -26,7 +26,7 @@ export default defineConfig({
       env: {
         NEXT_PUBLIC_API_MOCKING: "enabled",
         TRAVEL_NEXT_DIST_DIR: ".next-test-mock",
-        NEXT_PUBLIC_SENTRY_DSN: "",
+        NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "false",
         NEXT_PUBLIC_ANALYTICS_ENABLED: "false",
         NEXT_PUBLIC_SUPABASE_URL: "https://mock-test.supabase.co",
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "mock-not-a-real-key",
