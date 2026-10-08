@@ -3,6 +3,8 @@ import { argon2id, argon2Verify } from "npm:hash-wasm@4.12.0";
 import {
   ApiError,
   databaseError,
+  errorCaptureSqlInput,
+  maskedDiagnosticText,
   cleanInput,
   guestActions,
   memberActions,
@@ -10,6 +12,7 @@ import {
   sniff,
   text,
   validateAction,
+  validatedErrorContext,
 } from "./core.ts";
 const base = Deno.env.get("SUPABASE_URL")!;
 const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -102,6 +105,89 @@ async function rate(key: string, action: string, max: number, seconds = 60) {
   if (!r.allowed) throw new ApiError(429, "rate_limited", r.retry_after);
 }
 
+function reportField(
+  value: unknown,
+  pattern: RegExp,
+  fallback: string,
+): string {
+  return typeof value === "string" && pattern.test(value) ? value : fallback;
+}
+
+function errorReportInput(input: Record<string, unknown>) {
+  const allowed = new Set([
+    "app",
+    "environment",
+    "source",
+    "route",
+    "error_name",
+    "code",
+    "digest",
+    "release",
+    "masked_message",
+    "masked_stack",
+    "operation",
+    "dependency",
+    "http_status",
+    "origin_request_id",
+    "stack_frames",
+  ]);
+  if (Object.keys(input).some((key) => !allowed.has(key))) {
+    throw new ApiError(400, "invalid_error_report");
+  }
+  const app = reportField(input.app, /^(web|admin)$/, "");
+  const environment = reportField(
+    input.environment,
+    /^(production|preview|development)$/,
+    "",
+  );
+  const source = reportField(input.source, /^(browser|next_server)$/, "");
+  const route = reportField(
+    input.route,
+    /^\/$|^\/[a-z-]{1,32}(?:\/:id)?$/,
+    "",
+  );
+  const errorName = reportField(
+    input.error_name,
+    /^[A-Za-z][A-Za-z0-9_.]{0,63}$/,
+    "Error",
+  );
+  const code = reportField(input.code, /^[a-z][a-z0-9_]{0,63}$/, "");
+  const digest = input.digest === null || input.digest === undefined
+    ? null
+    : reportField(input.digest, /^[A-Za-z0-9_-]{1,64}$/, "");
+  const release = reportField(
+    input.release,
+    /^[A-Za-z0-9._-]{1,80}$/,
+    "unknown",
+  );
+  if (!app || !environment || !source || !route || !code || digest === "") {
+    throw new ApiError(400, "invalid_error_report");
+  }
+  return {
+    app,
+    environment,
+    source,
+    route,
+    error_name: errorName,
+    code,
+    digest,
+    release,
+    masked_message: maskedDiagnosticText(input.masked_message, 1024),
+    masked_stack: maskedDiagnosticText(input.masked_stack, 4096),
+    ...validatedErrorContext(input),
+  };
+}
+
+function validReportKey(provided: string | null): boolean {
+  const expected = Deno.env.get("TRAVEL_ERROR_REPORT_KEY");
+  if (!expected || !provided || expected.length !== provided.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < expected.length; i++) {
+    mismatch |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
 async function removeAssetPrefix(bucket: string, prefix: string) {
   const paths: string[] = [];
   async function collect(directory: string): Promise<void> {
@@ -149,11 +235,11 @@ async function visitor(req: Request): Promise<string> {
   if (mismatch) throw new ApiError(401, "invalid_visitor");
   return await hmac("actor:" + id);
 }
-async function readJson(req: Request): Promise<any> {
+async function readJson(req: Request, maxBytes = 1100000): Promise<any> {
   if (!req.headers.get("content-type")?.includes("application/json")) {
     throw new ApiError(415, "json_required");
   }
-  if (Number(req.headers.get("content-length") ?? 0) > 1100000) {
+  if (Number(req.headers.get("content-length") ?? 0) > maxBytes) {
     throw new ApiError(413, "request_too_large");
   }
   const reader = req.body?.getReader();
@@ -164,7 +250,7 @@ async function readJson(req: Request): Promise<any> {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.length;
-    if (size > 1100000) {
+    if (size > maxBytes) {
       await reader.cancel();
       throw new ApiError(413, "request_too_large");
     }
@@ -209,9 +295,41 @@ Deno.serve(async (req: Request) => {
     return respond({ error: "method_not_allowed" }, 405);
   }
   try {
-    const body = await readJson(req);
+    const body = await readJson(
+      req,
+      req.headers.has("x-error-report-key") ? 16384 : 1100000,
+    );
     const action = validateAction(body?.action);
     const input = cleanInput(body?.input ?? {});
+    if (action === "error.capture") {
+      if (encoder.encode(JSON.stringify(body)).length > 16384) {
+        throw new ApiError(413, "request_too_large");
+      }
+      // Check the server-only key before querying Auth or consuming SQL quotas.
+      if (!validReportKey(req.headers.get("x-error-report-key"))) {
+        throw new ApiError(403, "forbidden");
+      }
+      await rate("error-monitor", "capture", 120);
+      // Bound database growth even when the public relay is abused.
+      await rate("error-monitor", "capture-daily", 2000, 86400);
+      const report = errorReportInput(input);
+      const site = await rpc("site.get", null, { slug: "parents-travel" });
+      const fingerprint = await sha(JSON.stringify([
+        report.app,
+        report.environment,
+        report.source,
+        report.route,
+        report.error_name,
+        report.code,
+        report.digest,
+      ]));
+      await rate(`error-monitor:${fingerprint}`, "capture-issue", 10);
+      const { error } = await client.rpc("travel_error_capture", {
+        p_input: errorCaptureSqlInput(site.id, report, fingerprint, requestId),
+      });
+      if (error) throw databaseError(error);
+      return respond({ accepted: true }, 202);
+    }
     let actor: string | null = null;
     const authorization = req.headers.get("authorization");
     if (authorization) {
@@ -332,6 +450,37 @@ Deno.serve(async (req: Request) => {
         token: data.token,
         path: data.path,
       });
+    }
+    if (action === "admin.errors") {
+      const limit = Math.min(
+        50,
+        Math.max(1, Number.isInteger(input.limit) ? Number(input.limit) : 20),
+      );
+      const offset = Math.min(
+        100000,
+        Math.max(0, Number.isInteger(input.offset) ? Number(input.offset) : 0),
+      );
+      const { data, error } = await client.rpc("travel_admin_error_issues", {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_limit: limit,
+        p_offset: offset,
+      });
+      if (error) throw databaseError(error);
+      return respond(data);
+    }
+    if (action === "admin.error.get") {
+      if (
+        typeof input.site_id !== "string" || typeof input.id !== "string" ||
+        Object.keys(input).some((key) => key !== "site_id" && key !== "id")
+      ) throw new ApiError(400, "invalid_error_issue_request");
+      const { data, error } = await client.rpc("travel_admin_error_issue", {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_issue_id: input.id,
+      });
+      if (error) throw databaseError(error);
+      return respond(data);
     }
     if (action === "like.get") {
       const { data, error } = await client.rpc("travel_like_get", {

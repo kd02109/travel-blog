@@ -37,7 +37,13 @@ export function createServerReader(options: {
         body: JSON.stringify({ action, input: parsed }),
       });
     } catch {
-      throw new TravelApiError(0, "network_error");
+      throw new TravelApiError(
+        0,
+        "network_error",
+        undefined,
+        undefined,
+        action,
+      );
     }
     const data: unknown = await response.json();
     if (!response.ok) {
@@ -49,6 +55,7 @@ export function createServerReader(options: {
         response.status === 429
           ? (parseRetryAfter(response.headers.get("retry-after")) ?? 60)
           : undefined,
+        action,
       );
     }
     return parseActionOutput(action, data);

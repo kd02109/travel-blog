@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { createMockEngine } from "./engine";
-import { databaseError } from "../../../supabase/functions/travel-api/core";
+import {
+  databaseError,
+  errorCaptureSqlInput,
+} from "../../../supabase/functions/travel-api/core";
 import { MOCK_SITE_ID, MOCK_POST_IDS, mockId } from "./fixtures";
 import {
   actionContracts,
@@ -9,6 +12,56 @@ import {
 } from "@repo/contracts";
 const site = { site_id: MOCK_SITE_ID };
 const owner = { Authorization: "Bearer mock-owner" };
+const admin = { Authorization: "Bearer mock-admin" };
+it("passes only the SQL capture function's approved fields", () => {
+  const payload = errorCaptureSqlInput(
+    MOCK_SITE_ID,
+    {
+      app: "web",
+      environment: "preview",
+      source: "browser",
+      route: "/posts/:id",
+      error_name: "TypeError",
+      code: "render_boundary",
+      release: "r1",
+      masked_message: "Cannot read properties of undefined",
+      masked_stack:
+        "TypeError: Cannot read properties of undefined\n    at render (page.tsx:42:7)",
+    },
+    "a".repeat(64),
+    mockId(9, 1),
+  );
+  expect(Object.keys(payload).sort()).toEqual(
+    [
+      "site_id",
+      "app",
+      "environment",
+      "source",
+      "route",
+      "error_name",
+      "message",
+      "masked_message",
+      "masked_stack",
+      "operation",
+      "dependency",
+      "http_status",
+      "origin_request_id",
+      "stack_frames",
+      "fingerprint",
+      "release",
+      "request_id",
+    ].sort(),
+  );
+  expect(payload.message).toBe("render_boundary");
+  expect(payload.masked_message).toBe("Cannot read properties of undefined");
+  expect(payload).toMatchObject({
+    operation: null,
+    dependency: null,
+    http_status: null,
+    origin_request_id: null,
+    stack_frames: [],
+  });
+});
 it("validates public/member/admin reads including nullable profile and audit fields", () => {
   const engine = createMockEngine();
   const cases: [ApiAction, Record<string, unknown>][] = [
@@ -42,6 +95,125 @@ it("validates public/member/admin reads including nullable profile and audit fie
       action,
     ).toBe(true);
   }
+});
+it("restricts error issue reads to the active admin role", () => {
+  const engine = createMockEngine();
+  const request = { action: "admin.errors", input: site };
+  expect(engine.handle(request).status).toBe(401);
+  expect(engine.handle(request, owner).status).toBe(403);
+  const listed = engine.handle(request, admin);
+  expect(listed.status).toBe(200);
+  expect(
+    actionContracts["admin.errors"].output.safeParse(listed.body).success,
+  ).toBe(true);
+  expect(Array.isArray(listed.body) && listed.body).toHaveLength(1);
+  const detailRequest = {
+    action: "admin.error.get",
+    input: { ...site, id: mockId(8, 1) },
+  };
+  expect(engine.handle(detailRequest).status).toBe(401);
+  expect(
+    engine.handle(detailRequest, { Authorization: "Bearer mock-editor" })
+      .status,
+  ).toBe(403);
+  expect(engine.handle(detailRequest, owner).status).toBe(403);
+  const detail = engine.handle(detailRequest, admin);
+  expect(detail.status).toBe(200);
+  expect(
+    actionContracts["admin.error.get"].output.safeParse(detail.body).success,
+  ).toBe(true);
+  expect(detail.body).toMatchObject({
+    issue: {
+      id: mockId(8, 1),
+      masked_message: expect.any(String),
+      operation: "post.render",
+      origin_request_id: mockId(8, 4),
+      stack_frames: [{ file: "app/posts/id/page.tsx", line: 42 }],
+    },
+    events: [
+      {
+        masked_stack: expect.any(String),
+        dependency: "travel_api",
+        http_status: 503,
+      },
+    ],
+  });
+  expect(
+    engine.handle(
+      { ...detailRequest, input: { ...site, id: mockId(8, 10) } },
+      admin,
+    ).status,
+  ).toBe(404);
+  expect(
+    createMockEngine({ scenario: "empty" }).handle(request, admin).body,
+  ).toEqual([]);
+  expect(
+    createMockEngine({ scenario: "empty" }).handle(detailRequest, admin).status,
+  ).toBe(404);
+  expect(
+    engine.handle(
+      {
+        action: "admin.member.set",
+        input: { ...site, user_id: mockId(3, 3), role: "admin", active: false },
+      },
+      owner,
+    ).status,
+  ).toBe(200);
+  expect(engine.handle(detailRequest, admin).status).toBe(403);
+});
+it("matches the error capture gateway's key, input and 202 response", () => {
+  const engine = createMockEngine();
+  const request = {
+    action: "error.capture",
+    input: {
+      app: "web",
+      environment: "preview",
+      source: "browser",
+      route: "/posts/:id",
+      error_name: "TypeError",
+      code: "render_boundary",
+      digest: null,
+      release: "r1",
+      masked_message: "Cannot read properties of undefined",
+      masked_stack:
+        "TypeError: Cannot read properties of undefined\n    at render (page.tsx:42:7)",
+      operation: "post.render",
+      dependency: "travel_api",
+      http_status: 503,
+      origin_request_id: mockId(8, 4),
+      stack_frames: [
+        {
+          function_name: "render",
+          file: "app/posts/id/page.tsx",
+          line: 42,
+          column: 7,
+        },
+      ],
+    },
+  };
+  expect(engine.handle(request).status).toBe(403);
+  expect(engine.handle(request, { "X-Error-Report-Key": "wrong" }).status).toBe(
+    403,
+  );
+  const key = { "X-Error-Report-Key": "mock-error-report-key" };
+  expect(engine.handle(request, key)).toEqual(
+    expect.objectContaining({ status: 202, body: { accepted: true } }),
+  );
+  expect(
+    engine.handle(
+      { ...request, input: { ...request.input, route: "/secret?token=x" } },
+      key,
+    ).status,
+  ).toBe(400);
+  expect(
+    engine.handle(
+      {
+        ...request,
+        input: { ...request.input, masked_stack: "x".repeat(4097) },
+      },
+      key,
+    ).status,
+  ).toBe(400);
 });
 it("restricts asset status to staff of the selected site", () => {
   const engine = createMockEngine();

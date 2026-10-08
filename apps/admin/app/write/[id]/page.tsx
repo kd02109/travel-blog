@@ -1,4 +1,5 @@
 import { requireEditor } from "../../../lib/auth";
+import { resolvePublicSiteOrigin } from "../../../lib/public-post-url";
 import { Composer } from "../../composer";
 
 export default async function EditPost({
@@ -8,5 +9,9 @@ export default async function EditPost({
 }) {
   await requireEditor();
   const { id } = await params;
-  return <Composer postId={id} />;
+  const publicSiteOrigin = resolvePublicSiteOrigin(
+    process.env.WEB_ORIGIN,
+    process.env.NODE_ENV === "development",
+  );
+  return <Composer postId={id} publicSiteOrigin={publicSiteOrigin} />;
 }

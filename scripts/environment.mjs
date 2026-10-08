@@ -83,8 +83,8 @@ export function createAppEnvironment({
       "SUPABASE_URL",
       "SUPABASE_SECRET_KEY",
       "SUPABASE_SERVICE_ROLE_KEY",
-      "NEXT_PUBLIC_SENTRY_DSN",
-      "SENTRY_AUTH_TOKEN",
+      "NEXT_PUBLIC_ERROR_MONITORING_ENABLED",
+      "TRAVEL_ERROR_REPORT_KEY",
     ])
       env[key] = "";
     env.NEXT_PUBLIC_ANALYTICS_ENABLED = "false";

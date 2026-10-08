@@ -7,6 +7,7 @@
     "dev": "node ../../scripts/run-app.mjs dev --port 3002",
     "dev:supabase": "cross-env TRAVEL_API_MODE=supabase node ../../scripts/run-app.mjs dev --port 3002",
     "build": "next build",
+    "build:private-maps": "node ../../scripts/build-private-source-maps.mjs",
     "start": "next start --port 3002",
     "lint": "eslint --max-warnings 0",
     "check-types": "next typegen && tsc --noEmit",
@@ -22,11 +23,14 @@
     "@repo/database": "workspace:*",
     "@repo/api-client": "workspace:*",
     "@repo/observability": "workspace:*",
-    "@sentry/nextjs": "10.75.0",
     "@repo/editor": "workspace:*",
     "@repo/contracts": "workspace:*",
     "@repo/mock-api": "workspace:*",
-    "@repo/pdf-reader": "workspace:*"
+    "@repo/pdf-reader": "workspace:*",
+    "@repo/media-worker": "workspace:*",
+    "@napi-rs/canvas": "0.1.80",
+    "pdfjs-dist": "5.4.149",
+    "sharp": "0.34.5"
   },
   "devDependencies": {
     "@repo/eslint-config": "workspace:*",

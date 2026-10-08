@@ -1,4 +1,8 @@
-import { parseActionOutput, type ApiAction } from "@repo/contracts";
+import {
+  actionContracts,
+  parseActionOutput,
+  type ApiAction,
+} from "@repo/contracts";
 import { CATEGORIES } from "@repo/constants";
 import { validatePublishedMetadata } from "@repo/contracts";
 // These helpers are pure: use the same boundary validation and HTML renderer as Edge.
@@ -30,6 +34,41 @@ import type {
   Settings,
 } from "./types";
 const roles = Object.keys(MOCK_TOKENS) as Role[];
+const mockErrorIssue = {
+  id: mockId(8, 1),
+  site_id: MOCK_SITE_ID,
+  app: "web",
+  environment: "preview",
+  fingerprint: "a".repeat(64),
+  status: "open",
+  first_seen_at: MOCK_NOW,
+  last_seen_at: MOCK_NOW,
+  occurrence_count: 2,
+  error_name: "TypeError",
+  message: "render_boundary",
+  route: "/posts/:id",
+  source: "browser",
+  release: "mock-r1",
+  request_id: mockId(8, 2),
+};
+const mockMaskedMessage =
+  "Cannot read properties of undefined (reading 'title')";
+const mockMaskedStack =
+  "TypeError: Cannot read properties of undefined (reading 'title')\n    at render (page.tsx:42:7)";
+const mockErrorContext = {
+  operation: "post.render",
+  dependency: "travel_api",
+  http_status: 503,
+  origin_request_id: mockId(8, 4),
+  stack_frames: [
+    {
+      function_name: "render",
+      file: "app/posts/id/page.tsx",
+      line: 42,
+      column: 7,
+    },
+  ],
+};
 const object = (value: unknown): Record<string, unknown> => {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new ApiError(400, "invalid_input");
@@ -354,6 +393,7 @@ export function createMockEngine(options: MockOptions = {}) {
     headers: Record<string, string>,
   ): unknown {
     const person = member(headers);
+    if (action === "error.capture") return { accepted: true };
     if (action === "site.get") {
       if (
         (input.site_id && input.site_id !== MOCK_SITE_ID) ||
@@ -1189,6 +1229,40 @@ export function createMockEngine(options: MockOptions = {}) {
         staff(actor, ["admin", "owner"]);
         return paginate(state.audit, input);
       }
+      if (action === "admin.errors") {
+        staff(actor, ["admin"]);
+        return paginate(scenario === "empty" ? [] : [mockErrorIssue], input);
+      }
+      if (action === "admin.error.get") {
+        staff(actor, ["admin"]);
+        if (!actionContracts["admin.error.get"].input.safeParse(input).success)
+          throw new ApiError(400, "invalid_input");
+        if (scenario === "empty" || input.id !== mockErrorIssue.id)
+          throw new ApiError(404, "not_found");
+        return {
+          issue: {
+            ...mockErrorIssue,
+            masked_message: mockMaskedMessage,
+            masked_stack: mockMaskedStack,
+            ...mockErrorContext,
+          },
+          events: [
+            {
+              id: mockId(8, 3),
+              received_at: MOCK_NOW,
+              source: mockErrorIssue.source,
+              error_name: mockErrorIssue.error_name,
+              message: mockErrorIssue.message,
+              route: mockErrorIssue.route,
+              release: mockErrorIssue.release,
+              request_id: mockErrorIssue.request_id,
+              masked_message: mockMaskedMessage,
+              masked_stack: mockMaskedStack,
+              ...mockErrorContext,
+            },
+          ],
+        };
+      }
       if (action === "admin.members") {
         staff(actor, ["owner"]);
         return state.members
@@ -1263,6 +1337,12 @@ export function createMockEngine(options: MockOptions = {}) {
         const person = member(headers);
         if (memberActions.has(action) && !person)
           throw new ApiError(401, "login_required");
+        if (action === "error.capture") {
+          if (headers["x-error-report-key"] !== "mock-error-report-key")
+            throw new ApiError(403, "forbidden");
+          if (!actionContracts["error.capture"].input.safeParse(input).success)
+            throw new ApiError(400, "invalid_error_report");
+        }
         if (
           scenario === "conflict" &&
           ["comment.create", "admin.post.save", "admin.settings.save"].includes(
@@ -1271,7 +1351,7 @@ export function createMockEngine(options: MockOptions = {}) {
         )
           throw new ApiError(409, "version_conflict");
         return {
-          status: 200,
+          status: action === "error.capture" ? 202 : 200,
           body: parseActionOutput(
             action as ApiAction,
             structuredClone(dispatch(action, input, headers)),

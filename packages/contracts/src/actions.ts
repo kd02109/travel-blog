@@ -166,6 +166,97 @@ const audit = z.object({
   changes: json,
   created_at: timestamp,
 });
+const webErrorIssue = z.object({
+  id: uuid,
+  site_id: uuid,
+  app: z.enum(["web", "admin"]),
+  environment: z.enum(["development", "preview", "production"]),
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  status: z.enum(["open", "resolved", "ignored"]),
+  first_seen_at: timestamp,
+  last_seen_at: timestamp,
+  occurrence_count: z.number().int().positive(),
+  error_name: z.string(),
+  message: z.string(),
+  route: z.string(),
+  source: z.enum(["browser", "next_server", "edge_api"]),
+  release: z.string().nullable(),
+  request_id: z.string().nullable(),
+});
+const maskedErrorMessage = z.string().max(1024).nullable();
+const maskedErrorStack = z.string().max(4096).nullable();
+const errorOperation = z.string().regex(/^[a-z][a-z0-9_.-]{0,63}$/);
+const errorDependency = z.enum([
+  "travel_api",
+  "supabase_auth",
+  "supabase_storage",
+  "next_server",
+  "browser",
+  "other",
+]);
+const originRequestId = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+const stackFramePrefixes = [
+  "_next/static/chunks/",
+  ".next/server/",
+  "apps/web/",
+  "apps/admin/",
+  "packages/",
+  "app/",
+  "pages/",
+  "src/",
+];
+const stackFrame = z.strictObject({
+  function_name: z
+    .string()
+    .regex(/^[A-Za-z0-9_$<>.-]{1,80}$/)
+    .nullable(),
+  file: z
+    .string()
+    .regex(/^[A-Za-z0-9_./-]{1,160}$/)
+    .refine(
+      (value) =>
+        !value.startsWith("/") &&
+        !value.includes("..") &&
+        !value.includes("//") &&
+        stackFramePrefixes.some((prefix) => value.startsWith(prefix)),
+      "relative source file required",
+    ),
+  line: z.number().int().min(1).max(10_000_000),
+  column: z.number().int().min(1).max(10_000_000),
+});
+const errorContext = {
+  operation: errorOperation.nullable(),
+  dependency: errorDependency.nullable(),
+  http_status: z.number().int().min(100).max(599).nullable(),
+  origin_request_id: originRequestId.nullable(),
+  stack_frames: z.array(stackFrame).max(10),
+};
+const webErrorDetail = z.object({
+  issue: webErrorIssue.extend({
+    masked_message: maskedErrorMessage,
+    masked_stack: maskedErrorStack,
+    ...errorContext,
+  }),
+  events: z
+    .array(
+      z.object({
+        id: uuid,
+        received_at: timestamp,
+        source: z.enum(["browser", "next_server", "edge_api"]),
+        error_name: z.string(),
+        message: z.string(),
+        route: z.string(),
+        release: z.string().nullable(),
+        request_id: z.string().nullable(),
+        masked_message: maskedErrorMessage,
+        masked_stack: maskedErrorStack,
+        ...errorContext,
+      }),
+    )
+    .max(20),
+});
 function contract<I extends z.ZodType, O extends z.ZodType>(
   input: I,
   output: O,
@@ -203,6 +294,26 @@ export const actionContracts = {
       visitor_token: z.string().min(1),
       expires_at: z.number().int().positive(),
     }),
+  ),
+  "error.capture": contract(
+    z.strictObject({
+      app: z.enum(["web", "admin"]),
+      environment: z.enum(["development", "preview", "production"]),
+      source: z.enum(["browser", "next_server"]),
+      route: z.string().regex(/^\/$|^\/[a-z-]{1,32}(?:\/:id)?$/),
+      error_name: z.string().min(1).max(64),
+      code: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/),
+      digest: z.string().max(64).nullable(),
+      release: z.string().min(1).max(80),
+      masked_message: z.string().max(1024).nullable().optional(),
+      masked_stack: z.string().max(4096).nullable().optional(),
+      operation: errorOperation.nullable().optional(),
+      dependency: errorDependency.nullable().optional(),
+      http_status: z.number().int().min(100).max(599).nullable().optional(),
+      origin_request_id: originRequestId.nullable().optional(),
+      stack_frames: z.array(stackFrame).max(10).optional(),
+    }),
+    z.object({ accepted: z.literal(true) }),
   ),
   me: contract(empty, me),
   "profile.save": contract(
@@ -393,6 +504,14 @@ export const actionContracts = {
   "admin.audit": contract(
     z.strictObject({ ...scoped, ...page }),
     z.array(audit),
+  ),
+  "admin.errors": contract(
+    z.strictObject({ ...scoped, ...page }),
+    z.array(webErrorIssue),
+  ),
+  "admin.error.get": contract(
+    z.strictObject({ ...scoped, id: uuid }),
+    webErrorDetail,
   ),
   "asset.create": contract(
     z.strictObject({ ...scoped, kind: z.enum(["image", "pdf"]) }),

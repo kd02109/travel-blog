@@ -2,12 +2,7 @@
   "$schema": "https://turborepo.dev/schema.json",
   "ui": "tui",
   "globalEnv": ["NODE_ENV", "NEXT_PUBLIC_*", "TRAVEL_API_MODE"],
-  "globalPassThroughEnv": [
-    "CI",
-    "SENTRY_AUTH_TOKEN",
-    "SENTRY_ORG",
-    "SENTRY_PROJECT"
-  ],
+  "globalPassThroughEnv": ["CI", "TRAVEL_ERROR_REPORT_KEY"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

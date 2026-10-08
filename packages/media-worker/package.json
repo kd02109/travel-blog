@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "exports": {
+    "./processor": "./src/processor.ts"
+  },
   "scripts": {
     "start": "node --experimental-strip-types src/worker.ts",
     "process:once": "MEDIA_WORKER_ONCE=1 node --experimental-strip-types src/worker.ts",

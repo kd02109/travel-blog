@@ -158,6 +158,18 @@ asset.create/complete는 editor 이상이다. upload_url에는 파일을 **PUT**
 
 DB 내부 `travel_worker`와 `travel_api`는 서비스 역할 전용이다. worker의 claim/complete/fail, rate.consume, asset.internal, comment.credential은 클라이언트 action 목록에 없으며, 키·비밀번호 해시는 응답하지 않는다.
 
+## 자체 오류 모니터링 — 배포 전 계약
+
+`error.capture`는 web/admin의 브라우저가 각 앱의 같은 출처 `POST /api/errors`에 전송하고, 해당 Next 서버가 `TRAVEL_ERROR_REPORT_KEY`를 붙여 이 Edge Function으로 중계한다. Next 서버의 `onRequestError`도 같은 키로 직접 호출한다. Edge에는 동일한 키를 secret으로 설정한다. 키가 없거나 migration/Edge 배포가 끝나지 않았다면 `NEXT_PUBLIC_ERROR_MONITORING_ENABLED`를 켜지 않는다.
+
+| action | input | 권한/반환 |
+| --- | --- | --- |
+| `error.capture` | `app`(web/admin), `environment`(development/preview/production), `source`(browser/next_server), `route`(쿼리와 동적 ID를 제거한 경로), `error_name`, `code`, 선택 `digest`, `release`, `masked_message`(최대 1,024자), `masked_stack`(최대 4,096자), `stack_frames`(최대 10개의 허용된 상대 파일·줄·열), `operation`(고정 작업 코드), `dependency`(허용 목록), `http_status`(100–599), `origin_request_id`(UUID) | 서버 전용 공유 키 필수. 성공 시 202 `{accepted:true}`; 분당 제한 429. 보고 본문 최대 16KiB |
+| `admin.errors` | `site_id`, 선택 `limit`(1–50), `offset` | 활성 **admin 역할만**. `web_error_issues`의 최근 오류 그룹 목록 |
+| `admin.error.get` | `site_id`, `id`(이슈 UUID) | 활성 **admin 역할만**. 해당 이슈 요약과 최근 이벤트 최대 20건의 마스킹된 메시지·스택·안전한 진단 문맥. 다른 사이트 이슈는 404 |
+
+Edge는 클라이언트가 보낸 `site_id`를 받지 않고 활성 사이트를 직접 결정한다. 오류 이름·코드·경로·환경·릴리스로 fingerprint를 계산해 `app_private.web_error_issues`의 횟수를 갱신하고 `web_error_events`에 수신 시각·출처·요청 ID를 남긴다. 예외 객체의 메시지·스택은 클라이언트에서 먼저, Next 릴레이와 Edge에서 다시 마스킹한 뒤 별도 컬럼에 저장한다. `stack_frames`는 절대 경로·URL·쿼리 없는 허용 상대 파일명과 위치만 저장한다. `origin_request_id`는 실패한 원래 API/Next 요청의 ID이고, 기존 `request_id`는 오류 **수집 호출**의 ID다. 브라우저가 보고한 원래 ID는 검증된 사용자 식별이나 권한 증거로 사용하지 않는다. 원본 URL query/slug, 사용자 ID, IP, 쿠키, 요청 헤더·본문은 보고에 포함하지 않는다. 자유 서술형 메시지에서 모든 개인정보를 자동으로 찾는다고 보장할 수 없으므로 수집 활성화 전 민감값 주입 테스트가 필요하다. 기본 Vercel 빌드는 공개 source map을 생성하지 않으며, 저장소의 `build:private-maps`는 별도 임시 빌드의 map을 로컬 비공개 보관소에 저장한다. 배포된 실제 빌드 map의 안전한 업로드·연결과 자동 복원·알림은 아직 제공하지 않는다. 오류 SQL migration 세 개는 연결된 `travel-blog` DB에 적용됐지만 새 Edge 코드는 아직 배포하지 않았다. 격리 staging/운영의 실제 수집 검증도 남아 있다.
+
 ## 아직 연결하지 않은 것
 
 - 카카오·네이버 앱 등록과 OAuth provider 설정/검수.

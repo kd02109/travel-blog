@@ -1,4 +1,18 @@
-import * as Sentry from "@sentry/nextjs";
-import { sentryOptions } from "@repo/observability";
-Sentry.init(sentryOptions("web", process.env.NEXT_PUBLIC_SENTRY_DSN));
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+import { reportWebError } from "./lib/error-monitor";
+
+window.addEventListener("error", (event) => {
+  void reportWebError(
+    event.error,
+    "uncaught_error",
+    "browser",
+    window.location.pathname,
+  );
+});
+window.addEventListener("unhandledrejection", (event) => {
+  void reportWebError(
+    event.reason,
+    "unhandled_rejection",
+    "browser",
+    window.location.pathname,
+  );
+});
