@@ -13,7 +13,7 @@ import Image from "next/image";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { ApiErrorState } from "@repo/api-client/feedback";
 import { useTravelQuery } from "@repo/api-client/hooks";
-import { CATEGORIES, type CategoryCode } from "@repo/constants";
+import { CATEGORIES, SITE_NAME, type CategoryCode } from "@repo/constants";
 import { PrivateAssetView } from "./asset-view";
 import styles from "./post-preview.module.css";
 
@@ -181,6 +181,9 @@ function DraftCover({
             />
           </div>
         )}
+        <span className={styles.photoHint} aria-hidden="true">
+          ⛶ 원본 보기
+        </span>
         <div className={styles.overlay}>{children}</div>
       </div>
       {caption && <figcaption className={styles.caption}>{caption}</figcaption>}
@@ -228,6 +231,7 @@ function PdfFirstPage({
 export function PostPreview({
   open,
   onClose,
+  inline = false,
   kind,
   category,
   title,
@@ -242,6 +246,7 @@ export function PostPreview({
 }: {
   open: boolean;
   onClose: () => void;
+  inline?: boolean;
   kind: "article" | "pdf";
   category: CategoryCode;
   title: string;
@@ -259,6 +264,7 @@ export function PostPreview({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const headingId = useId();
   useEffect(() => {
+    if (inline) return;
     const dialog = dialogRef.current;
     if (!dialog) return;
     if (open && !dialog.open) {
@@ -272,7 +278,7 @@ export function PostPreview({
     } else if (!open && dialog.open) {
       dialog.close();
     }
-  }, [open]);
+  }, [inline, open]);
 
   const safeTitle = title.trim() || "제목을 입력해 주세요";
   const categoryLabel =
@@ -286,7 +292,9 @@ export function PostPreview({
   const header = (
     <header
       className={
-        kind === "article" && coverAssetId ? styles.coverHead : styles.head
+        kind === "article" && coverAssetId && siteId
+          ? styles.coverHead
+          : styles.head
       }
     >
       <p className={styles.eyebrow}>
@@ -299,8 +307,154 @@ export function PostPreview({
         <span>{publishedDay ? `게시 ${publishedDay}` : "발행 전 초안"}</span>
         {visitInfo && <span>{visitInfo}</span>}
       </p>
+      {kind === "article" && (
+        <div className={styles.previewActions} aria-hidden="true">
+          <span>♡ 좋아요</span>
+          <span>↗ 공유하기</span>
+        </div>
+      )}
     </header>
   );
+
+  const previewContent = (
+    <>
+      <div className={styles.toolbar}>
+        <h2 id={headingId}>방문자 화면 미리보기</h2>
+        {inline && <span className={styles.readOnly}>읽기 전용</span>}
+        <button
+          ref={closeRef}
+          type="button"
+          onClick={onClose}
+          aria-label="미리보기 닫기"
+        >
+          닫기 <span aria-hidden="true">×</span>
+        </button>
+      </div>
+      {open && (
+        <div className={styles.page}>
+          <div className={styles.readerArea}>
+            <p className={styles.draftNotice}>
+              <strong>
+                {publishedAt ? "미공개 수정 초안" : "발행 전 초안"}
+              </strong>
+              <span>
+                {publishedAt
+                  ? "현재 입력 중인 변경 사항은 공개 중인 글에 아직 반영되지 않았습니다."
+                  : "현재 입력 중인 내용은 방문자에게 공개되지 않았습니다."}
+              </span>
+            </p>
+            <section className={styles.checklist} aria-label="발행 전 확인">
+              <strong>발행 전 확인</strong>
+              <ul>
+                {checks.map((check) => (
+                  <li key={check.label} data-valid={check.valid}>
+                    <span aria-hidden="true">{check.valid ? "✓" : "○"}</span>{" "}
+                    <span className="sr-only">
+                      {check.valid ? "완료: " : "필요: "}
+                    </span>
+                    {check.label}
+                  </li>
+                ))}
+              </ul>
+            </section>
+            <div
+              className={styles.sitePage}
+              aria-label="블로그 글 화면 미리보기"
+            >
+              <div className={styles.siteHeader} aria-hidden="true">
+                <strong>{SITE_NAME}</strong>
+                <div className={styles.siteHeaderActions}>
+                  <span>로그인</span>
+                  <span>메뉴</span>
+                </div>
+              </div>
+              <div className={styles.back} aria-hidden="true">
+                <span>← {categoryLabel} 목록</span>
+              </div>
+              <article className={styles.article}>
+                {kind === "article" && coverAssetId && siteId ? (
+                  <DraftCover
+                    key={coverAssetId}
+                    assetId={coverAssetId}
+                    siteId={siteId}
+                    title={safeTitle}
+                    caption={coverCaption}
+                  >
+                    {header}
+                  </DraftCover>
+                ) : (
+                  header
+                )}
+                {kind === "article" && body && (
+                  <section
+                    className={styles.reading}
+                    aria-label="여행 이야기 미리보기"
+                  >
+                    <div className={styles.body}>{body}</div>
+                  </section>
+                )}
+                {kind === "pdf" && (
+                  <section
+                    className={styles.pdfSection}
+                    aria-label="PDF 첫 페이지 미리보기"
+                  >
+                    {pdfAssetId && siteId ? (
+                      <PdfFirstPage
+                        assetId={pdfAssetId}
+                        siteId={siteId}
+                        title={safeTitle}
+                      />
+                    ) : (
+                      <p className={styles.pdfUnavailable}>
+                        PDF 파일을 선택하면 첫 페이지가 여기에 표시됩니다.
+                      </p>
+                    )}
+                  </section>
+                )}
+                {kind === "article" && tags.length > 0 && (
+                  <div className={styles.tags} aria-label="글 태그">
+                    {tags.map((tag) => (
+                      <span key={tag}>#{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </article>
+              {kind === "article" && (
+                <div className={styles.afterArticle} aria-hidden="true">
+                  <section className={styles.commentsPreview}>
+                    <h3>댓글</h3>
+                    <div className={styles.commentFormPreview}>
+                      <strong>편지 남기기</strong>
+                      <span />
+                    </div>
+                  </section>
+                  <section className={styles.relatedPreview}>
+                    <small>KEEP READING</small>
+                    <h3>다음 여행 읽기</h3>
+                  </section>
+                </div>
+              )}
+              <footer className={styles.siteFooter} aria-hidden="true">
+                <span>
+                  © {new Date().getFullYear()} {SITE_NAME} · 세상을 여행하고
+                  삶을 기록합니다.
+                </span>
+                <span>여행 기록 · 우리의 기록 · 저작권 및 이용 안내</span>
+              </footer>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  if (inline) {
+    return open ? (
+      <aside className={styles.inlinePanel} aria-labelledby={headingId}>
+        {previewContent}
+      </aside>
+    ) : null;
+  }
 
   return (
     <dialog
@@ -316,87 +470,7 @@ export function PostPreview({
         returnFocusRef.current?.focus();
       }}
     >
-      <div className={styles.toolbar}>
-        <h2 id={headingId}>공개 화면 미리보기</h2>
-        <button
-          ref={closeRef}
-          type="button"
-          onClick={onClose}
-          aria-label="미리보기 닫기"
-        >
-          닫기 <span aria-hidden="true">×</span>
-        </button>
-      </div>
-      {open && (
-        <div className={styles.page}>
-          <p className={styles.draftNotice}>
-            현재 입력 중인 내용을 보여줍니다. 발행 전에는 방문자에게 공개되지
-            않습니다.
-          </p>
-          <section className={styles.checklist} aria-label="발행 전 확인">
-            <strong>발행 전 확인</strong>
-            <ul>
-              {checks.map((check) => (
-                <li key={check.label} data-valid={check.valid}>
-                  <span aria-hidden="true">{check.valid ? "✓" : "○"}</span>{" "}
-                  <span className="sr-only">
-                    {check.valid ? "완료: " : "필요: "}
-                  </span>
-                  {check.label}
-                </li>
-              ))}
-            </ul>
-          </section>
-          <article className={styles.article}>
-            {kind === "article" && coverAssetId && siteId ? (
-              <DraftCover
-                key={coverAssetId}
-                assetId={coverAssetId}
-                siteId={siteId}
-                title={safeTitle}
-                caption={coverCaption}
-              >
-                {header}
-              </DraftCover>
-            ) : (
-              header
-            )}
-            {kind === "article" && body && (
-              <section
-                className={styles.reading}
-                aria-label="여행 이야기 미리보기"
-              >
-                <div className={styles.body}>{body}</div>
-              </section>
-            )}
-            {kind === "pdf" && (
-              <section
-                className={styles.pdfSection}
-                aria-label="PDF 첫 페이지 미리보기"
-              >
-                {pdfAssetId && siteId ? (
-                  <PdfFirstPage
-                    assetId={pdfAssetId}
-                    siteId={siteId}
-                    title={safeTitle}
-                  />
-                ) : (
-                  <p className={styles.pdfUnavailable}>
-                    PDF 파일을 선택하면 첫 페이지가 여기에 표시됩니다.
-                  </p>
-                )}
-              </section>
-            )}
-            {kind === "article" && tags.length > 0 && (
-              <div className={styles.tags} aria-label="글 태그">
-                {tags.map((tag) => (
-                  <span key={tag}>#{tag}</span>
-                ))}
-              </div>
-            )}
-          </article>
-        </div>
-      )}
+      {previewContent}
     </dialog>
   );
 }

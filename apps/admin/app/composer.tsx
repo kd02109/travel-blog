@@ -32,6 +32,8 @@ import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { MediaUpload, uploadEditorImage } from "./media-upload";
 import { PrivateAssetView } from "./asset-view";
 import { PostPreview } from "./post-preview";
+import revisionHistoryStyles from "./revision-history.module.css";
+import { publicPostUrl } from "../lib/public-post-url";
 import {
   hasUnpublishedChanges,
   publicationChecklist,
@@ -141,7 +143,13 @@ function blockHasContent(value: unknown): boolean {
       : key !== "id" && key !== "type" && blockHasContent(child),
   );
 }
-export function Composer({ postId }: { postId?: string }) {
+export function Composer({
+  postId,
+  publicSiteOrigin,
+}: {
+  postId?: string;
+  publicSiteOrigin: string | null;
+}) {
   const router = useRouter();
   const api = useMemo(() => createBrowserTravelApi(), []);
   const [siteId, setSiteId] = useState("");
@@ -217,7 +225,12 @@ export function Composer({ postId }: { postId?: string }) {
     return [...ids];
   }, [coverAssetId, document]);
   const [editorEpoch, setEditorEpoch] = useState(0);
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(true);
+  const [previewDocument, setPreviewDocument] =
+    useState<EditorDocument>(document);
+  const [previewDocumentVersion, setPreviewDocumentVersion] = useState(0);
+  const renderedPreviewDocumentRef = useRef(document);
+  const previewToggleRef = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -232,9 +245,31 @@ export function Composer({ postId }: { postId?: string }) {
   const [latestDraft, setLatestDraft] = useState<PostDraft>();
   const [selectedRevisionId, setSelectedRevisionId] = useState<string>();
   const [revisionOffset, setRevisionOffset] = useState(0);
+  const [revisionHistoryOpen, setRevisionHistoryOpen] = useState(false);
   const savingRef = useRef(false);
   const editVersionRef = useRef(0);
   const loadedPostIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!preview || renderedPreviewDocumentRef.current === document) return;
+    const timer = window.setTimeout(() => {
+      renderedPreviewDocumentRef.current = document;
+      setPreviewDocument(document);
+      setPreviewDocumentVersion((version) => version + 1);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [document, preview]);
+
+  function openPreview() {
+    renderedPreviewDocumentRef.current = document;
+    setPreviewDocument(document);
+    setPreviewDocumentVersion((version) => version + 1);
+    setPreview(true);
+  }
+
+  function closePreview() {
+    setPreview(false);
+    window.requestAnimationFrame(() => previewToggleRef.current?.focus());
+  }
   const published = useTravelQuery(
     api,
     "admin.post.published",
@@ -606,7 +641,7 @@ export function Composer({ postId }: { postId?: string }) {
       .filter((check) => !check.valid)
       .map((check) => check.label);
     if (missing.length) {
-      setPreview(true);
+      openPreview();
       if (post.kind === "article") {
         setMetadataError(
           validatePublishedMetadata(
@@ -868,8 +903,14 @@ export function Composer({ postId }: { postId?: string }) {
       (published.isSuccess &&
         (!published.data ||
           hasUnpublishedChanges(post.draft_content, published.data.snapshot))));
+  const publishedUrl = publicPostUrl(
+    publicSiteOrigin,
+    published.data ? snapshotText(published.data.snapshot, "slug") : null,
+  );
   return (
-    <main className="mx-auto max-w-4xl space-y-6 px-5 py-12 md:px-8">
+    <main
+      className={`mx-auto space-y-6 px-5 py-12 md:px-8 ${preview ? "max-w-[1600px]" : "max-w-4xl"}`}
+    >
       {loadError !== null && (
         <ApiErrorState error={loadError} onRetry={retryInitialLoad} />
       )}
@@ -884,8 +925,14 @@ export function Composer({ postId }: { postId?: string }) {
           </h1>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setPreview(true)}>
-            미리보기
+          <Button
+            ref={previewToggleRef}
+            variant={preview ? "secondary" : "outline"}
+            aria-controls="post-preview-pane"
+            aria-expanded={preview}
+            onClick={preview ? closePreview : openPreview}
+          >
+            {preview ? "미리보기 닫기" : "미리보기 열기"}
           </Button>
           <Button
             variant="outline"
@@ -950,704 +997,808 @@ export function Composer({ postId }: { postId?: string }) {
                 ? `마지막 저장: ${new Date(lastSavedAt).toLocaleString("ko-KR")}`
                 : "저장된 변경 사항 없음"}
       </p>
-      {post.status === "published" && (
-        <aside
-          className="rounded-panel space-y-3 border border-emerald-200 bg-emerald-50 p-5"
-          aria-label="공개본과 수정 초안 상태"
-        >
-          <h2 className="font-semibold">현재 공개본과 수정 초안</h2>
-          <p className="text-sm leading-relaxed">
-            방문자는 아래의 현재 공개본을 보고 있습니다. 이 화면에서 수정하거나
-            초안을 저장해도 공개 글은 바뀌지 않습니다. 수정이 끝나면
-            <strong> 공개본 업데이트</strong>를 눌러 변경 사항을 공개하세요.
-          </p>
-          <p className="text-sm font-medium">
-            {published.isPending
-              ? "공개본을 확인하고 있습니다…"
-              : published.isError
-                ? "공개본을 불러오지 못했습니다. 새로고침해 주세요."
-                : published.data === null
-                  ? "현재 공개본을 찾지 못했습니다."
-                  : hasUnpublishedDraft
-                    ? "공개본에 반영되지 않은 수정 초안이 있습니다."
-                    : "수정 초안과 공개본이 같습니다."}
-          </p>
-          {published.isError && (
-            <ApiErrorState
-              error={published.error}
-              onRetry={() => void published.refetch()}
-              isRetrying={published.isFetching}
-            />
-          )}
-        </aside>
-      )}
-      {post.status === "published" && published.data && (
-        <details
-          open
-          className="rounded-panel border p-4"
-          aria-label="현재 공개 중인 글"
-        >
-          <summary className="cursor-pointer font-semibold">
-            현재 공개 중인 글 ·{" "}
-            {new Date(published.data.updated_at).toLocaleString("ko-KR")}
-          </summary>
-          <p className="text-muted-foreground mt-2 mb-4 text-sm">
-            이 내용은 읽기 전용이며, 공개본 업데이트 전까지 방문자에게
-            표시됩니다.
-          </p>
-          <div className="max-h-[40rem] overflow-y-auto">
-            <SnapshotView
-              snapshot={published.data.snapshot}
-              kind={post.kind}
-              siteId={siteId}
-              revisionId={published.data.revision_id}
-              renderImage={renderEditorImage}
-            />
-          </div>
-        </details>
-      )}
-      {latestDraft && (
-        <aside
-          className="rounded-panel space-y-3 border border-amber-500 p-4"
-          aria-label="버전 충돌 해결"
-        >
-          <h2 className="font-semibold">최신 저장본과 충돌</h2>
-          <p>
-            최신본 v{latestDraft.lock_version} ·{" "}
-            {new Date(latestDraft.updated_at).toLocaleString("ko-KR")} · 제목:{" "}
-            {typeof latestDraft.draft_content.title === "string"
-              ? latestDraft.draft_content.title || "(제목 없음)"
-              : "(제목 없음)"}
-          </p>
-          <p>
-            현재 입력은 별도로 유지됩니다. 최신본으로 교체하거나, 최신 버전을
-            기준으로 현재 입력을 다시 저장할 수 있습니다.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                applyDraft(latestDraft);
-                setDirty(false);
-                setLatestDraft(undefined);
-                setSaveError("");
-              }}
+      <div
+        className={
+          preview
+            ? "grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            : ""
+        }
+      >
+        <div className={`min-w-0 space-y-6 ${preview ? "max-xl:hidden" : ""}`}>
+          {post.status === "published" && (
+            <aside
+              className="rounded-panel border border-slate-200 bg-slate-50/90 p-4"
+              aria-label="게시 상태"
             >
-              최신본으로 교체
-            </Button>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setPost(latestDraft);
-                setLatestDraft(undefined);
-                markDirty();
-              }}
-            >
-              최신 버전에 내 입력 저장
-            </Button>
-          </div>
-        </aside>
-      )}
-      <label className="block space-y-2">
-        글 제목
-        <Input
-          disabled={busy}
-          value={title}
-          maxLength={150}
-          onChange={(event) => {
-            const value = event.currentTarget.value;
-            setTitle(value);
-            if (!slugEdited) {
-              const suggestedSlug = value
-                .toLocaleLowerCase()
-                .trim()
-                .replace(/[^a-z0-9]+/g, "-")
-                .replace(/^-|-$/g, "")
-                .slice(0, 120);
-              setSlug(suggestedSlug || `travel-note-${postId.slice(0, 8)}`);
-            }
-            markDirty();
-          }}
-        />
-      </label>
-      <label className="block space-y-2">
-        주소 이름
-        <Input
-          disabled={busy}
-          value={slug}
-          maxLength={120}
-          onChange={(event) => {
-            setSlugEdited(true);
-            setSlug(event.currentTarget.value);
-            markDirty();
-          }}
-        />
-      </label>
-      <label className="block space-y-2">
-        글 소개 문구 <span className="text-muted-foreground">(선택)</span>
-        <textarea
-          disabled={busy}
-          value={
-            typeof metadata.description === "string" ? metadata.description : ""
-          }
-          maxLength={160}
-          rows={3}
-          placeholder="여행의 한 장면을 짧게 소개해 주세요"
-          className="rounded-control border-input bg-surface text-foreground placeholder:text-muted-foreground/80 disabled:bg-muted min-h-28 w-full resize-y border px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-80"
-          onChange={(event) =>
-            updateMetadata("description", event.currentTarget.value)
-          }
-        />
-        <span className="text-muted-foreground block text-sm">
-          공개 글 표지와 공유 설명에 표시됩니다. 최대 160자.
-        </span>
-      </label>
-      {post.kind === "article" && (
-        <label className="block space-y-2">
-          태그
-          <Input
-            disabled={busy}
-            value={tagsText}
-            maxLength={300}
-            placeholder="쉼표로 구분해 입력 (예: 제주, 가족여행)"
-            onChange={(event) => {
-              const value = event.currentTarget.value;
-              setTagsText(value);
-              setTags(
-                [
-                  ...new Set(
-                    value
-                      .split(",")
-                      .map((tag) => tag.trim())
-                      .filter(Boolean),
-                  ),
-                ].slice(0, 10),
-              );
-              markDirty();
-            }}
-          />
-        </label>
-      )}
-      {post.kind === "article" && (
-        <label className="block space-y-2">
-          대표 사진 설명 <span className="text-muted-foreground">(선택)</span>
-          <Input
-            disabled={busy}
-            value={
-              typeof metadata.cover_caption === "string"
-                ? metadata.cover_caption
-                : ""
-            }
-            maxLength={160}
-            placeholder="사진을 한 문장으로 설명해 주세요"
-            onChange={(event) =>
-              updateMetadata("cover_caption", event.currentTarget.value)
-            }
-          />
-          <span className="text-muted-foreground block text-sm">
-            공개 글의 대표 사진 아래에 표시됩니다. 최대 160자.
-          </span>
-        </label>
-      )}
-      {post.kind === "article" && (
-        <label className="block space-y-2">
-          분류
-          <Select
-            disabled={busy}
-            value={category}
-            onValueChange={(value) => {
-              setCategory(value as typeof category);
-              setMetadataError("");
-              markDirty();
-            }}
-          >
-            <SelectTrigger aria-label="분류 선택">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CATEGORIES.filter((item) => item.code !== "itinerary-pdf").map(
-                (item) => (
-                  <SelectItem key={item.code} value={item.code}>
-                    {item.label}
-                  </SelectItem>
-                ),
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                    <h2 className="inline-flex items-center gap-2 font-semibold text-slate-800">
+                      <span
+                        className="size-2 rounded-full bg-emerald-600"
+                        aria-hidden="true"
+                      />
+                      공개 중
+                    </h2>
+                    {published.data && (
+                      <time
+                        className="text-xs text-slate-500"
+                        dateTime={published.data.updated_at}
+                      >
+                        {new Date(published.data.updated_at).toLocaleString(
+                          "ko-KR",
+                        )}
+                        에 업데이트
+                      </time>
+                    )}
+                    {published.isSuccess && published.data && (
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${hasUnpublishedDraft ? "bg-amber-100 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}
+                      >
+                        {hasUnpublishedDraft
+                          ? "수정 초안 있음"
+                          : "공개본과 동일"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs leading-relaxed text-slate-600">
+                    {published.isPending
+                      ? "방문자에게 보이는 공개본을 확인하고 있습니다."
+                      : published.isError
+                        ? "공개본을 불러오지 못했습니다. 다시 시도해 주세요."
+                        : !published.data
+                          ? "현재 공개본을 찾지 못했습니다."
+                          : hasUnpublishedDraft
+                            ? "방문자는 아직 이전 공개본을 보고 있습니다. 공개본 업데이트 후 수정 내용이 반영됩니다."
+                            : "작성 내용과 공개본이 같습니다."}
+                  </p>
+                </div>
+                {publishedUrl && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="min-h-9 bg-white px-3 py-1 text-xs"
+                    >
+                      <a
+                        href={publishedUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="실제 공개 글 보기 (새 창)"
+                      >
+                        실제 공개 글 보기 ↗
+                      </a>
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {published.isError && (
+                <div className="mt-3">
+                  <ApiErrorState
+                    error={published.error}
+                    onRetry={() => void published.refetch()}
+                    isRetrying={published.isFetching}
+                  />
+                </div>
               )}
-            </SelectContent>
-          </Select>
-        </label>
-      )}
-      {post.kind === "article" && (
-        <fieldset className="rounded-panel border p-5">
-          <legend className="px-2 font-semibold">댓글 설정</legend>
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              checked={commentsEnabled}
-              disabled={busy}
-              className="accent-primary mt-1 size-5 shrink-0 disabled:cursor-not-allowed"
-              onChange={(event) => {
-                setCommentsEnabled(event.currentTarget.checked);
-                markDirty();
-              }}
-            />
-            <span>
-              <strong className="block font-medium">댓글 허용</strong>
-              <span className="text-muted-foreground block text-sm">
-                끄면 새 댓글 작성을 막고, 기존 댓글은 계속 읽을 수 있습니다.
-              </span>
-            </span>
-          </label>
-          <p className="text-muted-foreground mt-3 text-sm">
-            {post.status === "published"
-              ? "변경한 댓글 설정은 공개본 업데이트를 눌러야 방문자 화면에 반영됩니다."
-              : "발행할 때 선택한 댓글 설정이 방문자 화면에 적용됩니다."}
-          </p>
-        </fieldset>
-      )}
-      {post.kind === "article" && (
-        <fieldset className="rounded-panel space-y-4 border p-5">
-          <legend className="px-2 font-semibold">여행 정보</legend>
-          <p className="text-muted-foreground text-sm">
-            초안은 비워 두어도 저장됩니다. 별표 항목은 공개 발행 전에
-            필요합니다.
-          </p>
+            </aside>
+          )}
+          {latestDraft && (
+            <aside
+              className="rounded-panel space-y-3 border border-amber-500 p-4"
+              aria-label="버전 충돌 해결"
+            >
+              <h2 className="font-semibold">최신 저장본과 충돌</h2>
+              <p>
+                최신본 v{latestDraft.lock_version} ·{" "}
+                {new Date(latestDraft.updated_at).toLocaleString("ko-KR")} ·
+                제목:{" "}
+                {typeof latestDraft.draft_content.title === "string"
+                  ? latestDraft.draft_content.title || "(제목 없음)"
+                  : "(제목 없음)"}
+              </p>
+              <p>
+                현재 입력은 별도로 유지됩니다. 최신본으로 교체하거나, 최신
+                버전을 기준으로 현재 입력을 다시 저장할 수 있습니다.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => {
+                    applyDraft(latestDraft);
+                    setDirty(false);
+                    setLatestDraft(undefined);
+                    setSaveError("");
+                  }}
+                >
+                  최신본으로 교체
+                </Button>
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    setPost(latestDraft);
+                    setLatestDraft(undefined);
+                    markDirty();
+                  }}
+                >
+                  최신 버전에 내 입력 저장
+                </Button>
+              </div>
+            </aside>
+          )}
           <label className="block space-y-2">
-            지역명 *
+            글 제목
             <Input
               disabled={busy}
-              value={typeof metadata.region === "string" ? metadata.region : ""}
-              maxLength={100}
-              onChange={(event) =>
-                updateMetadata("region", event.currentTarget.value)
-              }
-              placeholder="예: 제주 서귀포"
+              value={title}
+              maxLength={150}
+              onChange={(event) => {
+                const value = event.currentTarget.value;
+                setTitle(value);
+                if (!slugEdited) {
+                  const suggestedSlug = value
+                    .toLocaleLowerCase()
+                    .trim()
+                    .replace(/[^a-z0-9]+/g, "-")
+                    .replace(/^-|-$/g, "")
+                    .slice(0, 120);
+                  setSlug(suggestedSlug || `travel-note-${postId.slice(0, 8)}`);
+                }
+                markDirty();
+              }}
             />
           </label>
-          {(category === "day-walk" || category === "food-cafe") && (
+          <label className="block space-y-2">
+            주소 이름
+            <Input
+              disabled={busy}
+              value={slug}
+              maxLength={120}
+              onChange={(event) => {
+                setSlugEdited(true);
+                setSlug(event.currentTarget.value);
+                markDirty();
+              }}
+            />
+          </label>
+          <label className="block space-y-2">
+            글 소개 문구 <span className="text-muted-foreground">(선택)</span>
+            <textarea
+              disabled={busy}
+              value={
+                typeof metadata.description === "string"
+                  ? metadata.description
+                  : ""
+              }
+              maxLength={160}
+              rows={3}
+              placeholder="여행의 한 장면을 짧게 소개해 주세요"
+              className="rounded-control border-input bg-surface text-foreground placeholder:text-muted-foreground/80 disabled:bg-muted min-h-28 w-full resize-y border px-4 py-3 text-base disabled:cursor-not-allowed disabled:opacity-80"
+              onChange={(event) =>
+                updateMetadata("description", event.currentTarget.value)
+              }
+            />
+            <span className="text-muted-foreground block text-sm">
+              공개 글 표지와 공유 설명에 표시됩니다. 최대 160자.
+            </span>
+          </label>
+          {post.kind === "article" && (
             <label className="block space-y-2">
-              방문일 *
+              태그
               <Input
                 disabled={busy}
-                type="date"
-                value={
-                  typeof metadata.visited_on === "string"
-                    ? metadata.visited_on
-                    : ""
-                }
-                onChange={(event) =>
-                  updateMetadata("visited_on", event.currentTarget.value)
-                }
+                value={tagsText}
+                maxLength={300}
+                placeholder="쉼표로 구분해 입력 (예: 제주, 가족여행)"
+                onChange={(event) => {
+                  const value = event.currentTarget.value;
+                  setTagsText(value);
+                  setTags(
+                    [
+                      ...new Set(
+                        value
+                          .split(",")
+                          .map((tag) => tag.trim())
+                          .filter(Boolean),
+                      ),
+                    ].slice(0, 10),
+                  );
+                  markDirty();
+                }}
               />
             </label>
           )}
-          {category === "overnight-trip" && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block space-y-2">
-                여행 시작일 *
-                <Input
-                  disabled={busy}
-                  type="date"
-                  value={
-                    typeof metadata.start_date === "string"
-                      ? metadata.start_date
-                      : ""
-                  }
-                  onChange={(event) =>
-                    updateMetadata("start_date", event.currentTarget.value)
-                  }
-                />
-              </label>
-              <label className="block space-y-2">
-                여행 종료일 *
-                <Input
-                  disabled={busy}
-                  type="date"
-                  min={
-                    typeof metadata.start_date === "string"
-                      ? metadata.start_date
-                      : undefined
-                  }
-                  value={
-                    typeof metadata.end_date === "string"
-                      ? metadata.end_date
-                      : ""
-                  }
-                  onChange={(event) =>
-                    updateMetadata("end_date", event.currentTarget.value)
-                  }
-                />
-              </label>
-            </div>
-          )}
-          {category === "stay-review" && (
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block space-y-2">
-                체크인 *
-                <Input
-                  disabled={busy}
-                  type="date"
-                  value={
-                    typeof metadata.check_in === "string"
-                      ? metadata.check_in
-                      : ""
-                  }
-                  onChange={(event) =>
-                    updateMetadata("check_in", event.currentTarget.value)
-                  }
-                />
-              </label>
-              <label className="block space-y-2">
-                체크아웃 *
-                <Input
-                  disabled={busy}
-                  type="date"
-                  min={
-                    typeof metadata.check_in === "string"
-                      ? metadata.check_in
-                      : undefined
-                  }
-                  value={
-                    typeof metadata.check_out === "string"
-                      ? metadata.check_out
-                      : ""
-                  }
-                  onChange={(event) =>
-                    updateMetadata("check_out", event.currentTarget.value)
-                  }
-                />
-              </label>
-            </div>
-          )}
-          {(category === "food-cafe" || category === "stay-review") && (
+          {post.kind === "article" && (
             <label className="block space-y-2">
-              {category === "food-cafe" ? "장소명 *" : "숙소명 *"}
+              대표 사진 설명{" "}
+              <span className="text-muted-foreground">(선택)</span>
               <Input
                 disabled={busy}
                 value={
-                  typeof metadata.place_name === "string"
-                    ? metadata.place_name
+                  typeof metadata.cover_caption === "string"
+                    ? metadata.cover_caption
                     : ""
                 }
-                maxLength={150}
+                maxLength={160}
+                placeholder="사진을 한 문장으로 설명해 주세요"
                 onChange={(event) =>
-                  updateMetadata("place_name", event.currentTarget.value)
-                }
-                placeholder={
-                  category === "food-cafe"
-                    ? "예: 바다 앞 작은 카페"
-                    : "예: 서귀포 바다 숙소"
+                  updateMetadata("cover_caption", event.currentTarget.value)
                 }
               />
+              <span className="text-muted-foreground block text-sm">
+                공개 글의 대표 사진 아래에 표시됩니다. 최대 160자.
+              </span>
             </label>
           )}
-          {category === "food-cafe" && (
+          {post.kind === "article" && (
             <label className="block space-y-2">
-              장소 종류 *
+              분류
               <Select
                 disabled={busy}
-                value={
-                  typeof metadata.venue_type === "string" && metadata.venue_type
-                    ? metadata.venue_type
-                    : undefined
-                }
-                onValueChange={(value) => updateMetadata("venue_type", value)}
+                value={category}
+                onValueChange={(value) => {
+                  setCategory(value as typeof category);
+                  setMetadataError("");
+                  markDirty();
+                }}
               >
-                <SelectTrigger aria-label="장소 종류 선택">
-                  <SelectValue placeholder="종류를 선택해 주세요" />
+                <SelectTrigger aria-label="분류 선택">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cafe">카페</SelectItem>
-                  <SelectItem value="restaurant">음식점</SelectItem>
+                  {CATEGORIES.filter(
+                    (item) => item.code !== "itinerary-pdf",
+                  ).map((item) => (
+                    <SelectItem key={item.code} value={item.code}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </label>
           )}
-          {metadataError && (
-            <p role="alert">
-              {metadataError === "incomplete_article"
-                ? "지역명을 입력해 주세요."
-                : metadataError === "missing_date"
-                  ? "방문일을 입력해 주세요."
-                  : metadataError === "missing_place"
-                    ? category === "stay-review"
-                      ? "숙소명을 입력해 주세요."
-                      : "장소명을 입력해 주세요."
-                    : metadataError === "invalid_date"
-                      ? "날짜를 다시 확인해 주세요."
-                      : metadataError === "invalid_dates"
-                        ? "종료일은 시작일 이후로 선택해 주세요."
-                        : "카페 또는 음식점 중 하나를 선택해 주세요."}
-            </p>
-          )}
-        </fieldset>
-      )}
-      {message && (
-        <p role="status" aria-live="polite">
-          {message}
-        </p>
-      )}
-      <section
-        className="rounded-panel space-y-4 border p-4"
-        aria-label="수정 이력"
-      >
-        <div className="space-y-1">
-          <h2 className="font-semibold">수정 이력</h2>
-          <p className="text-muted-foreground text-sm">
-            직접 저장하거나 공개본을 업데이트할 때의 내용을 보관합니다. 자동
-            저장은 초안만 갱신합니다.
-          </p>
-        </div>
-        {revisions.data?.length ? (
-          <ul className="space-y-3">
-            {revisions.data.map((revision) => (
-              <li
-                className="space-y-3 rounded-lg border bg-white p-4"
-                key={revision.id}
-              >
-                <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
-                  <span className="rounded-full bg-stone-100 px-2.5 py-1">
-                    {revision.reason === "published"
-                      ? "공개본 업데이트"
-                      : revision.reason === "before_restore"
-                        ? "복원 전 초안"
-                        : "직접 저장"}
+          {post.kind === "article" && (
+            <fieldset className="rounded-panel border p-5">
+              <legend className="px-2 font-semibold">댓글 설정</legend>
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={commentsEnabled}
+                  disabled={busy}
+                  className="accent-primary mt-1 size-5 shrink-0 disabled:cursor-not-allowed"
+                  onChange={(event) => {
+                    setCommentsEnabled(event.currentTarget.checked);
+                    markDirty();
+                  }}
+                />
+                <span>
+                  <strong className="block font-medium">댓글 허용</strong>
+                  <span className="text-muted-foreground block text-sm">
+                    끄면 새 댓글 작성을 막고, 기존 댓글은 계속 읽을 수 있습니다.
                   </span>
-                  {revision.is_published && (
-                    <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">
-                      {post.status === "published"
-                        ? "현재 공개본"
-                        : "마지막 게시본"}
-                    </span>
-                  )}
-                  {revision.post_version !== null && (
-                    <span className="text-muted-foreground">
-                      글 버전 {revision.post_version}
-                    </span>
-                  )}
-                  <time
-                    className="text-muted-foreground"
-                    dateTime={revision.created_at}
-                  >
-                    {new Date(revision.created_at).toLocaleString("ko-KR")}
-                  </time>
-                </div>
-                <div>
-                  <p className="font-medium">{revision.title || "제목 없음"}</p>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {revision.excerpt || "본문 미입력"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
+                </span>
+              </label>
+              <p className="text-muted-foreground mt-3 text-sm">
+                {post.status === "published"
+                  ? "변경한 댓글 설정은 공개본 업데이트를 눌러야 방문자 화면에 반영됩니다."
+                  : "발행할 때 선택한 댓글 설정이 방문자 화면에 적용됩니다."}
+              </p>
+            </fieldset>
+          )}
+          {post.kind === "article" && (
+            <fieldset className="rounded-panel space-y-4 border p-5">
+              <legend className="px-2 font-semibold">여행 정보</legend>
+              <p className="text-muted-foreground text-sm">
+                초안은 비워 두어도 저장됩니다. 별표 항목은 공개 발행 전에
+                필요합니다.
+              </p>
+              <label className="block space-y-2">
+                지역명 *
+                <Input
+                  disabled={busy}
+                  value={
+                    typeof metadata.region === "string" ? metadata.region : ""
+                  }
+                  maxLength={100}
+                  onChange={(event) =>
+                    updateMetadata("region", event.currentTarget.value)
+                  }
+                  placeholder="예: 제주 서귀포"
+                />
+              </label>
+              {(category === "day-walk" || category === "food-cafe") && (
+                <label className="block space-y-2">
+                  방문일 *
+                  <Input
                     disabled={busy}
-                    onClick={() =>
-                      setSelectedRevisionId(
-                        selectedRevisionId === revision.id
-                          ? undefined
-                          : revision.id,
-                      )
+                    type="date"
+                    value={
+                      typeof metadata.visited_on === "string"
+                        ? metadata.visited_on
+                        : ""
                     }
-                  >
-                    {selectedRevisionId === revision.id
-                      ? "내용 닫기"
-                      : "내용 보기"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={busy || saving}
-                    onClick={() => void restoreSnapshot(revision.id)}
-                  >
-                    이 이력 복원
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={busy || saving || revision.is_published}
-                    title={
-                      revision.is_published
-                        ? "게시본에 연결된 이력은 새 공개본으로 업데이트한 뒤 삭제할 수 있습니다."
+                    onChange={(event) =>
+                      updateMetadata("visited_on", event.currentTarget.value)
+                    }
+                  />
+                </label>
+              )}
+              {category === "overnight-trip" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block space-y-2">
+                    여행 시작일 *
+                    <Input
+                      disabled={busy}
+                      type="date"
+                      value={
+                        typeof metadata.start_date === "string"
+                          ? metadata.start_date
+                          : ""
+                      }
+                      onChange={(event) =>
+                        updateMetadata("start_date", event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    여행 종료일 *
+                    <Input
+                      disabled={busy}
+                      type="date"
+                      min={
+                        typeof metadata.start_date === "string"
+                          ? metadata.start_date
+                          : undefined
+                      }
+                      value={
+                        typeof metadata.end_date === "string"
+                          ? metadata.end_date
+                          : ""
+                      }
+                      onChange={(event) =>
+                        updateMetadata("end_date", event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+              {category === "stay-review" && (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block space-y-2">
+                    체크인 *
+                    <Input
+                      disabled={busy}
+                      type="date"
+                      value={
+                        typeof metadata.check_in === "string"
+                          ? metadata.check_in
+                          : ""
+                      }
+                      onChange={(event) =>
+                        updateMetadata("check_in", event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    체크아웃 *
+                    <Input
+                      disabled={busy}
+                      type="date"
+                      min={
+                        typeof metadata.check_in === "string"
+                          ? metadata.check_in
+                          : undefined
+                      }
+                      value={
+                        typeof metadata.check_out === "string"
+                          ? metadata.check_out
+                          : ""
+                      }
+                      onChange={(event) =>
+                        updateMetadata("check_out", event.currentTarget.value)
+                      }
+                    />
+                  </label>
+                </div>
+              )}
+              {(category === "food-cafe" || category === "stay-review") && (
+                <label className="block space-y-2">
+                  {category === "food-cafe" ? "장소명 *" : "숙소명 *"}
+                  <Input
+                    disabled={busy}
+                    value={
+                      typeof metadata.place_name === "string"
+                        ? metadata.place_name
+                        : ""
+                    }
+                    maxLength={150}
+                    onChange={(event) =>
+                      updateMetadata("place_name", event.currentTarget.value)
+                    }
+                    placeholder={
+                      category === "food-cafe"
+                        ? "예: 바다 앞 작은 카페"
+                        : "예: 서귀포 바다 숙소"
+                    }
+                  />
+                </label>
+              )}
+              {category === "food-cafe" && (
+                <label className="block space-y-2">
+                  장소 종류 *
+                  <Select
+                    disabled={busy}
+                    value={
+                      typeof metadata.venue_type === "string" &&
+                      metadata.venue_type
+                        ? metadata.venue_type
                         : undefined
                     }
-                    onClick={() => void permanentlyDeleteRevision(revision.id)}
+                    onValueChange={(value) =>
+                      updateMetadata("venue_type", value)
+                    }
                   >
-                    영구 삭제
-                  </Button>
-                </div>
-                {selectedRevisionId === revision.id && (
-                  <div
-                    className="space-y-2 border-t pt-4"
-                    aria-label="선택한 수정 이력 내용"
-                  >
-                    {revisionDetail.isPending ? (
-                      <p role="status">이력 내용을 불러오는 중…</p>
-                    ) : revisionDetail.isError || !revisionDetail.data ? (
-                      <ApiErrorState
-                        error={revisionDetail.error}
-                        onRetry={() => void revisionDetail.refetch()}
-                        isRetrying={revisionDetail.isFetching}
-                      />
-                    ) : (
-                      <SnapshotView
-                        snapshot={revisionDetail.data.snapshot}
-                        kind={post.kind}
-                        siteId={siteId}
-                        revisionId={revision.id}
-                        renderImage={renderEditorImage}
-                      />
-                    )}
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        ) : revisions.isPending ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            이력을 불러오는 중…
-          </p>
-        ) : revisions.isError ? (
-          <ApiErrorState
-            error={revisions.error}
-            onRetry={() => void revisions.refetch()}
-            isRetrying={revisions.isFetching}
-          />
-        ) : (
-          <p className="text-muted-foreground text-sm">
-            저장된 수정 이력이 없습니다. 초안을 직접 저장하면 이력이 남습니다.
-          </p>
-        )}
-        {(revisionOffset > 0 || (revisions.data?.length ?? 0) === 20) && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={revisionOffset === 0 || busy}
-              onClick={() => {
-                setSelectedRevisionId(undefined);
-                setRevisionOffset(Math.max(0, revisionOffset - 20));
-              }}
-            >
-              더 최신 이력
-            </Button>
-            <Button
-              variant="outline"
-              disabled={(revisions.data?.length ?? 0) < 20 || busy}
-              onClick={() => {
-                setSelectedRevisionId(undefined);
-                setRevisionOffset(revisionOffset + 20);
-              }}
-            >
-              이전 이력
-            </Button>
-          </div>
-        )}
-      </section>
-      {post.kind === "article" && (
-        <section
-          className="rounded-panel space-y-3 border p-4"
-          aria-label="본문 편집기"
-        >
-          <Editor
-            key={`${post.id}-edit-${editorEpoch}`}
-            initialContent={document}
-            editable={!busy}
-            onChange={(nextDocument) => {
-              if (JSON.stringify(nextDocument) === JSON.stringify(document))
-                return;
-              setDocument(nextDocument);
-              markDirty();
-            }}
-            onReady={onEditorReady}
-            onUploadImage={handleEditorImageUpload}
-            renderImage={renderEditorImage}
-            onError={setEditorError}
-          />
-          {editorError && (
-            <p role="alert" className="text-sm text-red-700">
-              {editorError}
+                    <SelectTrigger aria-label="장소 종류 선택">
+                      <SelectValue placeholder="종류를 선택해 주세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cafe">카페</SelectItem>
+                      <SelectItem value="restaurant">음식점</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </label>
+              )}
+              {metadataError && (
+                <p role="alert">
+                  {metadataError === "incomplete_article"
+                    ? "지역명을 입력해 주세요."
+                    : metadataError === "missing_date"
+                      ? "방문일을 입력해 주세요."
+                      : metadataError === "missing_place"
+                        ? category === "stay-review"
+                          ? "숙소명을 입력해 주세요."
+                          : "장소명을 입력해 주세요."
+                        : metadataError === "invalid_date"
+                          ? "날짜를 다시 확인해 주세요."
+                          : metadataError === "invalid_dates"
+                            ? "종료일은 시작일 이후로 선택해 주세요."
+                            : "카페 또는 음식점 중 하나를 선택해 주세요."}
+                </p>
+              )}
+            </fieldset>
+          )}
+          {message && (
+            <p role="status" aria-live="polite">
+              {message}
             </p>
           )}
-        </section>
-      )}
-      <PostPreview
-        open={preview}
-        onClose={() => setPreview(false)}
-        kind={post.kind}
-        category={post.kind === "pdf" ? "itinerary-pdf" : category}
-        title={title}
-        metadata={metadata}
-        tags={tags}
-        coverAssetId={coverAssetId}
-        pdfAssetId={pdfAssetId}
-        siteId={siteId}
-        publishedAt={post.first_published_at}
-        checks={publishChecks}
-        body={
-          post.kind === "article" ? (
-            <Editor
-              key={`${post.id}-preview-${editorEpoch}`}
-              initialContent={document}
-              editable={false}
-              renderImage={renderEditorImage}
+          <section className="rounded-panel border p-4" aria-label="수정 이력">
+            <h2>
+              <button
+                id="revision-history-toggle"
+                type="button"
+                aria-expanded={revisionHistoryOpen}
+                aria-controls="revision-history-content"
+                onClick={() => setRevisionHistoryOpen((open) => !open)}
+                className="flex min-h-11 w-full items-center justify-between gap-3 rounded-md text-left focus-visible:outline-2 focus-visible:outline-offset-2"
+              >
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">수정 이력</span>
+                  <span className="text-muted-foreground text-xs font-normal">
+                    {revisions.isError
+                      ? "불러오지 못함"
+                      : revisions.isPending
+                        ? "불러오는 중"
+                        : revisions.data?.length
+                          ? `현재 페이지 ${revisions.data.length}건`
+                          : "저장된 이력 없음"}
+                  </span>
+                </span>
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`text-muted-foreground size-4 shrink-0 transition-transform duration-300 motion-reduce:transition-none ${revisionHistoryOpen ? "rotate-180" : ""}`}
+                >
+                  <path d="m6 9 6 6 6-6" />
+                </svg>
+              </button>
+            </h2>
+            <div
+              className={`${revisionHistoryStyles.content} ${revisionHistoryOpen ? revisionHistoryStyles.contentOpen : ""}`}
+            >
+              <div
+                id="revision-history-content"
+                role="region"
+                aria-labelledby="revision-history-toggle"
+                aria-hidden={!revisionHistoryOpen}
+                inert={!revisionHistoryOpen}
+                className={revisionHistoryStyles.contentInner}
+              >
+                <div className="space-y-4 pt-4">
+                  <p className="text-muted-foreground text-sm">
+                    직접 저장하거나 공개본을 업데이트할 때의 내용을 보관합니다.
+                    자동 저장은 초안만 갱신합니다.
+                  </p>
+                  {revisions.data?.length ? (
+                    <ul className="space-y-3">
+                      {revisions.data.map((revision) => (
+                        <li
+                          className="space-y-3 rounded-lg border bg-white p-4"
+                          key={revision.id}
+                        >
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                            <span className="rounded-full bg-stone-100 px-2.5 py-1">
+                              {revision.reason === "published"
+                                ? "공개본 업데이트"
+                                : revision.reason === "before_restore"
+                                  ? "복원 전 초안"
+                                  : "직접 저장"}
+                            </span>
+                            {revision.is_published && (
+                              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">
+                                {post.status === "published"
+                                  ? "현재 공개본"
+                                  : "마지막 게시본"}
+                              </span>
+                            )}
+                            {revision.post_version !== null && (
+                              <span className="text-muted-foreground">
+                                글 버전 {revision.post_version}
+                              </span>
+                            )}
+                            <time
+                              className="text-muted-foreground"
+                              dateTime={revision.created_at}
+                            >
+                              {new Date(revision.created_at).toLocaleString(
+                                "ko-KR",
+                              )}
+                            </time>
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {revision.title || "제목 없음"}
+                            </p>
+                            <p className="text-muted-foreground mt-1 text-sm">
+                              {revision.excerpt || "본문 미입력"}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              disabled={busy}
+                              onClick={() =>
+                                setSelectedRevisionId(
+                                  selectedRevisionId === revision.id
+                                    ? undefined
+                                    : revision.id,
+                                )
+                              }
+                            >
+                              {selectedRevisionId === revision.id
+                                ? "내용 닫기"
+                                : "내용 보기"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={busy || saving}
+                              onClick={() => void restoreSnapshot(revision.id)}
+                            >
+                              이 이력 복원
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={busy || saving || revision.is_published}
+                              title={
+                                revision.is_published
+                                  ? "게시본에 연결된 이력은 새 공개본으로 업데이트한 뒤 삭제할 수 있습니다."
+                                  : undefined
+                              }
+                              onClick={() =>
+                                void permanentlyDeleteRevision(revision.id)
+                              }
+                            >
+                              영구 삭제
+                            </Button>
+                          </div>
+                          {selectedRevisionId === revision.id && (
+                            <div
+                              className="space-y-2 border-t pt-4"
+                              aria-label="선택한 수정 이력 내용"
+                            >
+                              {revisionDetail.isPending ? (
+                                <p role="status">이력 내용을 불러오는 중…</p>
+                              ) : revisionDetail.isError ||
+                                !revisionDetail.data ? (
+                                <ApiErrorState
+                                  error={revisionDetail.error}
+                                  onRetry={() => void revisionDetail.refetch()}
+                                  isRetrying={revisionDetail.isFetching}
+                                />
+                              ) : (
+                                <SnapshotView
+                                  snapshot={revisionDetail.data.snapshot}
+                                  kind={post.kind}
+                                  siteId={siteId}
+                                  revisionId={revision.id}
+                                  renderImage={renderEditorImage}
+                                />
+                              )}
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : revisions.isPending ? (
+                    <p role="status" className="text-muted-foreground text-sm">
+                      이력을 불러오는 중…
+                    </p>
+                  ) : revisions.isError ? (
+                    <ApiErrorState
+                      error={revisions.error}
+                      onRetry={() => void revisions.refetch()}
+                      isRetrying={revisions.isFetching}
+                    />
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      저장된 수정 이력이 없습니다. 초안을 직접 저장하면 이력이
+                      남습니다.
+                    </p>
+                  )}
+                  {(revisionOffset > 0 ||
+                    (revisions.data?.length ?? 0) === 20) && (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        disabled={revisionOffset === 0 || busy}
+                        onClick={() => {
+                          setSelectedRevisionId(undefined);
+                          setRevisionOffset(Math.max(0, revisionOffset - 20));
+                        }}
+                      >
+                        더 최신 이력
+                      </Button>
+                      <Button
+                        variant="outline"
+                        disabled={(revisions.data?.length ?? 0) < 20 || busy}
+                        onClick={() => {
+                          setSelectedRevisionId(undefined);
+                          setRevisionOffset(revisionOffset + 20);
+                        }}
+                      >
+                        이전 이력
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+          {post.kind === "article" && (
+            <section
+              className="rounded-panel space-y-3 border p-4"
+              aria-label="본문 편집기"
+            >
+              <Editor
+                key={`${post.id}-edit-${editorEpoch}`}
+                initialContent={document}
+                editable={!busy}
+                onChange={(nextDocument) => {
+                  if (JSON.stringify(nextDocument) === JSON.stringify(document))
+                    return;
+                  setDocument(nextDocument);
+                  markDirty();
+                }}
+                onReady={onEditorReady}
+                onUploadImage={handleEditorImageUpload}
+                renderImage={renderEditorImage}
+                onError={setEditorError}
+              />
+              {editorError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {editorError}
+                </p>
+              )}
+            </section>
+          )}
+          {siteId &&
+            (post.kind === "pdf" ? (
+              <MediaUpload
+                key="pdf-upload"
+                siteId={siteId}
+                kindFilter="pdf"
+                onSelectPdf={(assetId) => {
+                  setPdfAssetId(assetId);
+                  markDirty();
+                }}
+              />
+            ) : (
+              <MediaUpload
+                key="image-upload"
+                siteId={siteId}
+                kindFilter="image"
+                canDelete={canDeleteImages}
+                protectedAssetIds={protectedImageIds}
+                onInsertImage={(assetId, caption) => {
+                  insertImage?.(assetId, caption);
+                  markDirty();
+                }}
+                onSetCoverImage={(assetId) => {
+                  setCoverAssetId(assetId);
+                  markDirty();
+                }}
+              />
+            ))}
+          {siteId && coverAssetId && (
+            <section
+              className="space-y-2 rounded-lg border p-4"
+              aria-label="대표 사진 미리보기"
+            >
+              <h2 className="font-medium">선택한 대표 사진</h2>
+              <PrivateAssetView
+                assetId={coverAssetId}
+                siteId={siteId}
+                kind="image"
+                title="대표 사진"
+              />
+            </section>
+          )}
+          {siteId && pdfAssetId && (
+            <section
+              className="space-y-2 rounded-lg border p-4"
+              aria-label="선택한 일정 PDF"
+            >
+              <h2 className="font-medium">선택한 일정 PDF</h2>
+              <PrivateAssetView
+                assetId={pdfAssetId}
+                siteId={siteId}
+                kind="pdf"
+                title="일정 PDF"
+              />
+            </section>
+          )}
+        </div>
+        <section
+          id="post-preview-pane"
+          aria-label="방문자 화면 미리보기"
+          hidden={!preview}
+          className="min-w-0 xl:sticky xl:top-6 xl:max-h-[calc(100dvh-3rem)] xl:overflow-y-auto"
+        >
+          {preview && (
+            <PostPreview
+              inline
+              open
+              onClose={closePreview}
+              kind={post.kind}
+              category={post.kind === "pdf" ? "itinerary-pdf" : category}
+              title={title}
+              metadata={metadata}
+              tags={tags}
+              coverAssetId={coverAssetId}
+              pdfAssetId={pdfAssetId}
+              siteId={siteId}
+              publishedAt={post.first_published_at}
+              checks={publishChecks}
+              body={
+                post.kind === "article" ? (
+                  <Editor
+                    key={`${post.id}-preview-${editorEpoch}-${previewDocumentVersion}`}
+                    initialContent={previewDocument}
+                    editable={false}
+                    renderImage={renderEditorImage}
+                  />
+                ) : undefined
+              }
             />
-          ) : undefined
-        }
-      />
-      {siteId &&
-        (post.kind === "pdf" ? (
-          <MediaUpload
-            key="pdf-upload"
-            siteId={siteId}
-            kindFilter="pdf"
-            onSelectPdf={(assetId) => {
-              setPdfAssetId(assetId);
-              markDirty();
-            }}
-          />
-        ) : (
-          <MediaUpload
-            key="image-upload"
-            siteId={siteId}
-            kindFilter="image"
-            canDelete={canDeleteImages}
-            protectedAssetIds={protectedImageIds}
-            onInsertImage={(assetId, caption) => {
-              insertImage?.(assetId, caption);
-              markDirty();
-            }}
-            onSetCoverImage={(assetId) => {
-              setCoverAssetId(assetId);
-              markDirty();
-            }}
-          />
-        ))}
-      {siteId && coverAssetId && (
-        <section
-          className="space-y-2 rounded-lg border p-4"
-          aria-label="대표 사진 미리보기"
-        >
-          <h2 className="font-medium">선택한 대표 사진</h2>
-          <PrivateAssetView
-            assetId={coverAssetId}
-            siteId={siteId}
-            kind="image"
-            title="대표 사진"
-          />
+          )}
         </section>
-      )}
-      {siteId && pdfAssetId && (
-        <section
-          className="space-y-2 rounded-lg border p-4"
-          aria-label="선택한 일정 PDF"
-        >
-          <h2 className="font-medium">선택한 일정 PDF</h2>
-          <PrivateAssetView
-            assetId={pdfAssetId}
-            siteId={siteId}
-            kind="pdf"
-            title="일정 PDF"
-          />
-        </section>
-      )}
+      </div>
     </main>
   );
 }
