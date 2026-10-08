@@ -46,7 +46,7 @@
 - [x] 로그인 취소·실패·세션 만료·로그아웃·관리자 권한 없음 화면을 연결하고, 권한 회수 후 재요청이 거절되는지 확인한다.
 - [x] 빈 로컬 또는 격리된 staging DB에 migration 전체를 재생한다. 기존 관리 함수 의존성과 초기 owner 설정을 점검하고 환경별 bootstrap 대상을 관리한다.
 
-2026-09-26 검증: 원격 Auth의 지정 owner 이메일 인증·활성 membership 확인. 추가로 owner를 부여한 카카오 계정으로 실제 원격 Supabase에 연결한 localhost web/admin의 OAuth 로그인·각 앱 홈 복귀·세션 유지·관리자 글쓰기 접근·양쪽 로그아웃 후 접근 차단까지 확인했다. localhost의 두 앱은 포트가 달라도 인증 쿠키를 공유한다. 격리 DB에서 전체 migration 7개, SQL 4개와 실제 Auth/Edge를 사용하는 앱 권한·세션 만료·로그아웃 검증 통과. 사용자 요청에 따라 localhost 검증을 완료 처리하고, 배포 도메인별 callback/로그아웃 검증은 별도 미완료 항목으로 분리했다. [상세 결과와 재현 절차](AUTH-VERIFICATION.ko.md).
+2026-09-26 검증: 원격 Auth의 지정 owner 이메일 인증·활성 membership 확인. 추가로 owner를 부여한 카카오 계정으로 실제 원격 Supabase에 연결한 localhost web/admin의 OAuth 로그인·각 앱 홈 복귀·세션 유지·관리자 글쓰기 접근·양쪽 로그아웃 후 접근 차단까지 확인했다. localhost의 두 앱은 포트가 달라도 인증 쿠키를 공유한다. 격리 DB에서 전체 migration 7개, SQL 4개와 실제 Auth/Edge를 사용하는 앱 권한·세션 만료·로그아웃 검증 통과. 사용자 요청에 따라 localhost 검증을 완료 처리하고, 배포 도메인별 callback/로그아웃 검증은 별도 미완료 항목으로 분리했다. 상세 결과와 재현 절차는 로컬 전용 검증 기록에 보관한다.
 
 완료 기준: 실제 owner는 관리자에 접근하고 일반 독자는 접근하지 못하며, 빈 환경에서 DB와 API를 재현할 수 있다. 기존 운영 후보 DB에 reset이나 초기 owner 테스트 fixture를 실행하지 않는다.
 

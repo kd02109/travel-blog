@@ -24,11 +24,9 @@
 
 ## 최초 owner
 
-2026-09-26 갱신: 지정된 이메일의 Auth 계정·이메일 인증·활성 owner membership을 실제 DB에서 확인했다. 아래는 최초 구축 당시 기록이다. 현재는 환경별 `app_private.owner_bootstrap_targets`에 명시한 이메일만 bootstrap 대상으로 사용하며 새 환경의 기본값은 비활성화다. 기존 owner는 유지했다. [현재 검증 결과와 환경 설정](../AUTH-VERIFICATION.ko.md)을 따른다.
+초기 migration의 owner@example.invalid는 공개 저장소에 넣은 비활성 예시 주소다. 실제 owner 대상은 후속 20260926114006_environment_owner_bootstrap.sql에서 도입한 app_private.owner_bootstrap_targets에 환경별로 지정한다. 새 DB에는 대상이 자동으로 들어가지 않으며, 운영 환경의 기존 owner membership은 유지된다.
 
-사용자가 지정한 `owner@example.invalid`을 **최초 owner의 유일한 부트스트랩 대상**으로 설정했다. 현재 실제 Auth 계정은 아직 없다. 해당 이메일로 이 프로젝트의 Supabase Auth에 가입하고 이메일 인증을 완료하면 `parents-travel` 사이트 owner가 자동 부여된다.
-
-Supabase 관리 콘솔에 로그인하는 계정과 앱의 Auth 사용자는 별개다. 인증되지 않은 가입, 다른 이메일, 임의 user_metadata로는 owner가 되지 않는다. 이미 owner 행이 있으면 부트스트랩으로 추가 owner를 만들지 않는다. 최초 owner 등록 후 추가 권한 부여는 `admin.member.set`을 사용한다. 가입/초대 이메일을 대신 보내거나 임의 비밀번호를 설정하지 않았다.
+Supabase 관리 콘솔 계정과 앱의 Auth 사용자는 별개다. 환경별 대상 이메일을 설정한 뒤에는 앱 Auth의 이메일 인증과 활성 owner membership을 직접 확인한다. 인증되지 않은 가입이나 사용자 수정 가능 metadata만으로 owner 권한을 부여하지 않는다. 개인 계정의 검증 기록은 로컬에만 보관한다.
 
 ## API와 데이터 접근 원칙
 
