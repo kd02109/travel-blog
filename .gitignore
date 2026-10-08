@@ -43,6 +43,10 @@ yarn-error.log*
 AGENTS.md
 CLAUDE.md
 ROADMAP.ko.md
+# Keep authored documentation local. README files are the shared exception.
+*.md
+!README.md
+!README.ko.md
 .agents/
 .claude/
 .codex/
@@ -53,9 +57,6 @@ DESIGN.md
 docs/*
 # Private, date-based implementation notes for a future development blog.
 docs/local-development-log/
-!docs/media-worker-vercel-supabase.ko.md
-!docs/RELEASE-QA.ko.md
-!docs/PRODUCTION-RELEASE.ko.md
 apps/admin/app/error-analytics-preview/
 pdf/
 # Local services and test artifacts
