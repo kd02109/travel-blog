@@ -1,6 +1,6 @@
 # 첫 공개 운영 배포 기록과 중단 기준
 
-기준일: 2026-10-08. 이 문서는 [ROADMAP 공개 승인 게이트](../ROADMAP.ko.md#공개-승인-게이트)의 실행 기록 양식이다. **현재 공개 승인과 운영 배포는 보류 상태다.** 코드·mock·SQL rollback 검사만으로 아래 항목을 통과 처리하지 않는다. 실제 검증 결과, 담당자, 시간, 배포 식별자를 같은 릴리스 기록에 남긴 뒤 승인한다. [현재 QA 결과](./RELEASE-QA.ko.md)와 [미디어 전환 절차](./media-worker-vercel-supabase.ko.md)를 함께 사용한다.
+기준일: 2026-10-08. 이 문서는 첫 공개 승인 항목의 실행 기록 양식이다. **현재 공개 승인과 운영 배포는 보류 상태다.** 코드·mock·SQL rollback 검사만으로 아래 항목을 통과 처리하지 않는다. 실제 검증 결과, 담당자, 시간, 배포 식별자를 같은 릴리스 기록에 남긴 뒤 승인한다. [현재 QA 결과](./RELEASE-QA.ko.md)와 [미디어 전환 절차](./media-worker-vercel-supabase.ko.md)를 함께 사용한다.
 
 ## 배포 전 필수 확인
 
@@ -13,13 +13,13 @@
 | 비공개/삭제 글과 파일 접근                                                 | 보류: 실제 삭제·signed URL 시험 전                     | 공개 404/403, 참조 중 삭제 방지, Storage API 실패·lease 재시도, URL 만료 정책                                  |
 | 관리자 권한·`admin.errors` 격리                                            | 부분: 임시 staging JWT 검사는 통과                     | 실제 OAuth owner/admin/editor/독자 및 역할 회수 뒤 API 재요청·화면 결과                                        |
 | 오류 관측·GA 동의/철회·큐 복구·DB/Storage 복원                             | 보류: 오류 알림/보존 job·GA 상태 지속·복원 훈련 미완료 | 민감정보 마스킹과 조회 권한, 알림 수신, 동의 재방문/철회, 백업 시점·복원 시간·담당자, 큐 중단/재개 기록        |
-| sitemap/robots/Search Console, Preview/admin 보호, Kakao callback/로그아웃 | 보류: Vercel 프로젝트·고정 배포 도메인 전              | HTTPS 두 앱 URL, Kakao→Supabase 및 Supabase→앱 callback, 로그아웃, 비공개 noindex/권한, 공개 sitemap/색인 결과 |
+| sitemap/robots/Search Console, Preview/admin 보호, Kakao callback/로그아웃 | 부분: Preview 두 프로젝트·noindex 확인, 실제 OAuth 전   | HTTPS 두 앱 URL, Kakao→Supabase 및 Supabase→앱 callback, 로그아웃, 비공개 noindex/권한, 공개 sitemap/색인 결과 |
 | 부모님 사용성 검수와 롤백 리허설                                           | 보류                                                   | 실제 작성·발행·사진·답글 수행 결과, 이전 배포로 되돌리는 데 걸린 시간과 담당자                                 |
 
 다음 기반 조건도 모두 확인한다.
 
 1. 기능별 PR을 순서대로 검토·병합하고, `main`의 필수 CI/빌드와 배포할 SHA를 고정한다. staging의 32개 migration 버전 불일치를 [공식 repair 절차](https://supabase.com/docs/reference/cli/supabase-migration-repair)로 정합화하기 전에는 `db push`를 실행하지 않는다. 기존 `travel-blog` DB를 reset하거나 SQL 파일을 무조건 재적용하지 않는다.
-2. Vercel의 web/admin **서로 다른 두 프로젝트**가 Git 저장소와 각각 `apps/web`, `apps/admin` 루트로 연결되고, 실제 Preview Linux 빌드/Function/파일 처리를 통과해야 한다. 현재 연결 계정의 팀 범위 조회가 403이며 두 프로젝트는 아직 확인되지 않았다. 고정 Preview 도메인만 staging Supabase URL/key, Edge CORS, Auth Redirect URLs에 등록한다.
+2. Vercel의 web/admin **서로 다른 두 프로젝트**는 Git 저장소와 각각 `apps/web`, `apps/admin` 루트로 연결됐고 두 Linux Preview 빌드는 Ready다(web `DymzWo5qc`, admin `64bzJijPA`). 고정 QA 주소에는 팀 로그인 보호와 noindex가 있다. 실제 Function/파일 처리, Kakao와 API 연결은 미검증이다. 현재 staging Edge가 두 Preview Origin을 403으로 거절하므로 정확한 HTTPS Origin과 Auth Redirect URLs를 등록하고 재검증한다.
 3. 운영 web/admin HTTPS 도메인, TLS, DNS, canonical, `NEXT_PUBLIC_SITE_URL`, Supabase Kakao provider의 callback, 두 앱 callback allowlist, **정확한 운영 Origin**의 Edge CORS를 대조한다. `NEXT_PUBLIC_*`와 빌드 산출물에 service key/오류 수집 key/Cron secret이 없어야 한다. Production에 mock/광고/분석 플래그를 의도치 않게 켜지 않는다. `NEXT_PUBLIC_SITE_URL`이 누락되면 코드가 localhost 주소로 대체하므로 실제 배포의 canonical/sitemap까지 확인한다.
 4. production DB의 migration 기록·실제 schema를 원본 SQL과 대조하고, 백업·Storage 복원 가능 시점과 담당자를 확인한다. production Edge v19에는 현재 오류 API와 좁힌 CORS가 아직 없으므로, 호환되는 최신 Edge 소스 배포 및 권한 재검사가 필요하다.
 5. 매분 미디어 Cron을 쓸 계정은 해당 주기를 지원하는 Vercel 요금제와 비용 상한을 승인받는다. `TRAVEL_MEDIA_CRON_ENABLED`는 **빌드 시점의 명시적 opt-in**이며 기본값은 꺼짐이다. `TRAVEL_MEDIA_WORKER_ENABLED`는 route 실행 flag다. 전자는 배포를 다시 해야 스케줄이 바뀌고, 후자는 스케줄을 제거하지 않는다. Docker polling과 Vercel Cron이 같은 큐에서 동시에 claim하지 않도록 실행기 전환 시점을 기록한다.
