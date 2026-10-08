@@ -2,11 +2,9 @@ import { describe, expect, it } from "vitest";
 import { authUsersDashboardUrl } from "./auth-dashboard";
 
 describe("Supabase Auth dashboard link", () => {
-  it("uses the configured staging project rather than a production ref", () => {
-    expect(
-      authUsersDashboardUrl("https://bnfihijsquvvkneoutie.supabase.co"),
-    ).toBe(
-      "https://supabase.com/dashboard/project/bnfihijsquvvkneoutie/auth/users",
+  it("uses the project ref from the configured Supabase URL", () => {
+    expect(authUsersDashboardUrl("https://sample-project.supabase.co")).toBe(
+      "https://supabase.com/dashboard/project/sample-project/auth/users",
     );
   });
 
