@@ -4,7 +4,7 @@
 
 앞으로의 구현 순서와 공개 완료 기준은 [최종 배포까지의 작업 목록](ROADMAP.ko.md)을 참고하세요.
 
-owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생 결과는 [P0-1 인증 검증 기록](AUTH-VERIFICATION.ko.md)에 정리했습니다.
+owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 완료 범위는 [ROADMAP](ROADMAP.ko.md)에 정리했습니다. 개인 계정의 검증 기록은 로컬에만 보관합니다.
 
 ## 실행 모드
 
@@ -89,7 +89,7 @@ pnpm exec vitest run --coverage
 pnpm format
 ```
 
-개발 서버나 브라우저 테스트가 포트를 열었다면 작업을 마칠 때 해당 서버와 자식 프로세스를 종료하고, 사용한 포트가 작업 전 상태로 돌아왔는지 확인합니다. 로컬 Supabase를 이번 작업에서 시작했다면 `pnpm db:stop`도 실행합니다. 다른 작업이 이미 사용 중이던 포트는 보존합니다. 자세한 마무리 절차는 [AGENTS.md](AGENTS.md)를 따릅니다.
+개발 서버나 브라우저 테스트가 포트를 열었다면 작업을 마칠 때 해당 서버와 자식 프로세스를 종료하고, 사용한 포트가 작업 전 상태로 돌아왔는지 확인합니다. 로컬 Supabase를 이번 작업에서 시작했다면 `pnpm db:stop`도 실행합니다. 다른 작업이 이미 사용 중이던 포트는 보존합니다.
 
 GitHub Actions도 frozen 설치 → check → build → Chromium E2E를 실행합니다. Supabase SQL/Edge/worker 테스트는 별도 환경이 필요하므로 프런트엔드 CI와 분리되어 있습니다.
 
