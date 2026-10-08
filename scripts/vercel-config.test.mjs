@@ -1,5 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+
+test("only dev and main trigger automatic web and admin deployments", async () => {
+  const web = JSON.parse(
+    readFileSync(new URL("../apps/web/vercel.json", import.meta.url), "utf8"),
+  );
+  const { config: admin } = await import("../apps/admin/vercel.mjs?git-policy");
+  const policy = { "**": false, main: true, dev: true };
+  assert.deepEqual(web.git?.deploymentEnabled, policy);
+  assert.deepEqual(admin.git?.deploymentEnabled, policy);
+});
 
 test("admin Preview has no scheduled media worker invocation", async () => {
   const previous = process.env.VERCEL_ENV;
