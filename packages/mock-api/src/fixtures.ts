@@ -24,7 +24,7 @@ export const FIXTURE_SOURCE = {
     "docs/design/five-category-blog-and-admin.ko.md",
     "docs/design/penpot-five-category-manifest.json",
     "docs/design/penpot-admin-home-templates-manifest.json",
-    "supabase/API.ko.md",
+    "supabase/functions/travel-api/core.ts",
   ],
   note: "카테고리·화면 상태는 로컬 Penpot 설계 기준. 제목·본문·사용자·숫자는 합성 데이터이며 실제 게시물이나 최신 Penpot API 응답이 아닙니다.",
 } as const;

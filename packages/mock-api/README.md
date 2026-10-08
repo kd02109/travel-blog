@@ -26,7 +26,7 @@ pnpm dev:mock
 - `docs/design/penpot-five-category-admin-manifest.json`: 관리자 글·상태별 목록.
 - `docs/design/penpot-admin-home-templates-manifest.json`: A/B/C/D 선택·저장·적용.
 - `docs/design/design-system.tokens.json`: v3 종이색·잉크색. 체험 화면에만 적용.
-- `supabase/API.ko.md`, migrations와 Edge Function: action, 필드, 응답 배열, 오류 및 버전 규칙.
+- `supabase/functions/travel-api/core.ts`, migrations와 API 계약: action, 필드, 응답 배열, 오류 및 버전 규칙.
 
 **로컬 Penpot 내보내기 자료에서 추론한 fixture입니다. 라이브 Penpot에서 최신 데이터를 가져온 것이 아닙니다.** 제목·본문·댓글·사용자·날짜·수치는 모두 합성 예시입니다. 외부 사진 대신 `public/mock-assets/placeholder.svg`, 실제 여행 일정 대신 한 페이지 `itinerary.pdf`를 사용합니다. 저장소에서 무시된 docs가 없어도 설치·실행·CI는 작동합니다.
 

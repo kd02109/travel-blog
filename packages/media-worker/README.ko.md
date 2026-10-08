@@ -25,7 +25,7 @@ pnpm media:worker:docker:run
 
 패키지 디렉터리에서는 `pnpm process:once`, `pnpm start`, `pnpm docker:build`, `pnpm docker:run`을 사용한다. polling은 빈 큐에서 5초, 연결 오류에서 15초 쉬고 다시 조회한다. DB는 5분 lease·만료 lease 회수·최대 5회 지수 backoff를 담당한다. 파일은 20MB, 이미지 디코딩은 40MP, PDF는 200쪽으로 제한하며 네트워크 요청은 30초에 timeout한다. 컨테이너 설정의 memory 상한은 512MB다.
 
-`pnpm media:worker`와 `pnpm media:worker:once`는 셸 환경변수를 사용하며 패키지의 `.env.local`을 자동으로 읽지 않는다. 해당 파일을 사용해 Node 실행기를 직접 시험하려면 패키지 디렉터리에서 `MEDIA_WORKER_ONCE=1 node --env-file=.env.local --experimental-strip-types src/worker.ts`를 실행한다. 이 명령은 실제 큐를 소비하므로 새 migration을 적용한 격리 staging에서만 사용한다. Vercel 경로와 같은 동작을 검증하려면 별도 Node polling 대신 관리자 Function을 localhost에서 수동 호출한다. [로컬 검증 절차](../../docs/media-worker-vercel-supabase.ko.md#localhost에서-검증할-때)를 참고한다.
+`pnpm media:worker`와 `pnpm media:worker:once`는 셸 환경변수를 사용하며 패키지의 `.env.local`을 자동으로 읽지 않는다. 해당 파일을 사용해 Node 실행기를 직접 시험하려면 패키지 디렉터리에서 `MEDIA_WORKER_ONCE=1 node --env-file=.env.local --experimental-strip-types src/worker.ts`를 실행한다. 이 명령은 실제 큐를 소비하므로 새 migration을 적용한 격리 staging에서만 사용한다. Vercel 경로와 같은 동작을 검증하려면 별도 Node polling 대신 관리자 Function을 localhost에서 수동 호출한다.
 
 로그에는 job/asset ID, 작업 종류, 시도 횟수와 오류 코드만 남긴다. 파일명, JWT, 업로드 본문, service key는 기록하지 않는다. polling 실행기는 매분 `travel_queue_health`를 읽어 적체·실패·만료 lease를 기록하고, 매시간 정리 후보 수를 보고한다. Vercel 단일 요청 경로는 이 주기 보고를 자동 수행하지 않으므로 운영 지표·알림은 별도로 연결해야 한다.
 
@@ -35,4 +35,4 @@ pnpm media:worker:docker:run
 
 `asset.access` signed URL의 유효기간은 300초다. 화면은 만료 전에 API에서 새 URL을 요청한다. URL 발급 뒤 글을 비공개로 바꿔도 이미 발급한 URL은 만료 때까지 접근 가능하므로 URL을 로그나 영구 저장소에 남기지 않는다.
 
-전체 환경별 배포·검증·롤백 순서는 [미디어 worker Vercel·Supabase 전환 가이드](../../docs/media-worker-vercel-supabase.ko.md)를 따른다.
+환경별 배포·검증·롤백의 상세 작업 기록은 로컬에서 관리한다.
