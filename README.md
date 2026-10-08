@@ -2,9 +2,9 @@
 
 부모님 여행 블로그의 pnpm + Turborepo 기반 모노레포입니다. Node 24, pnpm 11.25.0을 사용합니다.
 
-배포 준비의 현재 검증 범위는 [staging 기록](supabase/STAGING.ko.md)과 [미디어 전환 절차](docs/media-worker-vercel-supabase.ko.md)를 참고하세요. 날짜별 개인 개발 로드맵은 로컬에서만 관리합니다.
+배포 준비의 공유 절차는 [Supabase README](supabase/README.ko.md)와 [미디어 worker README](packages/media-worker/README.ko.md)를 참고하세요. 날짜별 로드맵·QA·배포 기록은 로컬에서만 관리합니다.
 
-owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 검증 범위는 [staging 기록](supabase/STAGING.ko.md)에 정리했습니다. 개인 계정의 검증 기록은 로컬에만 보관합니다.
+owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 상세 검증 기록은 로컬에만 보관합니다.
 
 ## 실행 모드
 
@@ -75,6 +75,8 @@ pnpm --filter admin dev:supabase
 
 기존 `apps/docs` 템플릿은 보존하되 workspace 실행 대상에서 제외했습니다.
 
+web/admin의 `public/home-design` 샘플 사진은 Wikimedia Commons의 CC0 1.0 이미지입니다. 로컬 출처 문서 대신 공유 기록을 여기에 보존합니다: [Santorini · gtgt](https://commons.wikimedia.org/wiki/File:Santorini_Greece_Island.jpg), [Dolomites · David Marcu](https://commons.wikimedia.org/wiki/File:Dolomites,_Italy_%28Unsplash_f2SeKHyjqk4%29.jpg), [Kyoto · Sorasak](https://commons.wikimedia.org/wiki/File:Kyoto,_Japan_%28Unsplash_UIN-pFfJ7c%29.jpg), [Jeju · lumoplank](https://commons.wikimedia.org/wiki/File:Beaches_of_Jeju_-_JejuBeaches2458.jpg). 각 원본 페이지에서 라이선스를 확인할 수 있습니다.
+
 앱 → 기능 패키지 → 공통 설정/상수 방향으로 의존합니다. 공개 web은 BlockNote를 import하지 않습니다. 일반 요청은 공개 Supabase 키와 사용자 세션을 사용하며 service-role 키는 앱에 필요하지 않습니다. 별도 API 서버 대신 앱의 Route Handler와 기존 Supabase `travel-api`를 사용합니다.
 
 ## 검증
@@ -100,7 +102,7 @@ pnpm db:types             # 로컬 DB 기준 supabase/database.types.ts 갱신
 pnpm db:stop
 ```
 
-기존 DB 구축/테스트 방법은 [Supabase 문서](supabase/README.ko.md), 실제 action 규격은 [API 문서](supabase/API.ko.md)를 따릅니다. 이 작업에서는 기존 migration/원격 DB를 변경하지 않았습니다.
+기존 DB 구축/테스트 방법은 [Supabase README](supabase/README.ko.md)를 따릅니다. 실제 action 규격은 [Edge Function 코드](supabase/functions/travel-api/core.ts)와 [API 계약](packages/contracts/README.ko.md)을 기준으로 확인합니다. 이 작업에서는 기존 migration/원격 DB를 변경하지 않았습니다.
 
 ## 서비스 연결
 
