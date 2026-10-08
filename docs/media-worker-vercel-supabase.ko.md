@@ -1,6 +1,6 @@
 # 미디어 worker의 Vercel·Supabase 전환
 
-기준일: 2026-10-08. 이 문서는 로컬 구현과 원격 배포 상태를 구분한다. 코드에는 Supabase 큐를 한 번만 처리하는 `@repo/media-worker` 함수, 보호된 관리자 Next.js Function, 1분 Vercel Cron 설정과 큐/삭제 lease 보정 migration이 있다. worker 단위 테스트 8개, route 테스트 5개, 타입 검사와 PostgreSQL 17의 관련 스키마·pgtap shim을 이용한 격리 SQL 테스트는 통과했다. 작은 테스트 이미지는 실제 `sharp` 변환·업로드 요청까지 검사했다. 관리자 Function의 선택 경로 webpack 프로덕션 빌드와 로컬 빌드 실행도 통과했다. 가짜 Supabase API를 연결한 로컬 호출에서 인증 없는 요청 401, 이미지·PDF 처리 각각 200 `processed`, 빈 큐 200 `idle`을 확인하고 테스트 서버를 종료했다. **연결된 Supabase `travel-blog`에는 새 migration까지 적용됐지만, Vercel에서 이 프로젝트의 web/admin 프로젝트를 찾지 못해 Function과 Cron은 배포되지 않았다.** 전체 staging migration 재생, 실제 Storage API 삭제, 실물 고화질 이미지/PDF 처리, 비용과 처리량은 격리 staging 및 Vercel Preview에서 아직 확인해야 한다.
+기준일: 2026-10-08. 이 문서는 로컬 구현과 원격 배포 상태를 구분한다. 코드에는 Supabase 큐를 한 번만 처리하는 `@repo/media-worker` 함수, 보호된 관리자 Next.js Function, 1분 Vercel Cron 설정과 큐/삭제 lease 보정 migration이 있다. worker 단위 테스트 8개, route 테스트 5개, 타입 검사와 PostgreSQL 17의 관련 스키마·pgtap shim을 이용한 격리 SQL 테스트는 통과했다. 작은 테스트 이미지는 실제 `sharp` 변환·업로드 요청까지 검사했다. 관리자 Function의 선택 경로 webpack 프로덕션 빌드와 로컬 빌드 실행도 통과했다. 가짜 Supabase API를 연결한 로컬 호출에서 인증 없는 요청 401, 이미지·PDF 처리 각각 200 `processed`, 빈 큐 200 `idle`을 확인하고 테스트 서버를 종료했다. **새 격리 staging `travel-blog-staging`에는 migration 33개와 `travel-api`를 적용하고 SQL·HTTP·권한 검사를 통과했다.** 기존 `travel-blog`에도 미디어 migration이 적용돼 있다. 하지만 연결된 Vercel 계정에는 travel-blog의 web/admin 프로젝트가 없고 팀 범위 접근은 403이어서 Function·Cron의 실제 배포와 파일 종단 검증은 아직이다. [staging 검증 기록](../supabase/STAGING.ko.md).
 
 ## 목표 구조와 이유
 
@@ -26,14 +26,17 @@ Vercel Cron ─ Bearer CRON_SECRET ─→ apps/admin Node Function
 
 ## 실제 프로젝트 상태
 
-| 항목 | 확인 결과 | 배포 시 해야 할 일 |
-| --- | --- | --- |
-| Supabase `travel-blog` | `kqbqoopqomrwozpqgono`, Seoul, migration 33개가 `20261008013658`까지 적용, `travel-api` Edge v19 | 기존 DB reset 금지. 현재 로컬 Edge 변경은 staging에 먼저 배포·검증 |
-| 원격 미디어 큐 | 이전 확인에서 `process_asset` 완료 14·실패 3, 만료된 `invalidate_cache` lease 10 | 미디어 작업과 비미디어 적체를 분리해 진단하고 실제 업로드 테스트 |
-| Vercel | 연결된 계정에서 `travel-blog` web/admin 프로젝트가 보이지 않음 | 저장소를 별도 web/admin 프로젝트에 연결; admin Root Directory `apps/admin` 확인 |
-| 현재 실행기 | 로컬 코드에 Docker polling과 Vercel 1회 처리 경로가 공존 | 같은 Supabase 환경에서 동시 활성화 금지; production 전환을 단계별로 수행 |
+| 항목                           | 확인 결과                                                                                          | 배포 시 해야 할 일                                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Supabase `travel-blog`         | `kqbqoopqomrwozpqgono`, Seoul, migration 33개가 `20261008013658`까지 적용, `travel-api` Edge v19   | 기존 DB reset 금지. 현재 로컬 Edge 변경은 staging에서 먼저 검증                                                                              |
+| Supabase `travel-blog-staging` | `bnfihijsquvvkneoutie`, migration 33개와 `travel-api` v1 적용, SQL·HTTP·임시 Auth 권한 테스트 통과 | 원격 migration 버전 32개의 이력 정합화 전 `db push` 금지. Kakao/실제 파일 테스트 남음                                                        |
+| 원격 미디어 큐                 | 이전 확인에서 `process_asset` 완료 14·실패 3, 만료된 `invalidate_cache` lease 10                   | 미디어 작업과 비미디어 적체를 분리해 진단하고 실제 업로드 테스트                                                                             |
+| Vercel                         | 연결된 계정에서 `travel-blog` web/admin 프로젝트가 보이지 않고 팀 범위 조회 403. 현재 계정은 Hobby | 접근 가능한 계정 범위에서 두 Preview 프로젝트를 생성·검증. 운영 매분 Cron을 사용하려면 Pro 여부 결정. admin Root Directory `apps/admin` 확인 |
+| 현재 실행기                    | 로컬 코드에 Docker polling과 Vercel 1회 처리 경로가 공존                                           | 같은 Supabase 환경에서 동시 활성화 금지; production 전환을 단계별로 수행                                                                     |
 
 Supabase migration/Edge 배포는 Vercel Git 자동 배포에 포함되지 않는다. DB 버전과 `travel-api` 버전을 별도 릴리스 절차로 관리한다. `supabase/deployment.json`은 2026-10-08 읽기 전용 원격 대조 결과를 기록하며, 다음 배포 전에는 원격 이력을 다시 확인한다.
+
+Staging 공개 변수로 만든 web/admin Preview형 로컬 webpack 빌드는 통과했다. 캐시를 제외한 생성 파일에서 staging Supabase ref는 확인됐고 운영 ref·service secret·오류 수집 키는 발견되지 않았다. 잠시 실행한 빌드는 web `/`·`robots.txt`·`sitemap.xml`의 noindex/차단, admin `/login` noindex와 미인증 media Function 401을 반환했다. 테스트 포트 3100·3102는 종료했다. 이는 Vercel 배포·Linux native 변환 성공을 증명하지 않는다.
 
 ## localhost에서 검증할 때
 
@@ -52,15 +55,15 @@ node --env-file=apps/admin/.env.supabase.local --input-type=module -e 'const res
 ## Vercel 관리자 프로젝트 설정
 
 1. 원격 Git 저장소를 Vercel에 연결하고 admin 프로젝트의 Root Directory를 `apps/admin`으로 지정한다. workspace 루트 lockfile과 공유 `packages/media-worker`를 포함해 설치·빌드되는지 Preview에서 확인한다. admin에는 `sharp`, `pdfjs-dist`, `@napi-rs/canvas`를 서버 런타임 의존성으로 명시했다. 선택 경로 webpack 빌드와 macOS 로컬 실행은 통과했지만, Vercel의 Linux native 바이너리·PDF 글꼴 경로는 Preview에서 실행 확인해야 한다. 기본 Turbopack 빌드는 이 격리 환경에서 CSS loader의 포트 생성 권한 오류로 완료하지 못했다. web은 별도 `apps/web` 프로젝트로 둔다. [Vercel 모노레포 가이드](https://vercel.com/docs/monorepos).
-2. `apps/admin/vercel.json`이 `/api/internal/media-worker`를 매분 호출한다. [Vercel Cron은 production deployment에서 실행](https://vercel.com/docs/cron-jobs)되므로 Preview는 직접 요청으로 검사한다. **매분 실행은 Vercel Pro 이상이 필요하다.** Hobby의 1일 1회 주기로는 업로드 후 빠른 처리와 정리 지연 목표를 충족하기 어렵다. [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+2. `apps/admin/vercel.mjs`는 Preview의 Cron을 비우고 production에서만 `/api/internal/media-worker`를 매분 등록한다. [Vercel Cron은 production deployment에서 실행](https://vercel.com/docs/cron-jobs)되므로 Preview는 보호된 경로를 직접 요청해 검사한다. **매분 Cron은 Vercel Pro 이상이 필요하다.** 현재 [Hobby Function 최대 시간은 300초](https://vercel.com/docs/plans/hobby)이므로 240초 제한의 Preview 직접 호출은 가능하다. Hobby의 1일 1회 Cron으로는 현재 운영 스케줄을 배포할 수 없다. [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing), [programmatic config](https://vercel.com/docs/project-configuration/vercel-ts).
 3. 관리자 프로젝트의 server-only 환경변수를 환경별로 설정한다. 변수 이름은 `apps/admin/.env.example`에도 있다. Preview에는 격리 staging Supabase 값을, Production에는 운영 Supabase 값을 넣는다. 설정 변경 후 대상 deployment가 새 값을 받는지 확인한다.
 
-| 변수 | Preview | Production | 주의 |
-| --- | --- | --- | --- |
-| `SUPABASE_URL` | staging project URL | 운영 project URL | `NEXT_PUBLIC_SUPABASE_URL`과 별개로 worker 서버에서 사용 |
-| `SUPABASE_SERVICE_ROLE_KEY` | staging secret/service-role key | 운영 secret/service-role key | `sb_secret_...` 또는 기존 service_role JWT; 브라우저·로그·Git 금지 |
-| `CRON_SECRET` | 독립된 긴 난수 | 별도 긴 난수 | 최소 32자; Vercel Cron의 Bearer 헤더와 route 검증값을 일치시킴 |
-| `TRAVEL_MEDIA_WORKER_ENABLED` | Preview 직접 테스트할 때 `true` | canary 준비 후 `true` | `false`면 보호된 route가 503; Cron 설정 자체를 없애지는 않음 |
+| 변수                          | Preview                         | Production                   | 주의                                                               |
+| ----------------------------- | ------------------------------- | ---------------------------- | ------------------------------------------------------------------ |
+| `SUPABASE_URL`                | staging project URL             | 운영 project URL             | `NEXT_PUBLIC_SUPABASE_URL`과 별개로 worker 서버에서 사용           |
+| `SUPABASE_SERVICE_ROLE_KEY`   | staging secret/service-role key | 운영 secret/service-role key | `sb_secret_...` 또는 기존 service_role JWT; 브라우저·로그·Git 금지 |
+| `CRON_SECRET`                 | 독립된 긴 난수                  | 별도 긴 난수                 | 최소 32자; Vercel Cron의 Bearer 헤더와 route 검증값을 일치시킴     |
+| `TRAVEL_MEDIA_WORKER_ENABLED` | Preview 직접 테스트할 때 `true` | canary 준비 후 `true`        | `false`면 보호된 route가 503; Cron 설정 자체를 없애지는 않음       |
 
 `CRON_SECRET`과 Supabase secret을 같은 값으로 재사용하지 않는다. secret은 Vercel의 환경변수 UI/비밀 저장소로 관리하고 `NEXT_PUBLIC_` 접두사를 붙이지 않는다. Secret 권한이 있는 관리자만 변경한다. Function 로그에는 job/asset ID와 정해진 오류 코드만 남기고 파일명, 원본 파일, 토큰, secret을 기록하지 않는다. [Vercel Cron 보안](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
 

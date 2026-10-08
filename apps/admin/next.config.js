@@ -2,6 +2,16 @@ import { fileURLToPath } from "node:url";
 
 const nextConfig = {
   distDir: process.env.TRAVEL_NEXT_DIST_DIR || ".next",
+  async headers() {
+    return process.env.VERCEL_ENV
+      ? [
+          {
+            source: "/:path*",
+            headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+          },
+        ]
+      : [];
+  },
   outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   outputFileTracingIncludes: {
     "/api/internal/media-worker": [
