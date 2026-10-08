@@ -46,7 +46,7 @@ pnpm --filter admin dev:supabase
 
 각 앱 디렉터리(`apps/web`, `apps/admin`)에서는 `pnpm dev:supabase`로 실행할 수 있습니다. `pnpm start`는 이전 운영 빌드를 실행하므로 개발 중에는 `dev:supabase`를 사용하세요. 실제 연결의 운영 결과를 확인하려면 `pnpm build:supabase` 후 `pnpm start:supabase`를 실행하세요.
 
-공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 단일 원격 프로젝트 정책에 따라 web/admin의 로컬 실제 연결, Vercel Preview, Production을 모두 `travel-blog`로 전환할 예정입니다. Vercel 환경변수 전환은 아직 완료되지 않았습니다. 예제 파일은 프로젝트 URL을 비워 두므로 [운영 배포 식별자](supabase/deployment.json)의 프로젝트 URL과 해당 프로젝트 publishable key를 설정하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다. 실제 연결에서 저장·발행·삭제·업로드하면 운영 데이터가 바뀝니다. 반복·파괴적 테스트는 mock이나 별도 로컬/격리 테스트 backend를 사용하세요.
+공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 로컬 실제 연결과 Vercel web/admin Preview의 공개 URL·키는 단일 `travel-blog` 프로젝트를 사용합니다. Preview 환경변수 변경은 새 배포에만 적용되며, Production 환경변수와 운영 배포는 출시 게이트에서 별도로 확인합니다. 예제 파일은 프로젝트 URL을 비워 두므로 [운영 배포 식별자](supabase/deployment.json)의 프로젝트 URL과 해당 프로젝트 publishable key를 설정하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다. 실제 연결에서 저장·발행·삭제·업로드하면 운영 데이터가 바뀝니다. 반복·파괴적 테스트는 mock이나 별도 로컬/격리 테스트 backend를 사용하세요.
 
 우선순위는 **셸 환경 변수 > 앱별 profile > 루트 profile**입니다. 값은 `$VARIABLE` 참조 없이 직접 입력하세요. 선택한 실행 명령은 `NEXT_PUBLIC_API_MOCKING` 값을 항상 덮어쓰므로 `.env.local`이나 셸에 남은 플래그 때문에 모드가 뒤바뀌지 않습니다. 기존 `.env.local`의 Supabase 연결 값은 profile 파일로 옮겨 주세요. Next는 그 외 일반 환경 변수를 기존 방식으로 읽습니다.
 
