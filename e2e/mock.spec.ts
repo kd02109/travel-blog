@@ -7,8 +7,10 @@ test("public home shows its categories with fixture data", async ({ page }) => {
     page.getByRole("heading", { name: "오늘도 함께 걷다", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "여행 일정표" }),
-  ).toBeVisible();
+    page
+      .getByRole("list", { name: "여행 기록 분류" })
+      .getByRole("link", { name: /여행 일정표/ }),
+  ).toHaveAttribute("href", "/posts?category=itinerary-pdf");
 });
 
 test("mock mode does not bypass administrator login", async ({ page }) => {
@@ -161,13 +163,23 @@ test("public pages show a retry action when their API is unavailable", async ({
   await expect(
     page.getByRole("heading", { name: "여행 기록에 연결하지 못했어요" }),
   ).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "여행 기록에 연결하지 못했어요" })
+      .getByRole("button", { name: "다시 시도" }),
+  ).toBeVisible();
 
   await page.goto("/posts?mockScenario=error");
   await expect(
-    page.getByRole("heading", { name: "공개 기록을 확인하지 못했어요" }),
+    page.getByRole("heading", { name: "여행 기록에 연결하지 못했어요" }),
   ).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole("button", { name: "다시 시도" })).toBeVisible();
+  await expect(
+    page
+      .getByRole("alert")
+      .filter({ hasText: "여행 기록에 연결하지 못했어요" })
+      .getByRole("button", { name: "다시 시도" }),
+  ).toBeVisible();
   await expect(
     page.getByText("아직 여행 기록이 없어요", { exact: true }),
   ).toHaveCount(0);
@@ -175,7 +187,7 @@ test("public pages show a retry action when their API is unavailable", async ({
 test("rate limits show a countdown before retry", async ({ page }) => {
   await page.goto("/posts?mockScenario=rate-limited");
   await expect(
-    page.getByRole("heading", { name: "공개 기록을 확인하지 못했어요" }),
+    page.getByRole("heading", { name: "여행 기록에 연결하지 못했어요" }),
   ).toBeVisible({ timeout: 15000 });
   await expect(
     page.getByRole("button", { name: /초 후 다시 시도/ }),
@@ -209,8 +221,12 @@ test("conflict keeps comment input and offers explicit recovery", async ({
 test("slow responses show pending state and disable duplicate comment submission", async ({
   page,
 }) => {
-  await page.goto("/posts/example-day-walk?mockScenario=slow");
-  await expect(page.getByText("기록을 불러오고 있어요…")).toBeVisible();
+  await page.goto("/posts/example-day-walk?mockScenario=slow", {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(
+    page.getByRole("status", { name: "여행 기록을 불러오는 중" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "서울숲에서 천천히 걸었던 하루" }),
   ).toBeVisible({ timeout: 15000 });
