@@ -30,7 +30,7 @@
     "test:staging:api": "node --test supabase/tests/http_test.ts",
     "test:auth:kakao": "node scripts/test-kakao.mjs",
     "test:auth:local": "node scripts/test-auth-local.mjs",
-    "test:config": "node --test scripts/environment.test.mjs scripts/private-source-maps.test.mjs scripts/vercel-config.test.mjs",
+    "test:config": "node --test scripts/environment.test.mjs scripts/private-source-maps.test.mjs scripts/vercel-config.test.mjs supabase/functions/travel-api/cors.test.ts",
     "error:source-map:lookup": "node scripts/lookup-private-source-map.mjs",
     "test:contracts:supabase": "vitest run --config vitest.supabase.config.ts",
     "test:ssr": "playwright test --config playwright.ssr.config.ts"

@@ -5,7 +5,7 @@
 | 환경                       | 프로젝트                                                                                              | 확인된 상태                                                                                                                                                                                                                           |
 | -------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 기존 `travel-blog`         | `kqbqoopqomrwozpqgono` · [Supabase 콘솔](https://supabase.com/dashboard/project/kqbqoopqomrwozpqgono) | migration 33개가 `20261008013658_media_serverless_claim_retry`까지 적용됨. `travel-api`는 v19. DB와 Edge의 버전은 서로 다르며, v19에는 로컬의 `error.capture`/`admin.errors` 코드가 아직 배포되지 않았다. 기존 DB를 reset하지 않는다. |
-| 격리 `travel-blog-staging` | `bnfihijsquvvkneoutie` · [Supabase 콘솔](https://supabase.com/dashboard/project/bnfihijsquvvkneoutie) | 33개 migration 순차 적용과 `travel-api` v1 배포 완료. SQL·HTTP 권한 검사는 통과했으며, 실제 카카오 owner 로그인·파일 변환·Vercel Preview는 미완료다.                                                                                  |
+| 격리 `travel-blog-staging` | `bnfihijsquvvkneoutie` · [Supabase 콘솔](https://supabase.com/dashboard/project/bnfihijsquvvkneoutie) | 33개 migration 순차 적용과 `travel-api` v3 배포 완료. SQL·HTTP 권한 및 localhost CORS 검사는 통과했으며, 실제 카카오 owner 로그인·파일 변환·Vercel Preview는 미완료다.                                                                                  |
 
 운영 사이트는 slug `parents-travel`, ID `e6bac53e-3c68-49dd-9784-f3c413603ef2`다. Staging 사이트 ID와 migration 버전 대응표는 [staging 배포 기록](./staging-deployment.json)에 분리했다. [staging 검증 기록](./STAGING.ko.md), [API 사용 명세](./API.ko.md), [DB 타입](./database.types.ts), [미디어 배포 절차](../docs/media-worker-vercel-supabase.ko.md)를 함께 참고한다.
 
@@ -20,6 +20,8 @@ Staging에는 지정된 owner 대상을 설정했지만 실제 앱 Auth 가입�
 ## API와 오류 관측
 
 브라우저와 서버 앱은 `travel-api` Edge Function을 호출한다. Supabase REST 테이블이나 내부 `travel_api`·`travel_worker` RPC를 브라우저에서 직접 호출하지 않는다. `verify_jwt=false`는 공개 조회·비회원 기능을 위한 설정이며, 보호된 action은 Edge 내부에서 Auth `getUser(access_token)`을 수행하고 DB에서 활성 membership을 재검사한다. `SUPABASE_SERVICE_ROLE_KEY`는 Edge/보호된 서버 환경에만 둔다.
+
+Edge secret `TRAVEL_API_ALLOWED_ORIGINS`는 web/admin의 정확한 `https://` 출처를 쉼표로 구분한다. 격리 staging에는 개발용 `http://localhost:3000`, `http://localhost:3002`와 대응하는 `127.0.0.1` 주소만 먼저 지정했다. 새 고정 Preview 주소를 등록할 때는 해당 환경의 secret에만 추가하고 preflight·실제 POST·미허용 Origin 403을 다시 확인한다. 운영 도메인을 확정하기 전에는 운영 Edge에 이 코드를 배포하지 않는다. Origin 없는 서버 간 요청은 계속 허용된다. Origin 검사는 브라우저 접근 범위 제어이며 JWT·membership·CSRF 검증의 대체가 아니다.
 
 오류 관측용 SQL migration 3개는 기존 `travel-blog`에 적용됐지만, 해당 수집·관리자 조회 코드를 포함한 Edge 버전은 아직 운영에 배포되지 않았다. Staging Edge에는 별도 `TRAVEL_ERROR_REPORT_KEY`를 설정하고 수집 202/무키 403, 관리자 조회 200, editor·권한 회수자 조회 403, 마스킹 SQL 검사를 통과했다. Preview web/admin 서버 릴레이에는 **같은 staging 전용 키**를 서버 변수로 설정해야 하며 브라우저에는 노출하지 않는다.
 
@@ -42,7 +44,7 @@ npx deno test --config supabase/functions/travel-api/deno.json supabase/function
 
 `supabase/tests/*.sql`은 **격리된 staging**에서 `BEGIN`부터 `ROLLBACK`까지 한 DB 세션으로 실행한다. `BEGIN`과 `ROLLBACK`을 서로 다른 원격 SQL 호출로 나누지 않는다. 임시 테이블·pgTAP 테스트는 명시적 프로젝트 ref로 `supabase db query --linked --project-ref bnfihijsquvvkneoutie --file supabase/tests/<파일>.sql`을 사용했다. 권한·RLS SQL 테스트와 실제 Auth 토큰을 쓰는 HTTP 테스트는 모두 필요하다.
 
-`pnpm test:staging:api`는 staging `travel-api` HTTP 3개 검사를 실행한다. 방문자·rate-limit 기록을 생성하므로 **운영 프로젝트에 바꿔서 실행하지 않는다.** 2026-10-08 기준 3개가 통과했다.
+`pnpm test:staging:api`는 staging `travel-api` HTTP 4개 검사를 실행한다. 방문자·rate-limit 기록을 생성하므로 **운영 프로젝트에 바꿔서 실행하지 않는다.** 2026-10-08 기준 공개 조회·무인증 거절·방문자 토큰·CORS가 통과했다.
 
 남은 출시 검증은 staging owner·admin·비회원의 실제 로그인/권한 회수, 사진·PDF signed upload→큐→ready→게시, Storage 삭제 실패와 lease 재시도, Vercel Preview 두 앱의 연결 및 Cron 수동 호출이다. 운영의 migration·Edge 버전과 staging 결과를 다시 대조한 뒤 배포한다.
 

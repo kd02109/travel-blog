@@ -34,6 +34,53 @@ test("deployed API health and empty site reads", async () => {
     "empty posts",
   );
 });
+test("deployed API restricts browser CORS to configured staging origins", async () => {
+  for (const origin of ["http://localhost:3000", "http://localhost:3002"]) {
+    const preflight = await fetch(url, {
+      method: "OPTIONS",
+      headers: {
+        Origin: origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    assert(preflight.status === 204, `${origin} preflight status`);
+    assert(
+      preflight.headers.get("access-control-allow-origin") === origin,
+      `${origin} preflight ACAO`,
+    );
+    assert(
+      preflight.headers
+        .get("vary")
+        ?.split(",")
+        .some((part) => part.trim().toLowerCase() === "origin"),
+      `${origin} vary`,
+    );
+  }
+  const allowed = await call(
+    "site.get",
+    {},
+    { Origin: "http://localhost:3000" },
+  );
+  assert(allowed.status === 200, "allowed browser POST status");
+  assert(
+    allowed.headers.get("access-control-allow-origin") ===
+      "http://localhost:3000",
+    "allowed browser POST ACAO",
+  );
+  const denied = await call(
+    "site.get",
+    {},
+    { Origin: "https://untrusted.example" },
+  );
+  assert(denied.status === 403, "untrusted browser POST status");
+  assert(denied.body.error === "origin_not_allowed", "untrusted browser body");
+  assert(
+    denied.headers.get("access-control-allow-origin") === null,
+    "untrusted browser ACAO",
+  );
+});
 test("deployed API refuses unauthenticated admin and internal actions", async () => {
   for (const action of [
     "admin.posts",

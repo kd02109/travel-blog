@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { argon2id, argon2Verify } from "npm:hash-wasm@4.12.0";
+import { corsHeaders, corsOriginAllowed, parseAllowedOrigins } from "./cors.ts";
 import {
   ApiError,
   databaseError,
@@ -41,13 +42,9 @@ const hmac = async (s: string) =>
   );
 const sha = async (s: string) =>
   hex(await crypto.subtle.digest("SHA-256", encoder.encode(s)));
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, apikey, content-type, x-client-info, x-visitor-token",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Expose-Headers": "Retry-After, X-Request-Id",
-};
+const allowedCorsOrigins = parseAllowedOrigins(
+  Deno.env.get("TRAVEL_API_ALLOWED_ORIGINS") ?? "",
+);
 async function rpc(
   action: string,
   actor: string | null,
@@ -270,6 +267,8 @@ async function readJson(req: Request, maxBytes = 1100000): Promise<any> {
 }
 Deno.serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
+  const origin = req.headers.get("origin");
+  const cors = corsHeaders(origin, allowedCorsOrigins);
   const respond = (
     data: unknown,
     status = 200,
@@ -285,6 +284,9 @@ Deno.serve(async (req: Request) => {
         ...extra,
       },
     });
+  if (!corsOriginAllowed(origin, allowedCorsOrigins)) {
+    return respond({ error: "origin_not_allowed" }, 403);
+  }
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: cors });
   }
