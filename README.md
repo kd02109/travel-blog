@@ -4,7 +4,7 @@
 
 첫 공개의 검증 범위와 완료 기준은 [통합 QA 기록](docs/RELEASE-QA.ko.md)과 [운영 배포 기록](docs/PRODUCTION-RELEASE.ko.md)을 참고하세요. 날짜별 개인 개발 로드맵은 로컬에서만 관리합니다.
 
-owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 검증 범위는 [staging 기록](supabase/STAGING.ko.md)에 정리했습니다. 개인 계정의 검증 기록은 로컬에만 보관합니다.
+owner·Kakao·로그아웃·권한 회수 및 과거 격리 DB 재생의 검증 범위는 [staging 기록](supabase/STAGING.ko.md)에 정리했습니다. `travel-blog-staging`은 과거 검증 기록이며 현재 배포 대상이 아닙니다. 개인 계정의 검증 기록은 로컬에만 보관합니다.
 
 ## 실행 모드
 
@@ -46,7 +46,7 @@ pnpm --filter admin dev:supabase
 
 각 앱 디렉터리(`apps/web`, `apps/admin`)에서는 `pnpm dev:supabase`로 실행할 수 있습니다. `pnpm start`는 이전 운영 빌드를 실행하므로 개발 중에는 `dev:supabase`를 사용하세요. 실제 연결의 운영 결과를 확인하려면 `pnpm build:supabase` 후 `pnpm start:supabase`를 실행하세요.
 
-공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 예제 파일은 프로젝트 URL을 비워 두므로 `supabase/deployment.json`에서 복사하거나 사용할 개발 프로젝트 URL을 입력하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다.
+공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 단일 원격 프로젝트 정책에 따라 web/admin의 로컬 실제 연결, Vercel Preview, Production을 모두 `travel-blog`로 전환할 예정입니다. Vercel 환경변수 전환은 아직 완료되지 않았습니다. 예제 파일은 프로젝트 URL을 비워 두므로 [운영 배포 식별자](supabase/deployment.json)의 프로젝트 URL과 해당 프로젝트 publishable key를 설정하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다. 실제 연결에서 저장·발행·삭제·업로드하면 운영 데이터가 바뀝니다. 반복·파괴적 테스트는 mock이나 별도 로컬/격리 테스트 backend를 사용하세요.
 
 우선순위는 **셸 환경 변수 > 앱별 profile > 루트 profile**입니다. 값은 `$VARIABLE` 참조 없이 직접 입력하세요. 선택한 실행 명령은 `NEXT_PUBLIC_API_MOCKING` 값을 항상 덮어쓰므로 `.env.local`이나 셸에 남은 플래그 때문에 모드가 뒤바뀌지 않습니다. 기존 `.env.local`의 Supabase 연결 값은 profile 파일로 옮겨 주세요. Next는 그 외 일반 환경 변수를 기존 방식으로 읽습니다.
 
@@ -106,13 +106,13 @@ pnpm db:stop
 
 ### Supabase
 
-루트 또는 앱별 `.env.supabase.local`에 URL과 publishable key를 입력합니다. 서로 다른 개발/운영 프로젝트를 사용하세요. Supabase Auth에 각 앱의 `/auth/callback` URL을 등록하고 Kakao provider를 활성화합니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
+루트 또는 앱별 `.env.supabase.local`에 `travel-blog` URL과 publishable key를 입력합니다. Vercel Preview/Production의 web/admin도 같은 Supabase 프로젝트를 사용하도록 설정할 예정입니다. 현재 Vercel 환경변수의 전환은 미완료입니다. Supabase Auth에 localhost와 각 배포 도메인의 정확한 `/auth/callback` URL을 등록하고 Site URL을 운영 web 도메인으로 지정해야 합니다. 현재 원격에는 localhost 3000·3002 callback만 등록돼 있어 배포 도메인의 OAuth는 미검증입니다. Kakao provider는 활성화돼 있습니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
 
 `GET /api/health`는 앱 상태만 반환합니다. `GET /api/site`는 기존 Edge API의 `site.get`을 호출합니다. 미설정은 503, upstream 실패는 502로 구분합니다. 인증·API 요청은 캐시하지 않습니다. 범용 API 요청 함수의 응답은 `unknown`이므로 각 action을 추가할 때 Zod 응답 검증을 붙이세요. 쓰기 요청은 자동 재시도하지 않습니다.
 
 ### 자체 오류 모니터링
 
-Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전을 staging에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증은 [통합 QA 기록](docs/RELEASE-QA.ko.md)과 [운영 배포 기록](docs/PRODUCTION-RELEASE.ko.md)을 따릅니다.
+Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전의 권한·마스킹을 로컬/격리 테스트와 단일 원격 canary에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증은 [통합 QA 기록](docs/RELEASE-QA.ko.md)과 [운영 배포 기록](docs/PRODUCTION-RELEASE.ko.md)을 따릅니다.
 
 ### Firebase / GA4
 
