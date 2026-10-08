@@ -9,9 +9,10 @@ const nextConfig = {
       "../../packages/media-worker/node_modules/pdfjs-dist/standard_fonts/**/*",
     ],
   },
-  // Keep native Canvas and PDF.js as Node dependencies; bundling the platform
-  // binary makes webpack try to parse a .node file as JavaScript.
-  serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist"],
+  // Keep native Canvas on Node's resolver; bundling its platform binary makes
+  // webpack parse a .node file. PDF.js stays bundled because the client reader
+  // references its ESM worker through new URL(..., import.meta.url).
+  serverExternalPackages: ["@napi-rs/canvas"],
   // Maps are generated only for a local isolated archive build. Vercel builds
   // never emit browser source maps until a durable private uploader exists.
   productionBrowserSourceMaps:
