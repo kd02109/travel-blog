@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import Link from "next/link";
-import { captureException } from "@sentry/nextjs";
+import { reportAdminError } from "../lib/error-monitor";
 import { ErrorState } from "@repo/ui/feedback";
 
 export default function Error({
@@ -13,7 +13,14 @@ export default function Error({
   reset: () => void;
 }) {
   useEffect(() => {
-    captureException(error);
+    // Next already reports server-render errors with this digest.
+    if (error.digest) return;
+    void reportAdminError(
+      error,
+      "render_boundary",
+      "browser",
+      window.location.pathname,
+    );
   }, [error]);
 
   return (

@@ -25,6 +25,183 @@ export function databaseError(error: { code?: string; message?: string }) {
         : "invalid_or_conflicting_input";
   return new ApiError(status, message);
 }
+/** Map the public error envelope to the SQL function's strict allowlist. */
+export function errorCaptureSqlInput(
+  siteId: string,
+  report: {
+    app: string;
+    environment: string;
+    source: string;
+    route: string;
+    error_name: string;
+    code: string;
+    release: string;
+    masked_message?: string | null;
+    masked_stack?: string | null;
+    operation?: string | null;
+    dependency?: ErrorDependency | null;
+    http_status?: number | null;
+    origin_request_id?: string | null;
+    stack_frames?: ErrorStackFrame[];
+  },
+  fingerprint: string,
+  requestId: string,
+) {
+  return {
+    site_id: siteId,
+    app: report.app,
+    environment: report.environment,
+    source: report.source,
+    route: report.route,
+    error_name: report.error_name,
+    message: report.code,
+    fingerprint,
+    release: report.release,
+    request_id: requestId,
+    ...(report.masked_message !== undefined
+      ? { masked_message: report.masked_message }
+      : {}),
+    ...(report.masked_stack !== undefined
+      ? { masked_stack: report.masked_stack }
+      : {}),
+    operation: report.operation ?? null,
+    dependency: report.dependency ?? null,
+    http_status: report.http_status ?? null,
+    origin_request_id: report.origin_request_id ?? null,
+    stack_frames: report.stack_frames ?? [],
+  };
+}
+
+export type ErrorDependency =
+  | "travel_api"
+  | "supabase_auth"
+  | "supabase_storage"
+  | "next_server"
+  | "browser"
+  | "other";
+
+export type ErrorStackFrame = {
+  function_name: string | null;
+  file: string;
+  line: number;
+  column: number;
+};
+
+const errorSourcePrefixes = [
+  "_next/static/chunks/",
+  ".next/server/",
+  "apps/web/",
+  "apps/admin/",
+  "packages/",
+  "app/",
+  "pages/",
+  "src/",
+];
+
+/** Validate low-cardinality context and path-free stack locations. */
+export function validatedErrorContext(input: Record<string, unknown>): {
+  operation: string | null;
+  dependency: ErrorDependency | null;
+  http_status: number | null;
+  origin_request_id: string | null;
+  stack_frames: ErrorStackFrame[];
+} {
+  const invalid = () => {
+    throw new ApiError(400, "invalid_error_report");
+  };
+  const optionalString = (value: unknown, pattern: RegExp) => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !pattern.test(value)) invalid();
+    return value as string;
+  };
+  const operation = optionalString(input.operation, /^[a-z][a-z0-9_.-]{0,63}$/);
+  const dependency = optionalString(
+    input.dependency,
+    /^(travel_api|supabase_auth|supabase_storage|next_server|browser|other)$/,
+  ) as ErrorDependency | null;
+  const origin_request_id = optionalString(
+    input.origin_request_id,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  );
+  const http_status = input.http_status === undefined || input.http_status === null
+    ? null
+    : input.http_status;
+  if (
+    http_status !== null &&
+    (!Number.isInteger(http_status) || (http_status as number) < 100 ||
+      (http_status as number) > 599)
+  ) invalid();
+  const stack_frames = input.stack_frames === undefined || input.stack_frames === null
+    ? []
+    : input.stack_frames;
+  if (!Array.isArray(stack_frames) || stack_frames.length > 10) invalid();
+  for (const frame of stack_frames as unknown[]) {
+    if (!frame || typeof frame !== "object" || Array.isArray(frame)) invalid();
+    const data = frame as Record<string, unknown>;
+    const file = data.file;
+    if (
+      Object.keys(data).length !== 4 ||
+      Object.keys(data).some((key) =>
+        !["function_name", "file", "line", "column"].includes(key)
+      ) ||
+      (data.function_name !== null &&
+        (typeof data.function_name !== "string" ||
+          !/^[A-Za-z0-9_$<>.-]{1,80}$/.test(data.function_name))) ||
+      typeof file !== "string" ||
+      !/^[A-Za-z0-9_./-]{1,160}$/.test(file) ||
+      file.startsWith("/") || file.includes("..") ||
+      file.includes("//") ||
+      !errorSourcePrefixes.some((prefix) => file.startsWith(prefix)) ||
+      !Number.isInteger(data.line) || (data.line as number) < 1 ||
+      (data.line as number) > 10_000_000 ||
+      !Number.isInteger(data.column) || (data.column as number) < 1 ||
+      (data.column as number) > 10_000_000
+    ) invalid();
+  }
+  return {
+    operation,
+    dependency,
+    http_status: http_status as number | null,
+    origin_request_id,
+    stack_frames: stack_frames as ErrorStackFrame[],
+  };
+}
+
+/** Re-mask diagnostic text at the trusted gateway boundary. */
+export function maskedDiagnosticText(
+  value: unknown,
+  maximumLength: number,
+): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || value.length > maximumLength) {
+    throw new ApiError(400, "invalid_error_report");
+  }
+  const masked = value
+    .replace(/\x1b\[[0-9;]*m/g, "")
+    .replace(/[\x00-\x09\x0b-\x1f\x7f]/g, " ")
+    .replace(
+      /\b(?:authorization|proxy-authorization|set-cookie|cookie)\s*[:=]\s*[^\r\n]+/gi,
+      "[credential]",
+    )
+    .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*/gi, "[credential]")
+    .replace(/\b(?:https?|wss?|file):\/\/[^\s<>"'`)}\]]+/gi, "[url]")
+    .replace(/\b[A-Z]:\\(?:Users|Documents and Settings)\\[^\s):]+/gi, "[path]")
+    .replace(/\/(?:Users|home|workspace|root|private|var|tmp)\/[^\s):]+/g, "[path]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
+    .replace(
+      /\b(?:sb_(?:secret|publishable|service_role|anon)_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g,
+      "[credential]",
+    )
+    .replace(
+      /\b(?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|api[_-]?key|client[_-]?secret|auth[_-]?code|code|state|signature|session(?:_id)?)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi,
+      "[credential]",
+    )
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[id]")
+    .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[opaque]")
+    .trim();
+  return masked || null;
+}
 export const publicActions = new Set([
   "site.get",
   "posts.list",
@@ -32,6 +209,7 @@ export const publicActions = new Set([
   "comments.list",
   "asset.access",
   "visitor.create",
+  "error.capture",
 ]);
 export const guestActions = new Set([
   "comment.create",
@@ -69,6 +247,8 @@ export const memberActions = new Set([
   "admin.reports",
   "admin.report.resolve",
   "admin.audit",
+  "admin.errors",
+  "admin.error.get",
   "asset.create",
   "asset.complete",
   "asset.status",

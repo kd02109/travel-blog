@@ -20,6 +20,8 @@ export const readActions = [
   "admin.account.deletions",
   "admin.reports",
   "admin.audit",
+  "admin.errors",
+  "admin.error.get",
 ] as const satisfies readonly ApiAction[];
 export type ReadAction = (typeof readActions)[number];
 export type MutationAction = Exclude<ApiAction, ReadAction>;

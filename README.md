@@ -66,7 +66,7 @@ pnpm --filter admin dev:supabase
 | `packages/database`          | 기존 생성 DB 타입, Supabase browser/server/proxy 클라이언트          |
 | `packages/api-client`        | Axios travel-api 클라이언트, 오류 타입, TanStack Query provider/keys |
 | `packages/editor`            | 한국어 BlockNote + shadcn, 클라이언트 전용 편집/미리보기             |
-| `packages/observability`     | 공통 Sentry 초기화 옵션·민감 필드 제거                               |
+| `packages/observability`     | 자체 오류 수집 봉투·서버 릴레이·민감 정보 최소화                     |
 | `packages/analytics`         | 동의 기반 Firebase Analytics 초기화·페이지뷰                         |
 | `packages/eslint-config`     | ESLint flat config, TypeScript/React/Next 규칙                       |
 | `packages/typescript-config` | 공통 TypeScript 설정                                                 |
@@ -110,15 +110,15 @@ pnpm db:stop
 
 `GET /api/health`는 앱 상태만 반환합니다. `GET /api/site`는 기존 Edge API의 `site.get`을 호출합니다. 미설정은 503, upstream 실패는 502로 구분합니다. 인증·API 요청은 캐시하지 않습니다. 범용 API 요청 함수의 응답은 `unknown`이므로 각 action을 추가할 때 Zod 응답 검증을 붙이세요. 쓰기 요청은 자동 재시도하지 않습니다.
 
-### Sentry
+### 자체 오류 모니터링
 
-web/admin에 각각 DSN을 넣으면 browser/server/edge 오류 수집이 활성화됩니다. CI에만 `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`를 설정하면 소스맵 업로드를 사용할 수 있습니다. 기본 PII 수집·Replay·트레이스는 끄고, 요청 본문·헤더·쿠키·query·user·extra·breadcrumbs를 제거합니다. 오류 메시지 자체에 개인정보를 넣지 마세요. 실제 DSN 전송과 업로드 검증은 프로젝트 연결 후 수행합니다.
+Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전을 staging에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증은 [ROADMAP](ROADMAP.ko.md) 8–10단계를 따릅니다.
 
 ### Firebase / GA4
 
 web에만 Firebase web app config와 measurement ID를 입력하고 `NEXT_PUBLIC_ANALYTICS_ENABLED=true`로 설정합니다. 화면에서 동의한 뒤에만 SDK 수집을 시작하며 동의를 끄면 중지합니다. 동의는 현재 화면 세션의 메모리에만 유지합니다. 관리자에는 Analytics를 넣지 않습니다.
 
-수동 route page_view를 사용하므로 **GA4 웹 스트림의 향상된 측정에서 페이지 로드/브라우저 기록 기반 페이지뷰를 끄고** DebugView로 중복 여부를 확인하세요. 운영 배포에서만 활성화하고 개발·preview에는 false를 유지합니다. URL query/hash를 이벤트에서 제외합니다. GA4 Data API 운영 통계 화면과 Sentry REST 운영 화면은 후속 기능입니다.
+수동 route page_view를 사용하므로 **GA4 웹 스트림의 향상된 측정에서 페이지 로드/브라우저 기록 기반 페이지뷰를 끄고** DebugView로 중복 여부를 확인하세요. 운영 배포에서만 활성화하고 개발·preview에는 false를 유지합니다. URL query/hash를 이벤트에서 제외합니다. 현재 동의 컴포넌트는 홈에서만 렌더링되므로 전역 페이지 추적과 동의 저장·철회는 아직 구현해야 합니다. GA4 Data API 운영 통계 화면은 후속 기능입니다.
 
 ### 에디터 / UI
 
@@ -132,9 +132,9 @@ shadcn 구성은 `packages/ui/components.json`에 있습니다. 두 앱에서 `@
 - `.env.local`·Supabase 로컬 상태·테스트 산출물은 Git에서 제외합니다. `.env.example`만 공유합니다.
 - Turbo는 NEXT_PUBLIC 변수를 build hash에 포함합니다. 배포 공개 변수 변경 후 재빌드하세요.
 - formatter는 기존 별도 작업인 supabase/docs/DESIGN을 자동 변경하지 않습니다.
-- 프런트엔드 기반 설정 완료와 실제 서비스 운영 검증은 별개입니다. OAuth 실로그인, RLS 통합, Sentry 전송, Firebase DebugView는 실제 프로젝트 자격 정보가 필요합니다.
+- 프런트엔드 기반 설정 완료와 실제 서비스 운영 검증은 별개입니다. OAuth 실로그인, RLS 통합, 자체 오류 수집, Firebase DebugView는 실제 프로젝트 자격 정보가 필요합니다.
 
-공식 참고: [Supabase SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [BlockNote shadcn](https://www.blocknotejs.org/docs/getting-started/shadcn), [Sentry Next.js](https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/), [Firebase Analytics](https://firebase.google.com/docs/analytics/web/get-started).
+공식 참고: [Supabase SSR](https://supabase.com/docs/guides/auth/server-side/creating-a-client), [BlockNote shadcn](https://www.blocknotejs.org/docs/getting-started/shadcn), [Next.js instrumentation](https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation), [Firebase Analytics](https://firebase.google.com/docs/analytics/web/get-started).
 
 ## Penpot 설계 기반 MirageJS 개발 환경
 

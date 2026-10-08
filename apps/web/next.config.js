@@ -1,6 +1,13 @@
-import { withSentryConfig } from "@sentry/nextjs/config";
 const nextConfig = {
   distDir: process.env.TRAVEL_NEXT_DIST_DIR || ".next",
+  // Maps are generated only for a local isolated archive build. Vercel builds
+  // never emit browser source maps until a durable private uploader exists.
+  productionBrowserSourceMaps:
+    process.env.TRAVEL_PRIVATE_SOURCE_MAP_BUILD === "1" &&
+    /^\.next-test-private-maps-[a-zA-Z0-9]+$/.test(
+      process.env.TRAVEL_NEXT_DIST_DIR || "",
+    ) &&
+    !process.env.VERCEL,
   transpilePackages: [
     "@repo/ui",
     "@repo/editor",
@@ -12,9 +19,4 @@ const nextConfig = {
     "@repo/pdf-reader",
   ],
 };
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
-});
+export default nextConfig;
