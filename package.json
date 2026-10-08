@@ -27,6 +27,7 @@
     "media:worker:docker:run": "pnpm --filter @repo/media-worker docker:run",
     "test:mock": "pnpm test && pnpm test:e2e:mock",
     "test:supabase": "node scripts/test-supabase.mjs",
+    "test:staging:api": "node --test supabase/tests/http_test.ts",
     "test:auth:kakao": "node scripts/test-kakao.mjs",
     "test:auth:local": "node scripts/test-auth-local.mjs",
     "test:config": "node --test scripts/environment.test.mjs scripts/private-source-maps.test.mjs",
