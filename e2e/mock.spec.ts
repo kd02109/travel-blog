@@ -1,6 +1,16 @@
 import { expect, test } from "@playwright/test";
 const site_id = "10000000-0000-4000-8000-000000000001";
 
+test("public home shows its categories with fixture data", async ({ page }) => {
+  await page.goto("/");
+  await expect(
+    page.getByRole("heading", { name: "오늘도 함께 걷다", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "여행 일정표" }),
+  ).toBeVisible();
+});
+
 test("mock mode does not bypass administrator login", async ({ page }) => {
   await page.goto("http://localhost:3012/posts");
   await expect(page).toHaveURL("http://localhost:3012/login");

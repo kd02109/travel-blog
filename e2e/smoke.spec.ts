@@ -1,11 +1,8 @@
 import { test, expect } from "@playwright/test";
-test("public categories and health", async ({ page, request }) => {
-  await page.goto("/");
+test("static public notice and health endpoint", async ({ page, request }) => {
+  await page.goto("/notice");
   await expect(
-    page.getByRole("heading", { name: "오늘도 함께 걷다", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "여행 일정표" }),
+    page.getByRole("heading", { name: "저작권 및 이용 안내" }),
   ).toBeVisible();
   expect((await request.get("/api/health")).ok()).toBeTruthy();
 });
