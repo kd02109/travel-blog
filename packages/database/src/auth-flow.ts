@@ -71,6 +71,70 @@ function loginErrorPath(error: string, next: string) {
   return `/login?${query.toString()}`;
 }
 
+const returnCookieName = "travel_oauth_return";
+
+function returnCookie(request: Request, value: string, maxAge: number) {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `${returnCookieName}=${value}; Path=/auth/callback; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${secure}`;
+}
+
+/** Keep the destination on this origin so OAuth can use an exact callback URL. */
+export async function rememberOAuthReturn(request: Request) {
+  const headers = { "Cache-Control": "private, no-store" };
+  if (
+    request.method !== "POST" ||
+    request.headers.get("origin") !== new URL(request.url).origin
+  )
+    return new Response("Forbidden", { status: 403, headers });
+  try {
+    const body: unknown = await request.json();
+    if (
+      !body ||
+      typeof body !== "object" ||
+      !("next" in body) ||
+      typeof body.next !== "string"
+    )
+      return new Response("Invalid destination", { status: 400, headers });
+    const value = encodeURIComponent(safeReturnPath(body.next));
+    // Leave room for the cookie attributes within browser cookie size limits.
+    if (value.length > 3000)
+      return new Response("Destination too long", { status: 400, headers });
+    return new Response(null, {
+      status: 204,
+      headers: { ...headers, "Set-Cookie": returnCookie(request, value, 600) },
+    });
+  } catch {
+    return new Response("Invalid destination", { status: 400, headers });
+  }
+}
+
+function rememberedOAuthReturn(request: Request) {
+  const cookie = request.headers
+    .get("cookie")
+    ?.split(";")
+    .find((part) => part.trim().startsWith(`${returnCookieName}=`));
+  try {
+    return safeReturnPath(
+      decodeURIComponent(
+        cookie?.trim().slice(returnCookieName.length + 1) ?? "",
+      ),
+    );
+  } catch {
+    return "/";
+  }
+}
+
+export async function handleRememberedCallback(
+  request: Request,
+  createClient: () => Promise<AuthClient>,
+) {
+  const response = await handleCallback(request, createClient, {
+    returnPath: rememberedOAuthReturn(request),
+  });
+  response.headers.append("Set-Cookie", returnCookie(request, "", 0));
+  return response;
+}
+
 function oauthCallbackFailure(error: string, errorCode: string | null) {
   if (errorCode === "provider_email_needs_verification") return "oauth_email";
   if (errorCode === "user_banned" || errorCode === "signup_disabled")
@@ -120,9 +184,10 @@ function oauthExchangeFailure(error: unknown) {
 export async function handleCallback(
   request: Request,
   createClient: () => Promise<AuthClient>,
+  { returnPath }: { returnPath?: string } = {},
 ) {
   const params = new URL(request.url).searchParams;
-  const next = safeReturnPath(params.get("next"));
+  const next = safeReturnPath(returnPath ?? params.get("next"));
   const error = params.get("error");
   if (error)
     return redirect(
