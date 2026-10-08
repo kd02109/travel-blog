@@ -42,6 +42,7 @@ yarn-error.log*
 # Local assistant instructions and design drafts
 AGENTS.md
 CLAUDE.md
+ROADMAP.ko.md
 .agents/
 .claude/
 .codex/
@@ -50,7 +51,11 @@ CLAUDE.md
 AUTH-VERIFICATION.ko.md
 DESIGN.md
 docs/*
+# Private, date-based implementation notes for a future development blog.
+docs/local-development-log/
 !docs/media-worker-vercel-supabase.ko.md
+!docs/RELEASE-QA.ko.md
+!docs/PRODUCTION-RELEASE.ko.md
 apps/admin/app/error-analytics-preview/
 pdf/
 # Local services and test artifacts
