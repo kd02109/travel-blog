@@ -1,0 +1,177 @@
+{
+  "project_id": "bnfihijsquvvkneoutie",
+  "project_url": "https://bnfihijsquvvkneoutie.supabase.co",
+  "site_id": "7b83105e-7198-4391-a6d2-4bf503d1dacf",
+  "site_slug": "parents-travel",
+  "edge_function": "travel-api",
+  "edge_function_version": 1,
+  "migration_history": "MCP-generated staging versions differ from 32 local filenames; do not run db push until repaired with an approved supported method.",
+  "migrations": [
+    {
+      "name": "travel_blog_lean_schema",
+      "source_version": "20260919045332",
+      "staging_version": "20260919045332"
+    },
+    {
+      "name": "travel_blog_api",
+      "source_version": "20260919045612",
+      "staging_version": "20261008050956"
+    },
+    {
+      "name": "travel_blog_gateway_auth",
+      "source_version": "20260919045752",
+      "staging_version": "20261008051108"
+    },
+    {
+      "name": "travel_blog_worker",
+      "source_version": "20260919050109",
+      "staging_version": "20261008051114"
+    },
+    {
+      "name": "travel_blog_hardening",
+      "source_version": "20260919050250",
+      "staging_version": "20261008051120"
+    },
+    {
+      "name": "travel_blog_initial_owner",
+      "source_version": "20260919050407",
+      "staging_version": "20261008051128"
+    },
+    {
+      "name": "environment_owner_bootstrap",
+      "source_version": "20260926114006",
+      "staging_version": "20261008051138"
+    },
+    {
+      "name": "media_worker_typescript_and_cleanup",
+      "source_version": "20260926125949",
+      "staging_version": "20261008051145"
+    },
+    {
+      "name": "media_queue_monitoring",
+      "source_version": "20260926130458",
+      "staging_version": "20261008051152"
+    },
+    {
+      "name": "media_retry_attempt_reset",
+      "source_version": "20260926130921",
+      "staging_version": "20261008051157"
+    },
+    {
+      "name": "safe_media_cleanup_quarantine",
+      "source_version": "20260926132928",
+      "staging_version": "20261008051213"
+    },
+    {
+      "name": "admin_post_listing_filters",
+      "source_version": "20260926141221",
+      "staging_version": "20261008051218"
+    },
+    {
+      "name": "fix_admin_post_listing_filters",
+      "source_version": "20260926141325",
+      "staging_version": "20261008051223"
+    },
+    {
+      "name": "grant_asset_reference_guard_service",
+      "source_version": "20260926141533",
+      "staging_version": "20261008051229"
+    },
+    {
+      "name": "guard_media_asset_profile_reference_branch",
+      "source_version": "20260926141623",
+      "staging_version": "20261008051234"
+    },
+    {
+      "name": "reader_like_lookup",
+      "source_version": "20260926233103",
+      "staging_version": "20261008051246"
+    },
+    {
+      "name": "admin_comment_inbox",
+      "source_version": "20260926233711",
+      "staging_version": "20261008051251"
+    },
+    {
+      "name": "reader_account_requests",
+      "source_version": "20260926234510",
+      "staging_version": "20261008051301"
+    },
+    {
+      "name": "account_deletion_service_policy",
+      "source_version": "20260926234744",
+      "staging_version": "20261008051309"
+    },
+    {
+      "name": "grant_media_cleanup_helper_to_worker",
+      "source_version": "20260930065316",
+      "staging_version": "20261008051314"
+    },
+    {
+      "name": "post_revision_workflow",
+      "source_version": "20261006010000",
+      "staging_version": "20261008051326"
+    },
+    {
+      "name": "revision_body_excerpts",
+      "source_version": "20261006020000",
+      "staging_version": "20261008051332"
+    },
+    {
+      "name": "multi_photo_home_covers",
+      "source_version": "20261006111154",
+      "staging_version": "20261008051339"
+    },
+    {
+      "name": "home_cover_cleanup_candidates",
+      "source_version": "20261006111221",
+      "staging_version": "20261008051347"
+    },
+    {
+      "name": "asset_library",
+      "source_version": "20261006122920",
+      "staging_version": "20261008051352"
+    },
+    {
+      "name": "delete_unused_asset",
+      "source_version": "20261006130357",
+      "staging_version": "20261008051402"
+    },
+    {
+      "name": "pdf_asset_library",
+      "source_version": "20261007074250",
+      "staging_version": "20261008051409"
+    },
+    {
+      "name": "admin_comment_inbox_filters",
+      "source_version": "20261007074943",
+      "staging_version": "20261008051417"
+    },
+    {
+      "name": "admin_post_publication_links",
+      "source_version": "20261007075451",
+      "staging_version": "20261008051423"
+    },
+    {
+      "name": "web_error_monitoring",
+      "source_version": "20261007114242",
+      "staging_version": "20261008051434"
+    },
+    {
+      "name": "web_error_masked_details",
+      "source_version": "20261007130601",
+      "staging_version": "20261008051440"
+    },
+    {
+      "name": "web_error_safe_context",
+      "source_version": "20261007131630",
+      "staging_version": "20261008051446"
+    },
+    {
+      "name": "media_serverless_claim_retry",
+      "source_version": "20261008013658",
+      "staging_version": "20261008051452"
+    }
+  ],
+  "verified_at": "2026-10-08 05:18:43 UTC"
+}

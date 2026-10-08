@@ -1,6 +1,6 @@
 # 최종 배포까지의 작업 목록
 
-기준일: 2026-10-08. 구현 상태는 이 브랜치의 기능별 커밋과 실제 원격 이력을 구분해 기록한다. 기존 Supabase `travel-blog`의 migration 33개가 `20261008013658`까지 모두 적용됐고, 배포된 `travel-api`는 v19다. 로컬의 새 오류 수집 Edge 코드는 아직 배포하지 않았다. 별도 `travel-blog-staging` 프로젝트를 생성했지만 전체 migration 재생과 종단 검증은 진행 중이다. `[x]`는 코드 구현 또는 해당 줄에 기록된 검증을 완료했다는 뜻이며, staging/운영 검증이 필요한 항목은 별도로 남긴다.
+기준일: 2026-10-08. 구현 상태는 이 브랜치의 기능별 커밋과 실제 원격 이력을 구분해 기록한다. 기존 Supabase `travel-blog`의 migration 33개가 `20261008013658`까지 모두 적용됐고, 배포된 `travel-api`는 v19다. 로컬의 새 오류 수집 Edge 코드는 운영에 아직 배포하지 않았다. 별도 `travel-blog-staging`에는 migration 33개와 `travel-api` v1을 적용하고 SQL·HTTP 권한 검사를 마쳤다. 실제 카카오 owner 로그인·파일 변환·Vercel Preview 종단 검증은 남아 있다. `[x]`는 코드 구현 또는 해당 줄에 기록된 검증을 완료했다는 뜻이며, staging/운영 검증이 필요한 항목은 별도로 남긴다.
 
 ## 현재 출발점
 
@@ -15,7 +15,7 @@
 
 2026-10-08 코드 상태: 작성기 공개 미리보기·수정 이력 UI, 자체 오류 관측, 미디어 1회 처리 Function/Cron을 기능별 커밋으로 정리했다. `pnpm check`는 통과했다. 실제 환경의 기능 검증과 PR 병합은 별개다. 연결된 `travel-blog`의 migration 33개는 원격 적용됐지만, 새 오류 수집 Edge 코드는 배포 전인 v19다. 원격 버전과 migration 목록을 `supabase/deployment.json`에 기록했다.
 
-2026-10-08 미디어 이행 상태: Docker worker의 처리 함수를 1회 실행 가능한 모듈로 분리하고 관리자 Node Function·보호된 경로·매분 Cron 설정과 큐/정리 lease 보정 migration을 추가했다. 관련 함수 테스트와 PostgreSQL 17 격리 테스트는 통과했고, 미디어 migration은 기존 `travel-blog` 원격에 적용됐다. 전체 staging migration 재생, 실제 Storage API 삭제와 Vercel Preview native 빌드/파일 변환은 별개다. 연결된 Vercel 계정에는 `travel-blog` web/admin 프로젝트가 보이지 않았다. [전환·운영 가이드](docs/media-worker-vercel-supabase.ko.md).
+2026-10-08 미디어 이행 상태: Docker worker의 처리 함수를 1회 실행 가능한 모듈로 분리하고 관리자 Node Function·보호된 경로·매분 Cron 설정과 큐/정리 lease 보정 migration을 추가했다. 관련 함수 테스트와 PostgreSQL 17 격리 테스트는 통과했다. 미디어 migration은 기존 `travel-blog`와 신규 staging에 적용됐고, staging에서 lease·참조 fencing rollback SQL을 통과했다. 실제 Storage API 삭제와 Vercel Preview native 빌드/파일 변환은 별개다. 연결된 Vercel 계정에는 `travel-blog` web/admin 프로젝트가 보이지 않았다. [전환·운영 가이드](docs/media-worker-vercel-supabase.ko.md).
 
 **현재 배포를 막는 핵심은 staging에서 최신 DB/API와 media-worker를 함께 검증하고 두 Vercel 프로젝트와 Supabase SaaS를 실제로 연결하는 일이다.** 코드상 OAuth와 API 흐름, Docker 및 Vercel 1회 처리 경로가 마련됐지만 최신 migration 배포 기록·실제 파일 처리·정리 재시도는 staging에서 다시 확인해야 한다. Mock 통과만으로 OAuth·Storage·RLS·파일 변환의 정상 동작을 판단할 수 없다.
 
@@ -50,7 +50,9 @@
 - [x] 로그인 취소·실패·세션 만료·로그아웃·관리자 권한 없음 화면을 연결하고, 권한 회수 후 재요청이 거절되는지 확인한다.
 - [x] 빈 로컬 또는 격리된 staging DB에 migration 전체를 재생한다. 기존 관리 함수 의존성과 초기 owner 설정을 점검하고 환경별 bootstrap 대상을 관리한다.
 
-2026-09-26 검증: 원격 Auth의 지정 owner 이메일 인증·활성 membership 확인. 추가로 owner를 부여한 카카오 계정으로 실제 원격 Supabase에 연결한 localhost web/admin의 OAuth 로그인·각 앱 홈 복귀·세션 유지·관리자 글쓰기 접근·양쪽 로그아웃 후 접근 차단까지 확인했다. localhost의 두 앱은 포트가 달라도 인증 쿠키를 공유한다. 격리 DB에서 전체 migration 7개, SQL 4개와 실제 Auth/Edge를 사용하는 앱 권한·세션 만료·로그아웃 검증 통과. 사용자 요청에 따라 localhost 검증을 완료 처리하고, 배포 도메인별 callback/로그아웃 검증은 별도 미완료 항목으로 분리했다. 상세 결과와 재현 절차는 로컬 전용 검증 기록에 보관한다.
+2026-09-26 검증: 원격 Auth의 지정 owner 이메일 인증·활성 membership 확인. 추가로 owner를 부여한 카카오 계정으로 실제 원격 Supabase에 연결한 localhost web/admin의 OAuth 로그인·각 앱 홈 복귀·세션 유지·관리자 글쓰기 접근·양쪽 로그아웃 후 접근 차단까지 확인했다. localhost의 두 앱은 포트가 달라도 인증 쿠키를 공유한다. 격리 DB에서 당시 전체 migration 7개, SQL 4개와 실제 Auth/Edge를 사용하는 앱 권한·세션 만료·로그아웃 검증 통과. 사용자 요청에 따라 localhost 검증을 완료 처리하고, 배포 도메인별 callback/로그아웃 검증은 별도 미완료 항목으로 분리했다. 상세 결과와 재현 절차는 로컬 전용 검증 기록에 보관한다.
+
+2026-10-08 신규 staging 검증: 빈 DB에 현재 migration 33개를 순차 적용하고 Edge v1을 배포했다. owner bootstrap 대상은 설정했으나 실제 staging Auth 가입 전이므로 membership은 없다. 초기 owner·권한 회수·오류 상세·미디어 lease 등 rollback SQL 7개, 공개 API HTTP 3개, 실제 JWT의 admin 조회 200/editor·회수자 403, 오류 수집 202를 확인했다. MCP가 32개 migration의 원격 버전을 다시 발급했으므로 정합화 전 staging `db push`는 금지한다. [검증 기록과 남은 범위](supabase/STAGING.ko.md).
 
 완료 기준: 실제 owner는 관리자에 접근하고 일반 독자는 접근하지 못하며, 빈 환경에서 DB와 API를 재현할 수 있다. 기존 운영 후보 DB에 reset이나 초기 owner 테스트 fixture를 실행하지 않는다.
 
@@ -67,7 +69,7 @@
 
 2026-09-26 나머지 5개 항목 완료: 서버 read/브라우저 mutate 분리, 세션·방문자 만료와 401/403/409/429 처리, Query 캐시·페이지·중복 제출 제어, Mirage 응답 Zod 검증과 오류 시나리오, JS 비활성 SSR 테스트를 추가했다. 기본 테스트 82개, Mirage 브라우저 7개, SSR 3개, 실제 Supabase HTTP 9개 통과. 원격 travel-api v3에는 승인된 응답 헤더 노출 한 줄만 변경했다.
 
-2026-10-07 추가 구현: PDF 자산 라이브러리, 서버 측 관리자 댓글 필터, 홈 추천 글 검색/페이지 이동, 공개 글 바로가기용 action 및 DB migration을 추가했다. 해당 migration과 Edge 변경은 저장소에 있지만 현재 배포 기록 파일이 갱신되지 않아 staging 적용 여부를 확인해야 한다.
+2026-10-07 추가 구현: PDF 자산 라이브러리, 서버 측 관리자 댓글 필터, 홈 추천 글 검색/페이지 이동, 공개 글 바로가기용 action 및 DB migration을 추가했다. 해당 migration은 기존 프로젝트와 신규 staging에 적용됐다. 최신 Edge 소스는 staging v1에서 HTTP 검사를 통과했지만 운영 Edge v19에는 아직 배포되지 않았다.
 
 완료 기준: 한 기능의 UI 코드에서 임의 샘플 데이터를 직접 참조하지 않고, 실행 모드 변경으로 동일 계약의 API를 호출한다. Mock의 탭별 초기화와 업로드 미지원 범위는 문서에 유지한다.
 
@@ -81,15 +83,15 @@
 - [x] 기존 `asset.access`로 발급하는 5분 private signed URL을 만료 전에 갱신한다. 공개 글의 파일도 private 버킷과 API 권한 확인을 거치며, 비공개 전환 전에 발급한 URL은 만료까지 유효할 수 있음을 문서화한다.
 - [x] DB migration과 worker에 7일 격리·참조 fencing·Storage API 삭제·최종 참조 재검사 설계를 추가하고 Supabase에 적용한다.
 - [x] Docker polling의 변환/정리 함수를 `@repo/media-worker/processor`의 1회 실행으로 분리하고, 관리자 Node Function의 `CRON_SECRET`·기능 flag 검사와 Vercel Cron 설정을 로컬 코드에 추가한다. 기존 Docker 실행은 fallback으로 유지한다.
-- [x] 새 migration에서 미디어 claim을 `process_asset`으로 제한하고 만료된 삭제 lease의 재획득과 참조 재검사를 추가한다. 관련 SQL을 PostgreSQL 17 격리 컨테이너에서 관련 스키마와 pgtap shim으로 검증했다. 전체 migration replay 및 원격 적용 결과로 간주하지 않는다.
+- [x] 새 migration에서 미디어 claim을 `process_asset`으로 제한하고 만료된 삭제 lease의 재획득과 참조 재검사를 추가한다. PostgreSQL 17 격리 컨테이너 테스트에 이어 전체 migration을 재생한 staging에서 rollback SQL 검사를 통과했다. 실제 파일 처리는 별도 항목으로 남긴다.
 - [ ] Supabase migration 적용 후 격리된 staging에서 미참조·참조 중·삭제 실패·lease 재시도 흐름을 검증한다. `storage.objects` 직접 SQL 삭제는 사용하지 않는다.
 - [ ] Vercel admin Preview에서 Linux native 번들·실제 고화질 이미지/PDF 변환·401/503·함수 중단/겹침을 확인하고, 운영 Cron canary 전에는 동일한 큐의 Docker polling을 중지한다. 로컬 선택 경로 webpack 빌드는 통과했지만 Preview 실행 검증은 별개다. 매분 Cron은 Pro 이상이 필요하다.
 
 2026-09-30 추가 구현: Docker build/run 명령, `.dockerignore`, 새 `sb_secret_...` 키를 `apikey`에만 사용하는 worker 인증 처리와 권한 회귀 테스트를 추가했다. 실제 worker 실행에서 `travel_media_cleanup` 403을 확인해 내부 helper의 `service_role` 실행 권한 누락을 migration으로 수정하고 원격 권한을 재확인했다. migration 적용 뒤 worker가 큐 작업을 성공 처리하는 종단 확인은 아직 없다. Docker 명령은 루트에서 `pnpm media:worker:docker:build`, `pnpm media:worker:docker:run`이다.
 
-2026-10-06–07 추가 구현: PDF 원본 보존, 기존 PDF 자산 재사용, 사용하지 않는 자산 삭제 API/화면을 보강했다. migration은 코드베이스에 추가됐고 원격/격리 staging 적용과 삭제·lease 시나리오 결과를 확인해야 한다.
+2026-10-06–07 추가 구현: PDF 원본 보존, 기존 PDF 자산 재사용, 사용하지 않는 자산 삭제 API/화면을 보강했다. migration은 기존 프로젝트와 신규 staging에 적용됐다. Staging DB의 삭제·lease SQL은 통과했지만 실제 Storage 객체 삭제는 미검증이다.
 
-구현 상태: 관리자 업로드 UI, TypeScript 변환, 취소 API, private signed URL viewer/갱신, Docker 실행과 Vercel 1회 Function/Cron 코드, 격리·재검증 정리 로직을 마련했다. 새 migration은 부분 스키마 격리 SQL 테스트만 통과했으며 원격 적용, 전체 migration 재생, 실제 Storage 삭제와 파일 종단 검증은 남아 있다. Vercel Function/Cron 코드를 실제 배포·운영 완료로 계산하지 않는다. [세부 배포 순서](docs/media-worker-vercel-supabase.ko.md).
+구현 상태: 관리자 업로드 UI, TypeScript 변환, 취소 API, private signed URL viewer/갱신, Docker 실행과 Vercel 1회 Function/Cron 코드, 격리·재검증 정리 로직을 마련했다. 기존 프로젝트·staging migration 적용과 staging SQL 검사는 완료했다. 실제 Storage 삭제와 사진/PDF 종단 검증은 남아 있으며, Vercel Function/Cron 코드를 배포·운영 완료로 계산하지 않는다. [세부 배포 순서](docs/media-worker-vercel-supabase.ko.md).
 
 ## 4. 디자인 시스템과 화면 골격 — P1
 
@@ -272,24 +274,24 @@ Sentry가 제공하던 핵심은 브라우저/서버 예외 수집, 같은 오�
 
 ### 9-1. 배포 대상과 현재 차이
 
-| 대상                | 첫 배포 목표                                            | 현재 코드/연결 상태                                                                               |
-| ------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| 공개 web `apps/web` | Vercel Project A, 공개 canonical 도메인                 | Next.js 앱/monorepo build 존재; Vercel 프로젝트·실도메인 연결은 검증되지 않음                     |
-| 관리자 `apps/admin` | Vercel Project B, 별도 도메인·접근 보호                 | Next.js 앱과 Auth role 검사 존재; Vercel 연결/운영 접근 정책은 미검증                             |
-| Supabase SaaS       | staging/production 분리 DB/Auth/Storage/`travel-api`    | 연결된 `travel-blog`에 오류 SQL까지 적용. Edge는 v19이고 새 수집 코드는 미배포. 별도 staging 필요 |
-| 미디어 작업         | Supabase queue + Vercel Cron → Node Function의 1회 처리 | 단일 tick·보호된 route·Cron은 로컬 코드. 새 SQL/Function 원격 미배포, native 변환 미검증          |
-| CI                  | Git 보호 브랜치와 검증, Supabase 별도 배포 job          | 로컬 검사 script는 있으나 연결된 원격 Git/CI/Vercel 자동 배포는 확인되지 않음                     |
+| 대상                | 첫 배포 목표                                            | 현재 코드/연결 상태                                                                                                               |
+| ------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 공개 web `apps/web` | Vercel Project A, 공개 canonical 도메인                 | Next.js 앱/monorepo build 존재; Vercel 프로젝트·실도메인 연결은 검증되지 않음                                                     |
+| 관리자 `apps/admin` | Vercel Project B, 별도 도메인·접근 보호                 | Next.js 앱과 Auth role 검사 존재; Vercel 연결/운영 접근 정책은 미검증                                                             |
+| Supabase SaaS       | staging/production 분리 DB/Auth/Storage/`travel-api`    | 기존 `travel-blog` DB migration 33개·Edge v19. 신규 staging DB 33개·Edge v1과 SQL/HTTP 검증 완료. 운영 Edge 오류 수집 코드 미배포 |
+| 미디어 작업         | Supabase queue + Vercel Cron → Node Function의 1회 처리 | staging SQL claim·lease 검사 통과. 보호된 Function/Cron은 로컬 코드이며 Preview native 변환 미검증                                |
+| CI                  | Git 보호 브랜치와 검증, Supabase 별도 배포 job          | GitHub 원격·첫 기능별 PR 연결. CI/브랜치 보호·Vercel 자동 배포는 아직 검증되지 않음                                               |
 
-2026-10-07 저장소에서 `git remote -v`는 비어 있었고 Vercel 조회에서 `travel-blog` 프로젝트가 보이지 않았다. 따라서 자동 배포를 이미 연결된 것으로 간주하지 않는다. 같은 Git 저장소를 **별도 두 Vercel Project**에 연결하고 각 Root Directory를 `apps/web`, `apps/admin`으로 둔다. workspace root의 `pnpm-lock.yaml`, 공유 패키지, Node 24와 빌드 산출물이 두 프로젝트 preview에서 재현되는지 확인한다. ignored build 규칙은 공유 패키지 변경을 놓치지 않는 것을 먼저 확인한 후 적용한다. [Vercel monorepo](https://vercel.com/docs/monorepos), [Turborepo](https://vercel.com/docs/monorepos/turborepo).
+2026-10-07에는 원격 Git과 Vercel 프로젝트가 없었다. 2026-10-08에 GitHub 원격을 연결하고 기능별 변경을 PR로 올렸지만, 연결된 Vercel 계정에는 아직 `travel-blog` web/admin 프로젝트가 보이지 않는다. 같은 저장소를 **별도 두 Vercel Project**에 연결하고 각 Root Directory를 `apps/web`, `apps/admin`으로 둔다. workspace root의 `pnpm-lock.yaml`, 공유 패키지, Node 24와 빌드 산출물이 두 프로젝트 preview에서 재현되는지 확인한다. ignored build 규칙은 공유 패키지 변경을 놓치지 않는 것을 먼저 확인한 후 적용한다. [Vercel monorepo](https://vercel.com/docs/monorepos), [Turborepo](https://vercel.com/docs/monorepos/turborepo).
 
 ### 9-2. Docker polling worker를 Vercel Function으로 옮기는 순서
 
-현재 1·2단계는 로컬 코드, 큐/삭제 lease 보정은 격리 SQL 테스트까지 완료했다. 3–5단계의 실제 Vercel/Supabase 연결과 파일 종단 검증은 남아 있다. [환경변수·테스트·중지/복구 절차](docs/media-worker-vercel-supabase.ko.md).
+현재 1·2단계는 로컬 코드, 큐/삭제 lease 보정은 신규 staging SQL 테스트까지 완료했다. 3–5단계의 실제 Vercel 연결과 파일 종단 검증은 남아 있다. [환경변수·테스트·중지/복구 절차](docs/media-worker-vercel-supabase.ko.md).
 
 1. **로컬 구현:** `@repo/media-worker`의 변환·다운로드·완료/실패 로직을 **한 번 claim→최대 한 작업 처리→종료** 함수로 분리했다. 장기 polling loop와 Docker 전용 실행은 fallback으로 남겼다. 같은 production queue의 두 실행기를 동시에 켜지 않는다.
 2. **로컬 구현:** `apps/admin`에 보호된 Node Function `GET /api/internal/media-worker`와 `apps/admin/vercel.json`의 매분 Cron을 추가했다. `CRON_SECRET`을 검사한 뒤 `TRAVEL_MEDIA_WORKER_ENABLED=true`에서만 서버 전용 Supabase secret으로 RPC를 호출한다. 업로드 본문은 Function을 통과시키지 않고 브라우저→Supabase Storage signed upload를 유지한다. Function은 큐 자산을 Storage에서 읽고 결과도 Storage에 쓴다.
 3. **Preview 필요:** `sharp`, `pdfjs-dist`, `@napi-rs/canvas`의 Linux native 번들·파일 tracing·메모리·임시 디스크·함수 크기·실행시간을 실제 20MB PDF/고화질 이미지로 측정한다. 큐 lease는 5분, Function `maxDuration`은 240초, 네트워크 요청 timeout은 30초다. 실패·중단 시 재시도와 시도별 저장을 점검한다. [Vercel Function 제한](https://vercel.com/docs/functions/configuring-functions/duration).
-4. **staging/운영 검증 필요:** 기존 `travel-blog`에 적용된 새 migration을 별도 staging에도 재생하고 `process_asset`만 claim하며 만료된 삭제 lease를 재획득하는지 확인한다. Vercel Preview에서는 보호된 Function을 직접/CI로 반복 호출해 겹침·실패·재시도·적체를 검사한다. 실제 Vercel Cron 스케줄러는 production deployment에서만 호출되므로 배포 후 제한된 canary 작업으로 전달·누락·중복을 별도 확인한다. Cron을 정확히 한 번 실행 보장으로 취급하지 않고 DB lease/중복 방지를 유지한다. Vercel Hobby Cron은 하루 1회이므로 현재 매분 설정은 Pro 이상이 필요하다. [Cron 호출 대상](https://vercel.com/docs/cron-jobs), [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing), [Cron 관리/실패](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
+4. **Preview/운영 검증 필요:** 신규 staging에 migration을 전부 재생하고 `process_asset`만 claim하며 만료된 삭제 lease를 재획득하는 rollback SQL은 통과했다. Vercel Preview에서는 보호된 Function을 직접/CI로 반복 호출해 겹침·실패·재시도·적체를 검사한다. 실제 Vercel Cron 스케줄러는 production deployment에서만 호출되므로 배포 후 제한된 canary 작업으로 전달·누락·중복을 별도 확인한다. Cron을 정확히 한 번 실행 보장으로 취급하지 않고 DB lease/중복 방지를 유지한다. Vercel Hobby Cron은 하루 1회이므로 현재 매분 설정은 Pro 이상이 필요하다. [Cron 호출 대상](https://vercel.com/docs/cron-jobs), [Cron 주기·요금](https://vercel.com/docs/cron-jobs/usage-and-pricing), [Cron 관리/실패](https://vercel.com/docs/cron-jobs/manage-cron-jobs).
 5. **종단 검증 필요:** 이미지/PDF ready, 실패 후 backoff, 7일 격리, 참조 중 삭제 차단, Storage API 실패 재시도, lease 만료를 격리 staging에서 통과시킨다. production Cron canary 전에 polling 컨테이너를 중지한다. Supabase `storage.objects` 직접 SQL 삭제는 사용하지 않는다. Function 비용·실행량·큐 대기시간을 첫 주 집중 관찰한다. 현재 1분에 최대 한 작업을 처리하므로 유입량이 이를 넘거나 자산이 계속 쌓이면 정리가 밀릴 수 있다.
 
 Node Function에서 변환 시간/번들/메모리 제한을 통과하지 못하면 억지로 Edge Function으로 옮기지 않는다. 별도 Docker host는 이때의 명시적 fallback이며, 지금의 **목표 구조**에 포함하지 않는다. Supabase Edge Function은 이미지/PDF native 변환의 안전한 일괄 대체로 가정하지 않는다.
@@ -387,7 +389,7 @@ P2는 이번 배포를 늦추지 않기 위한 단계 구분이다. 최초 요�
 
 ## 바로 다음에 진행할 순서
 
-1. **staging Supabase 정합성:** 원격 이력과 갱신한 `supabase/deployment.json`을 대조했다. 새 `travel-blog-staging`에 최신 migration 전체와 `travel-api`를 적용하고 Auth/권한·오류 SQL/API·미디어 큐를 검증한다. 기존 `travel-blog` DB는 reset하지 않는다.
+1. **staging Supabase 정합성:** 최신 migration 33개·`travel-api` v1 적용과 SQL/HTTP·실제 JWT 권한 검증을 마쳤다. MCP가 생성한 원격 버전 32개를 공식 절차로 정합화하기 전에는 staging `db push`를 쓰지 않는다. 실제 owner Kakao 가입과 파일 종단 검증은 남아 있다. [staging 기록](supabase/STAGING.ko.md). 기존 `travel-blog` DB는 reset하지 않는다.
 2. **미디어 Vercel 이행:** 구현한 단일 작업 Function과 새 migration을 격리 staging/Vercel Preview에 적용해 native image/PDF 번들, 제한, 실패·lease·Storage 삭제 재시도를 통과시킨다. 실제 Cron은 production canary로 확인하고, 통과 전에는 Docker fallback만 한 실행기로 유지한다.
 3. **두 앱 preview와 도메인:** 이미 연결된 원격 Git을 Vercel web/admin 프로젝트와 연결하고 staging Supabase만 주입한다. 카카오 redirect 두 단계, GA 동의 배치, 오류 수집, sitemap/noindex, 권한 회수를 preview에서 검증한다.
 4. **운영 정책과 릴리스:** 개인정보·광고 정책, 백업/복원, 알림 담당자와 비용 상한을 정한 뒤 production 배포 순서와 rollback을 연습한다.
@@ -396,16 +398,17 @@ P2는 이번 배포를 늦추지 않기 위한 단계 구분이다. 최초 요�
 
 ## 검증 명령과 근거
 
-| 명령                  | 확인 범위                                              |
-| --------------------- | ------------------------------------------------------ |
-| `pnpm check`          | lint·타입·단위·환경 설정·포맷                          |
-| `pnpm test:mock`      | 단위 테스트와 Mirage 브라우저 시나리오                 |
-| `pnpm test:e2e`       | 기존 앱 smoke 테스트                                   |
-| `pnpm test:supabase`  | 실제 Auth 설정·Edge 상태·사이트/공개 글 읽기 전용 확인 |
-| `pnpm build:supabase` | 선택한 실제 연결 profile로 운영 빌드                   |
-| `pnpm start:supabase` | 해당 운영 빌드 실행                                    |
+| 명령                    | 확인 범위                                                         |
+| ----------------------- | ----------------------------------------------------------------- |
+| `pnpm check`            | lint·타입·단위·환경 설정·포맷                                     |
+| `pnpm test:mock`        | 단위 테스트와 Mirage 브라우저 시나리오                            |
+| `pnpm test:e2e`         | 기존 앱 smoke 테스트                                              |
+| `pnpm test:supabase`    | 실제 Auth 설정·Edge 상태·사이트/공개 글 읽기 전용 확인            |
+| `pnpm test:staging:api` | 고정된 신규 staging Edge의 공개 조회·무인증 거절·방문자 서명 검사 |
+| `pnpm build:supabase`   | 선택한 실제 연결 profile로 운영 빌드                              |
+| `pnpm start:supabase`   | 해당 운영 빌드 실행                                               |
 
-2026-10-06 마지막 확인에서 `pnpm test:supabase`는 이 작업 환경에서 `fetch failed`로 끝났다. 설정 파일 형식 검증 뒤 네트워크 요청 단계에서 실패했으며 실제 호스트 터미널에서 다시 확인해야 한다. 이 검사는 읽기 전용이고 OAuth/쓰기/업로드/운영 배포 검증을 대신하지 않는다.
+2026-10-06 `pnpm test:supabase`는 당시 샌드박스 네트워크에서 `fetch failed`였다. 2026-10-08 명시적 staging URL의 HTTP 검사 3개는 네트워크가 허용된 실행에서 통과했다. 앞의 읽기 전용 검사는 OAuth/쓰기/업로드/운영 배포 검증을 대신하지 않는다.
 
 - [프로젝트 실행·패키지 구조](README.md)
 - [Supabase 구축 상태와 남은 운영 연결](supabase/README.ko.md)

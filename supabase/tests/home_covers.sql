@@ -64,7 +64,7 @@ begin
 
  -- Each size from one to four saves as a draft, then becomes public on apply.
  for photo_count in 1..4 loop
-  select jsonb_agg(photo_id::text order by ordinal) into covers
+  select jsonb_agg(photos.photo_id::text order by photos.ordinal) into covers
   from unnest(t.photo_ids) with ordinality as photos(photo_id,ordinal)
   where ordinal<=photo_count;
   settings:=jsonb_build_object('template_id','A',
