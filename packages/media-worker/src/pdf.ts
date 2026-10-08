@@ -1,15 +1,21 @@
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const MAX_PAGES = 200;
-const standardFontDataUrl = fileURLToPath(
-  new URL(
-    "../../standard_fonts/",
-    import.meta.resolve("pdfjs-dist/legacy/build/pdf.mjs"),
+// The deployed Next.js chunk no longer has this source file's import.meta URL.
+// Both app and package font directories are included in the route file trace.
+const standardFontDataUrl = [
+  join(process.cwd(), "node_modules/pdfjs-dist/standard_fonts"),
+  join(process.cwd(), "apps/admin/node_modules/pdfjs-dist/standard_fonts"),
+  join(
+    process.cwd(),
+    "packages/media-worker/node_modules/pdfjs-dist/standard_fonts",
   ),
-);
+].find((directory) => existsSync(join(directory, "FoxitSerif.pfb")));
+if (!standardFontDataUrl) throw new Error("missing_pdf_standard_fonts");
 
 function digest(bytes: Uint8Array) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -23,7 +29,7 @@ export async function processPdf(source: Uint8Array) {
     data: source.slice(),
     stopAtErrors: true,
     isEvalSupported: false,
-    standardFontDataUrl,
+    standardFontDataUrl: `${standardFontDataUrl}/`,
   }).promise;
   try {
     if (document.numPages < 1 || document.numPages > MAX_PAGES)
