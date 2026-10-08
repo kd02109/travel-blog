@@ -54,6 +54,16 @@ pnpm --filter admin dev:supabase
 
 두 개발 모드는 같은 포트를 사용합니다. 실행 중인 서버를 종료한 뒤 다른 모드로 전환하세요. `/write`는 실제 로그인과 해당 사이트 owner/admin/editor 권한이 필요하며 mock 역할로 서버 인증을 우회하지 않습니다.
 
+## 브랜치와 배포
+
+`main`은 Production 출시 브랜치, `dev`는 web/admin이 함께 검증하는 고정 Vercel Preview 브랜치입니다. 평소에는 `dev`에서 `feature/*` 또는 `fix/*` 브랜치를 만들어 PR과 GitHub `quality` 검사를 거쳐 `dev`에 병합합니다. `dev`의 실제 사이트·관리자 Preview에서 통합 검증을 마친 뒤, 출시 승인 때 `dev`에서 `main`으로 PR을 병합합니다. 긴급 수정은 `main`에서 `hotfix/*`를 분기해 출시한 뒤 `dev`에도 반영합니다. 두 장기 브랜치는 직접 푸시와 강제 푸시를 제한하고 `quality` 통과를 필수로 둡니다.
+
+Vercel 프로젝트의 Root Directory는 각각 `apps/web`, `apps/admin`입니다. 두 앱의 설정은 `main`·`dev` 커밋만 자동 배포하고 다른 브랜치의 자동 배포를 막습니다. 따라서 기능 브랜치는 CI에서 빌드·mock·SSR 테스트를 실행하지만 Preview URL은 만들지 않습니다. 브라우저 Mirage는 운영 빌드와 서버 렌더링 요청을 모킹하지 못하므로 기능 브랜치의 Preview를 mock 사이트처럼 사용하지 않습니다.
+
+`dev` Preview의 두 앱과 이후 Production은 단일 Supabase `travel-blog`를 사용합니다. Vercel Preview의 Supabase URL·publishable key와 관리자 서버 전용 키는 `dev` 브랜치에만 적용하고, Production 변수는 별도로 관리합니다. 변경된 환경변수는 새 배포부터 적용됩니다. `dev`의 고정 web/admin Preview 주소만 필요한 CORS Origin과 Supabase Auth `/auth/callback`에 등록하며, 커밋마다 바뀌는 배포 URL이나 `*.vercel.app` 전체를 허용하지 않습니다. 같은 DB를 쓰므로 `dev`에서 저장·업로드·삭제한 데이터는 실제 데이터입니다.
+
+`main` 병합은 자동 Production 배포를 시작하므로 공개 승인 게이트를 통과한 뒤 진행합니다. 그 전에 OAuth callback·로그아웃, 권한 회수, 미디어 처리, 관측, noindex, 복원 절차와 실제 글 발행을 검증합니다. 구 release 브랜치의 Preview 배포와 Origin 허용 목록은 전환이 끝난 뒤 정리합니다. 배포 절차와 현재 Edge 버전은 [Supabase README](supabase/README.ko.md)와 [배포 식별자](supabase/deployment.json)를 따릅니다.
+
 ## 구조
 
 | 경로                         | 역할                                                                 |
@@ -108,7 +118,7 @@ pnpm db:stop
 
 ### Supabase
 
-루트 또는 앱별 `.env.supabase.local`에 `travel-blog` URL과 publishable key를 입력합니다. Vercel Preview/Production의 web/admin도 같은 Supabase 프로젝트를 사용하도록 설정할 예정입니다. 현재 Vercel 환경변수의 전환은 미완료입니다. Supabase Auth에 localhost와 각 배포 도메인의 정확한 `/auth/callback` URL을 등록하고 Site URL을 운영 web 도메인으로 지정해야 합니다. 현재 원격에는 localhost 3000·3002 callback만 등록돼 있어 배포 도메인의 OAuth는 미검증입니다. Kakao provider는 활성화돼 있습니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
+루트 또는 앱별 `.env.supabase.local`에 `travel-blog` URL과 publishable key를 입력합니다. web/admin의 기존 release Preview는 같은 프로젝트에 연결돼 있으며 `dev` Preview도 이 프로젝트에 연결합니다. Production 환경변수와 운영 배포는 출시 게이트에서 확인합니다. Supabase Auth에 localhost와 `dev`의 정확한 web/admin `/auth/callback` URL을 등록하고 Site URL을 운영 web 도메인으로 지정해야 합니다. 배포 도메인의 OAuth는 별도 실사용 검증이 남아 있습니다. Kakao provider는 활성화돼 있습니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
 
 `GET /api/health`는 앱 상태만 반환합니다. `GET /api/site`는 기존 Edge API의 `site.get`을 호출합니다. 미설정은 503, upstream 실패는 502로 구분합니다. 인증·API 요청은 캐시하지 않습니다. 범용 API 요청 함수의 응답은 `unknown`이므로 각 action을 추가할 때 Zod 응답 검증을 붙이세요. 쓰기 요청은 자동 재시도하지 않습니다.
 
