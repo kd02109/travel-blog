@@ -7,7 +7,7 @@
 | 기존 `travel-blog`         | `kqbqoopqomrwozpqgono` · [Supabase 콘솔](https://supabase.com/dashboard/project/kqbqoopqomrwozpqgono) | migration 33개가 `20261008013658_media_serverless_claim_retry`까지 적용됨. `travel-api`는 v19. DB와 Edge의 버전은 서로 다르며, v19에는 로컬의 `error.capture`/`admin.errors` 코드가 아직 배포되지 않았다. 기존 DB를 reset하지 않는다. |
 | 격리 `travel-blog-staging` | `bnfihijsquvvkneoutie` · [Supabase 콘솔](https://supabase.com/dashboard/project/bnfihijsquvvkneoutie) | 33개 migration 순차 적용과 `travel-api` v3 배포 완료. SQL·HTTP 권한 및 localhost CORS 검사는 통과했으며, 실제 카카오 owner 로그인·파일 변환·Vercel Preview는 미완료다.                                                                                  |
 
-운영 사이트는 slug `parents-travel`, ID `e6bac53e-3c68-49dd-9784-f3c413603ef2`다. Staging 사이트 ID와 migration 버전 대응표는 [staging 배포 기록](./staging-deployment.json)에 분리했다. [staging 검증 기록](./STAGING.ko.md), [API 사용 명세](./API.ko.md), [DB 타입](./database.types.ts), [미디어 배포 절차](../docs/media-worker-vercel-supabase.ko.md)를 함께 참고한다.
+운영 사이트는 slug `parents-travel`, ID `e6bac53e-3c68-49dd-9784-f3c413603ef2`다. Staging 사이트 ID와 migration 버전 대응표는 [staging 배포 기록](./staging-deployment.json)에 분리했다. API action은 [Edge Function 코드](./functions/travel-api/core.ts), 미디어 실행은 [worker README](../packages/media-worker/README.ko.md), DB 구조는 [타입 파일](./database.types.ts)을 참고한다. 상세 검증·배포 기록은 로컬에 보관한다.
 
 ## DB와 최초 owner
 
@@ -29,7 +29,7 @@ Edge secret `TRAVEL_API_ALLOWED_ORIGINS`는 web/admin의 정확한 `https://` �
 
 `asset.complete`는 업로드된 파일의 크기·형식·checksum을 검사하고 작업을 큐에 넣는다. 이 응답이 변환 완료나 게시 가능 상태를 뜻하지 않는다. 이미지는 Sharp, PDF 첫 장은 PDF.js/Canvas로 처리하며, 실제 변환과 결과 업로드가 끝나야 `ready`가 된다. Storage 객체 삭제는 SQL로 `storage.objects`를 직접 지우지 않고 Storage API를 사용한다.
 
-현재 코드의 권장 배포 경로는 **Vercel Cron → 보호된 `apps/admin` Node Function → `@repo/media-worker`의 한 번에 최대 한 작업 처리**다. `CRON_SECRET`, `TRAVEL_MEDIA_WORKER_ENABLED`, staging/운영별 `SUPABASE_URL`·서버 전용 service key가 필요하다. Docker polling 실행기는 로컬 검증과 fallback으로 남아 있다. 같은 DB 큐에 Vercel Function과 Docker를 동시에 활성화하지 않는다. 운영 DB의 claim·lease 보정 migration은 적용됐지만, Vercel Function/Cron의 운영 배포와 실제 Storage 파일 종단 검증은 아직 완료되지 않았다. [상세 실행·전환 절차](../docs/media-worker-vercel-supabase.ko.md)를 따른다.
+현재 코드의 권장 배포 경로는 **Vercel Cron → 보호된 `apps/admin` Node Function → `@repo/media-worker`의 한 번에 최대 한 작업 처리**다. `CRON_SECRET`, `TRAVEL_MEDIA_WORKER_ENABLED`, staging/운영별 `SUPABASE_URL`·서버 전용 service key가 필요하다. Docker polling 실행기는 로컬 검증과 fallback으로 남아 있다. 같은 DB 큐에 Vercel Function과 Docker를 동시에 활성화하지 않는다. 운영 DB의 claim·lease 보정 migration은 적용됐지만, Vercel Function/Cron의 운영 배포와 실제 Storage 파일 종단 검증은 아직 완료되지 않았다. 실행 명령과 안전 조건은 [worker README](../packages/media-worker/README.ko.md)에 정리했다.
 
 ## 재현과 남은 검증
 
