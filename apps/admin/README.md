@@ -8,6 +8,14 @@
 환경 변수와 연동 범위는 [루트 README](../../README.md)를 참고하세요.
 글 관리의 “공개 글 보기” 링크는 관리자 서버의 `WEB_ORIGIN`을 공개 웹 사이트의 origin(예: `https://blog.example.com`)으로 설정하면 표시됩니다. 개발 모드에서는 값이 없을 때 `http://localhost:3000`을 사용하고, 운영 모드에서는 HTTPS origin이 없으면 링크를 표시하지 않습니다.
 
+## 관리자 OAuth 주소
+
+Vercel admin의 Preview·dev 서버 환경변수 `ADMIN_AUTH_ORIGIN`에는 `https://travel-blog-admin-git-dev-kd02109s-projects.vercel.app`을 설정합니다. Supabase Authentication → URL Configuration의 Redirect URLs에는 이 주소 뒤에 `/auth/callback`을 붙인 정확한 URL이 있어야 합니다.
+
+배포 목록의 임시 주소로 `/login`에 접속하면 **카카오 인증을 시작하기 전에** 고정 관리자 주소의 `/login`으로 이동합니다. PKCE 쿠키와 callback을 같은 도메인에서 처리해야 하므로 callback 주소만 바꾸면 안 됩니다. 로그인 성공 후 관리자 `/posts`, 취소·실패 후 관리자 `/login`, 로그아웃 후 관리자 `/login?status=signed_out`을 사용합니다. 인증 이후에는 고정 주소에 연결된 최신 dev 배포를 사용합니다.
+
+Preview에서 이 설정이 없거나 잘못되면 로그인 시작을 503으로 차단합니다. 로컬에서는 비워 두어 localhost callback을 유지합니다. Production 도메인 전환 시에는 해당 환경에 관리자 HTTPS origin을 설정하고 Supabase에도 그 callback을 별도로 등록합니다. 블로그용 `WEB_ORIGIN`과 구분하며, Supabase Site URL을 admin으로 바꾸거나 전체 Vercel 도메인 와일드카드를 허용할 필요는 없습니다.
+
 ## 오류 이메일 알림 (Resend)
 
 `GET /api/internal/error-alerts`는 서버 전용 `CRON_SECRET` Bearer 인증을 통과한 경우에만 실행됩니다. 요청 body/query로 수신자나 메일 내용을 받지 않습니다. web/admin 오류 중 지정한 환경·사이트의 `open` issue가 최근 5분에 10회 이상 발생한 경우 한 건을 처리합니다.

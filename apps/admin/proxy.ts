@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { refreshSession } from "@repo/database/proxy";
+import { canonicalAdminLogin } from "./lib/login-origin";
 // Mirage cannot intercept server requests. Skip session refresh in offline mock mode;
 // protected server routes still perform their real authorization checks.
 export async function proxy(request: NextRequest) {
@@ -14,6 +15,14 @@ export async function proxy(request: NextRequest) {
     const response = NextResponse.next({ request: { headers } });
     response.headers.set("X-Travel-Request-Id", requestId);
     return response;
+  }
+  const loginRedirect = canonicalAdminLogin(request, {
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    ADMIN_AUTH_ORIGIN: process.env.ADMIN_AUTH_ORIGIN,
+  });
+  if (loginRedirect) {
+    loginRedirect.headers.set("X-Travel-Request-Id", requestId);
+    return loginRedirect;
   }
   const response = await refreshSession(request, requestId);
   response.headers.set("X-Travel-Request-Id", requestId);
