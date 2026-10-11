@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createServerDatabase } from "@repo/database/server";
 import { createTravelApi, TravelApiError } from "@repo/api-client";
 
@@ -35,8 +36,13 @@ export const getAdminAccess = cache(async () => {
     // Its embedded user object is not an authorization source.
     const { data: initial, error: sessionError } = await db.auth.getSession();
     if (sessionError) return authFailure(sessionError);
-    if (!initial.session)
-      return { status: "unauthenticated", reason: "missing" } as const;
+    if (!initial.session) {
+      const expired = (await headers()).get("x-travel-session-expired") === "1";
+      return {
+        status: "unauthenticated",
+        reason: expired ? "expired" : "missing",
+      } as const;
+    }
 
     // getUser verifies the session with Supabase Auth on the server.
     const { data, error: userError } = await db.auth.getUser();

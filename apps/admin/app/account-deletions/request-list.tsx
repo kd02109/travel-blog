@@ -5,6 +5,7 @@ import { createBrowserTravelApi } from "@repo/api-client/browser";
 import { useTravelMutation, useTravelQuery } from "@repo/api-client/hooks";
 import { ApiErrorState, ApiMutationError } from "@repo/api-client/feedback";
 import { Button } from "@repo/ui/button";
+import { authUsersDashboardUrl } from "../../lib/auth-dashboard";
 
 export function AccountDeletionInbox({ siteId }: { siteId: string }) {
   const api = useMemo(() => createBrowserTravelApi(), []);
@@ -66,7 +67,7 @@ export function AccountDeletionInbox({ siteId }: { siteId: string }) {
           <li>
             <a
               className="underline"
-              href="https://supabase.com/dashboard/project/kqbqoopqomrwozpqgono/auth/users"
+              href={authUsersDashboardUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)}
               target="_blank"
               rel="noreferrer"
             >

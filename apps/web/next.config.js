@@ -1,5 +1,15 @@
 const nextConfig = {
   distDir: process.env.TRAVEL_NEXT_DIST_DIR || ".next",
+  async headers() {
+    return process.env.VERCEL_ENV === "preview"
+      ? [
+          {
+            source: "/:path*",
+            headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+          },
+        ]
+      : [];
+  },
   // Maps are generated only for a local isolated archive build. Vercel builds
   // never emit browser source maps until a durable private uploader exists.
   productionBrowserSourceMaps:

@@ -63,6 +63,11 @@ async function user(email) {
     email_confirm: true,
   });
   assert.equal(result.error, null, "local fixture user creation");
+  // Local-only identity fixture: exercise membership checks after the Kakao
+  // identity gate. Real provider authentication is verified separately in Preview.
+  sql(`insert into auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at)
+    values ('${result.data.user.id}', '${result.data.user.id}',
+      jsonb_build_object('sub', '${result.data.user.id}', 'email', '${email}', 'email_verified', true), 'kakao', now(), now(), now());`);
   const db = createClient(base, status.ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -114,8 +119,15 @@ async function cookie(actor) {
 const ownerCookie = await cookie(owner);
 const editorCookie = await cookie(editor);
 const readerCookie = await cookie(reader);
-// Test-owned cookies only: expired session plus an invalid refresh token.
-const chunks = readerCookie.split("; ").map((part) => {
+// Test-owned cookies only: a real revoked refresh token in an expired session.
+const expiredActor = await user(`expired-${suffix}@example.test`);
+const expiredActorCookie = await cookie(expiredActor);
+const revoked = await admin.auth.admin.signOut(
+  expiredActor.session.access_token,
+  "local",
+);
+assert.equal(revoked.error, null, "revoke the expiry fixture session");
+const chunks = expiredActorCookie.split("; ").map((part) => {
   const index = part.indexOf("=");
   return [part.slice(0, index), part.slice(index + 1)];
 });
@@ -126,7 +138,6 @@ const expired = JSON.parse(
   Buffer.from(rawCookie.slice(7), "base64url").toString(),
 );
 expired.expires_at = 1;
-expired.refresh_token = randomUUID();
 const expiredCookie = `${cookieName}=base64-${Buffer.from(JSON.stringify(expired)).toString("base64url")}`;
 const servers = [];
 try {
@@ -182,11 +193,20 @@ try {
     (await writer(readerCookie)).headers.get("location"),
     /\/forbidden$/,
   );
-  assert.match((await writer()).headers.get("location"), /error=expired$/);
+  assert.match((await writer()).headers.get("location"), /\/login$/);
   assert.match(
     (await writer(expiredCookie)).headers.get("location"),
     /error=expired$/,
     "expired session cannot enter writer",
+  );
+  const expiredAccount = await fetch("http://localhost:3100/account", {
+    headers: { cookie: expiredCookie },
+    redirect: "manual",
+  });
+  assert.match(
+    expiredAccount.headers.get("location"),
+    /error=expired/,
+    "public account retains expiry feedback",
   );
   assert.equal(
     (

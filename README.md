@@ -4,7 +4,7 @@
 
 배포 준비의 공유 절차는 [Supabase README](supabase/README.ko.md)와 [미디어 worker README](packages/media-worker/README.ko.md)를 참고하세요. 날짜별 로드맵·QA·배포 기록은 로컬에서만 관리합니다.
 
-owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 상세 검증 기록은 로컬에만 보관합니다.
+owner·Kakao·로그아웃·권한 회수 및 과거 격리 DB 재생의 상세 검증 기록은 로컬에만 보관합니다. `travel-blog-staging`은 과거 검증 기록이며 현재 배포 대상이 아닙니다.
 
 ## 실행 모드
 
@@ -46,13 +46,23 @@ pnpm --filter admin dev:supabase
 
 각 앱 디렉터리(`apps/web`, `apps/admin`)에서는 `pnpm dev:supabase`로 실행할 수 있습니다. `pnpm start`는 이전 운영 빌드를 실행하므로 개발 중에는 `dev:supabase`를 사용하세요. 실제 연결의 운영 결과를 확인하려면 `pnpm build:supabase` 후 `pnpm start:supabase`를 실행하세요.
 
-공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 예제 파일은 프로젝트 URL을 비워 두므로 `supabase/deployment.json`에서 복사하거나 사용할 개발 프로젝트 URL을 입력하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다.
+공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 로컬 실제 연결과 Vercel web/admin Preview의 공개 URL·키는 단일 `travel-blog` 프로젝트를 사용합니다. Preview 환경변수 변경은 새 배포에만 적용되며, Production 환경변수와 운영 배포는 출시 게이트에서 별도로 확인합니다. 예제 파일은 프로젝트 URL을 비워 두므로 [운영 배포 식별자](supabase/deployment.json)의 프로젝트 URL과 해당 프로젝트 publishable key를 설정하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다. 실제 연결에서 저장·발행·삭제·업로드하면 운영 데이터가 바뀝니다. 반복·파괴적 테스트는 mock이나 별도 로컬/격리 테스트 backend를 사용하세요.
 
 우선순위는 **셸 환경 변수 > 앱별 profile > 루트 profile**입니다. 값은 `$VARIABLE` 참조 없이 직접 입력하세요. 선택한 실행 명령은 `NEXT_PUBLIC_API_MOCKING` 값을 항상 덮어쓰므로 `.env.local`이나 셸에 남은 플래그 때문에 모드가 뒤바뀌지 않습니다. 기존 `.env.local`의 Supabase 연결 값은 profile 파일로 옮겨 주세요. Next는 그 외 일반 환경 변수를 기존 방식으로 읽습니다.
 
 실제 모드는 필수 값이 없거나 비밀 키를 공개 키 자리에 넣으면 실행 전에 종료합니다. `test:supabase`는 로그인·쓰기·업로드·DB 초기화를 하지 않으며, OAuth 사용자 흐름이나 RLS 전체를 검증하는 테스트는 아닙니다. CI는 실서비스 자격 정보 없이 `pnpm check`, `pnpm build`, 일반 smoke E2E와 mock E2E를 실행합니다. `pnpm build`는 연결 없이 컴파일을 확인하는 기존 명령으로 유지했습니다. 실제 배포 설정으로 빌드하려면 `build:supabase`를 사용하세요.
 
 두 개발 모드는 같은 포트를 사용합니다. 실행 중인 서버를 종료한 뒤 다른 모드로 전환하세요. `/write`는 실제 로그인과 해당 사이트 owner/admin/editor 권한이 필요하며 mock 역할로 서버 인증을 우회하지 않습니다.
+
+## 브랜치와 배포
+
+`main`은 Production 출시 브랜치, `dev`는 web/admin이 함께 검증하는 고정 Vercel Preview 브랜치입니다. 평소에는 `dev`에서 `feature/*` 또는 `fix/*` 브랜치를 만들어 PR과 GitHub `quality` 검사를 거쳐 `dev`에 병합합니다. `dev`의 실제 사이트·관리자 Preview에서 통합 검증을 마친 뒤, 출시 승인 때 `dev`에서 `main`으로 PR을 병합합니다. 긴급 수정은 `main`에서 `hotfix/*`를 분기해 출시한 뒤 `dev`에도 반영합니다. 두 장기 브랜치는 직접 푸시와 강제 푸시를 제한하고 `quality` 통과를 필수로 둡니다.
+
+Vercel 프로젝트의 Root Directory는 각각 `apps/web`, `apps/admin`입니다. 두 앱의 설정은 `main`·`dev` 커밋만 자동 배포하고 다른 브랜치의 자동 배포를 막습니다. 따라서 기능 브랜치는 CI에서 빌드·mock·SSR 테스트를 실행하지만 Preview URL은 만들지 않습니다. 브라우저 Mirage는 운영 빌드와 서버 렌더링 요청을 모킹하지 못하므로 기능 브랜치의 Preview를 mock 사이트처럼 사용하지 않습니다.
+
+`dev` Preview의 두 앱과 이후 Production은 단일 Supabase `travel-blog`를 사용합니다. Vercel Preview의 Supabase URL·publishable key와 관리자 서버 전용 키는 `dev` 브랜치에만 적용하고, Production 변수는 별도로 관리합니다. 변경된 환경변수는 새 배포부터 적용됩니다. `dev`의 고정 web/admin Preview 주소만 필요한 CORS Origin과 Supabase Auth `/auth/callback`에 등록하며, 커밋마다 바뀌는 배포 URL이나 `*.vercel.app` 전체를 허용하지 않습니다. 같은 DB를 쓰므로 `dev`에서 저장·업로드·삭제한 데이터는 실제 데이터입니다.
+
+`main` 병합은 자동 Production 배포를 시작하므로 공개 승인 게이트를 통과한 뒤 진행합니다. 그 전에 OAuth callback·로그아웃, 권한 회수, 미디어 처리, 관측, noindex, 복원 절차와 실제 글 발행을 검증합니다. 구 release 브랜치의 Preview 배포와 Origin 허용 목록은 전환이 끝난 뒤 정리합니다. 배포 절차와 현재 Edge 버전은 [Supabase README](supabase/README.ko.md)와 [배포 식별자](supabase/deployment.json)를 따릅니다.
 
 ## 구조
 
@@ -108,13 +118,13 @@ pnpm db:stop
 
 ### Supabase
 
-루트 또는 앱별 `.env.supabase.local`에 URL과 publishable key를 입력합니다. 서로 다른 개발/운영 프로젝트를 사용하세요. Supabase Auth에 각 앱의 `/auth/callback` URL을 등록하고 Kakao provider를 활성화합니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
+루트 또는 앱별 `.env.supabase.local`에 `travel-blog` URL과 publishable key를 입력합니다. web/admin의 기존 release Preview는 같은 프로젝트에 연결돼 있으며 `dev` Preview도 이 프로젝트에 연결합니다. Production 환경변수와 운영 배포는 출시 게이트에서 확인합니다. Supabase Auth에 localhost와 `dev`의 정확한 web/admin `/auth/callback` URL을 등록하고 Site URL을 운영 web 도메인으로 지정해야 합니다. 배포 도메인의 OAuth는 별도 실사용 검증이 남아 있습니다. Kakao provider는 활성화돼 있습니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
 
 `GET /api/health`는 앱 상태만 반환합니다. `GET /api/site`는 기존 Edge API의 `site.get`을 호출합니다. 미설정은 503, upstream 실패는 502로 구분합니다. 인증·API 요청은 캐시하지 않습니다. 범용 API 요청 함수의 응답은 `unknown`이므로 각 action을 추가할 때 Zod 응답 검증을 붙이세요. 쓰기 요청은 자동 재시도하지 않습니다.
 
 ### 자체 오류 모니터링
 
-Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전을 staging에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증은 staging과 실제 Preview에서 별도로 수행합니다.
+Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전의 권한·마스킹을 로컬/격리 테스트와 단일 원격 canary에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증 기록은 로컬에서 관리합니다.
 
 ### Firebase / GA4
 
