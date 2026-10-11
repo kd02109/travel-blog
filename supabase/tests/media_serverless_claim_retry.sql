@@ -141,6 +141,16 @@ begin
   assert exists(select 1 from app_private.media_assets
     where id=t.orphan_id and cleanup_state='quarantined'
       and cleanup_after>now()+interval '6 days');
+
+  -- A newly matured quarantine takes a different path from an expired deletion
+  -- lease. Exercise its SQL projection (including the nullable preview join).
+  update app_private.media_assets set cleanup_after=now()-interval '1 second'
+    where id=t.orphan_id;
+  cleanup:=public.travel_media_cleanup('cleanup_claim','{}'::jsonb);
+  assert cleanup->>'stage'='delete';
+  assert cleanup->>'id'=t.orphan_id::text;
+  assert cleanup->'preview'='null'::jsonb;
+  assert (cleanup->>'lease_until')::timestamptz>now();
 end $$;
 
 reset role;
