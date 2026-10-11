@@ -16,13 +16,14 @@ export function databaseError(error: { code?: string; message?: string }) {
       : /^(22|23)/.test(code)
         ? 422
         : 500;
-  const message = status === 500
-    ? "internal_error"
-    : /^PT/.test(code)
-      ? error.message ?? "invalid_or_conflicting_input"
-      : code === "22007" || code === "22008"
-        ? "invalid_date"
-        : "invalid_or_conflicting_input";
+  const message =
+    status === 500
+      ? "internal_error"
+      : /^PT/.test(code)
+        ? (error.message ?? "invalid_or_conflicting_input")
+        : code === "22007" || code === "22008"
+          ? "invalid_date"
+          : "invalid_or_conflicting_input";
   return new ApiError(status, message);
 }
 /** Map the public error envelope to the SQL function's strict allowlist. */
@@ -123,17 +124,21 @@ export function validatedErrorContext(input: Record<string, unknown>): {
     input.origin_request_id,
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   );
-  const http_status = input.http_status === undefined || input.http_status === null
-    ? null
-    : input.http_status;
+  const http_status =
+    input.http_status === undefined || input.http_status === null
+      ? null
+      : input.http_status;
   if (
     http_status !== null &&
-    (!Number.isInteger(http_status) || (http_status as number) < 100 ||
+    (!Number.isInteger(http_status) ||
+      (http_status as number) < 100 ||
       (http_status as number) > 599)
-  ) invalid();
-  const stack_frames = input.stack_frames === undefined || input.stack_frames === null
-    ? []
-    : input.stack_frames;
+  )
+    invalid();
+  const stack_frames =
+    input.stack_frames === undefined || input.stack_frames === null
+      ? []
+      : input.stack_frames;
   if (!Array.isArray(stack_frames) || stack_frames.length > 10) invalid();
   for (const frame of stack_frames as unknown[]) {
     if (!frame || typeof frame !== "object" || Array.isArray(frame)) invalid();
@@ -141,22 +146,26 @@ export function validatedErrorContext(input: Record<string, unknown>): {
     const file = data.file;
     if (
       Object.keys(data).length !== 4 ||
-      Object.keys(data).some((key) =>
-        !["function_name", "file", "line", "column"].includes(key)
+      Object.keys(data).some(
+        (key) => !["function_name", "file", "line", "column"].includes(key),
       ) ||
       (data.function_name !== null &&
         (typeof data.function_name !== "string" ||
           !/^[A-Za-z0-9_$<>.-]{1,80}$/.test(data.function_name))) ||
       typeof file !== "string" ||
       !/^[A-Za-z0-9_./-]{1,160}$/.test(file) ||
-      file.startsWith("/") || file.includes("..") ||
+      file.startsWith("/") ||
+      file.includes("..") ||
       file.includes("//") ||
       !errorSourcePrefixes.some((prefix) => file.startsWith(prefix)) ||
-      !Number.isInteger(data.line) || (data.line as number) < 1 ||
+      !Number.isInteger(data.line) ||
+      (data.line as number) < 1 ||
       (data.line as number) > 10_000_000 ||
-      !Number.isInteger(data.column) || (data.column as number) < 1 ||
+      !Number.isInteger(data.column) ||
+      (data.column as number) < 1 ||
       (data.column as number) > 10_000_000
-    ) invalid();
+    )
+      invalid();
   }
   return {
     operation,
@@ -186,9 +195,16 @@ export function maskedDiagnosticText(
     .replace(/\b(?:Bearer|Basic)\s+[A-Za-z0-9._~+/-]+=*/gi, "[credential]")
     .replace(/\b(?:https?|wss?|file):\/\/[^\s<>"'`)}\]]+/gi, "[url]")
     .replace(/\b[A-Z]:\\(?:Users|Documents and Settings)\\[^\s):]+/gi, "[path]")
-    .replace(/\/(?:Users|home|workspace|root|private|var|tmp)\/[^\s):]+/g, "[path]")
+    .replace(
+      /\/(?:Users|home|workspace|root|private|var|tmp)\/[^\s):]+/g,
+      "[path]",
+    )
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
     .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
+    .replace(
+      /(?<!\d)(?:\+82[- .]?)?0?1[016789][- .]?\d{3,4}[- .]?\d{4}(?!\d)/g,
+      "[phone]",
+    )
     .replace(
       /\b(?:sb_(?:secret|publishable|service_role|anon)_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g,
       "[credential]",
@@ -197,7 +213,10 @@ export function maskedDiagnosticText(
       /\b(?:access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|api[_-]?key|client[_-]?secret|auth[_-]?code|code|state|signature|session(?:_id)?)\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}\]]+)/gi,
       "[credential]",
     )
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "[id]")
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+      "[id]",
+    )
     .replace(/\b[A-Za-z0-9_-]{40,}\b/g, "[opaque]")
     .trim();
   return masked || null;
@@ -248,6 +267,12 @@ export const memberActions = new Set([
   "admin.report.resolve",
   "admin.audit",
   "admin.errors",
+  "admin.errors.health",
+  "admin.error.events",
+  "admin.errors.summary",
+  "admin.errors.page",
+  "admin.error.status",
+  "admin.error.delete",
   "admin.error.get",
   "asset.create",
   "asset.complete",
@@ -259,69 +284,75 @@ export const memberActions = new Set([
 export function validateAction(action: unknown): string {
   if (
     typeof action !== "string" ||
-    !publicActions.has(action) && !guestActions.has(action) &&
-      !memberActions.has(action)
-  ) throw new ApiError(400, "unknown_action");
+    (!publicActions.has(action) &&
+      !guestActions.has(action) &&
+      !memberActions.has(action))
+  )
+    throw new ApiError(400, "unknown_action");
   return action;
 }
 export function cleanInput(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new ApiError(400, "invalid_input");
   }
-  const data = { ...input as Record<string, unknown> };
-  for (
-    const key of [
-      "actor_hash",
-      "password_hash",
-      "guest_verified",
-      "request_hash",
-      "rendered_html",
-      "asset_ids",
-      "p_actor",
-    ]
-  ) delete data[key];
-  for (
-    const key of [
-      "id",
-      "site_id",
-      "user_id",
-      "revision_id",
-      "parent_id",
-      "request_key",
-    ]
-  ) {
+  const data = { ...(input as Record<string, unknown>) };
+  for (const key of [
+    "actor_hash",
+    "password_hash",
+    "guest_verified",
+    "request_hash",
+    "rendered_html",
+    "asset_ids",
+    "p_actor",
+  ])
+    delete data[key];
+  for (const key of [
+    "id",
+    "site_id",
+    "user_id",
+    "revision_id",
+    "parent_id",
+    "request_key",
+  ]) {
     const value = data[key];
     if (
-      value !== undefined && value !== null &&
+      value !== undefined &&
+      value !== null &&
       (typeof value !== "string" ||
         !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           value,
         ))
-    ) throw new ApiError(400, "invalid_" + key);
+    )
+      throw new ApiError(400, "invalid_" + key);
   }
   return data;
 }
 export function text(value: unknown, min: number, max: number): string {
   if (
-    typeof value !== "string" || [...value].length < min ||
-    [...value].length > max || value.trim().length === 0
-  ) throw new ApiError(422, "invalid_text");
+    typeof value !== "string" ||
+    [...value].length < min ||
+    [...value].length > max ||
+    value.trim().length === 0
+  )
+    throw new ApiError(422, "invalid_text");
   return value;
 }
 export const escapeHtml = (s: string): string =>
   s.replace(
     /[&<>"']/g,
-    (c) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#39;",
-    }[c]!),
+    (c) =>
+      ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      })[c]!,
   );
-export function renderBlocks(
-  blocks: unknown,
-): { html: string; assetIds: string[] } {
+export function renderBlocks(blocks: unknown): {
+  html: string;
+  assetIds: string[];
+} {
   const ids = new Set<string>();
   let nodes = 0;
   function inline(value: unknown): string {
@@ -329,41 +360,42 @@ export function renderBlocks(
     if (!Array.isArray(value)) {
       throw new ApiError(422, "invalid_inline_content");
     }
-    return value.map((item) => {
-      if (!item || typeof item !== "object") {
-        throw new ApiError(422, "invalid_inline_content");
-      }
-      if (item.type === "link") {
-        const href = text(item.href, 1, 2048);
-        let url: URL;
-        try {
-          url = new URL(href);
-        } catch {
-          throw new ApiError(422, "invalid_link");
+    return value
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          throw new ApiError(422, "invalid_inline_content");
         }
-        if (!["http:", "https:"].includes(url.protocol)) {
-          throw new ApiError(422, "invalid_link");
+        if (item.type === "link") {
+          const href = text(item.href, 1, 2048);
+          let url: URL;
+          try {
+            url = new URL(href);
+          } catch {
+            throw new ApiError(422, "invalid_link");
+          }
+          if (!["http:", "https:"].includes(url.protocol)) {
+            throw new ApiError(422, "invalid_link");
+          }
+          return `<a href="${escapeHtml(
+            url.href,
+          )}" rel="nofollow noopener noreferrer">${inline(item.content)}</a>`;
         }
-        return `<a href="${
-          escapeHtml(url.href)
-        }" rel="nofollow noopener noreferrer">${inline(item.content)}</a>`;
-      }
-      if (item.type !== "text" || typeof item.text !== "string") {
-        throw new ApiError(422, "unsupported_inline_type");
-      }
-      let t = escapeHtml(item.text);
-      const styles = item.styles ?? {};
-      for (
-        const [key, tag] of [
+        if (item.type !== "text" || typeof item.text !== "string") {
+          throw new ApiError(422, "unsupported_inline_type");
+        }
+        let t = escapeHtml(item.text);
+        const styles = item.styles ?? {};
+        for (const [key, tag] of [
           ["bold", "strong"],
           ["italic", "em"],
           ["underline", "u"],
           ["strike", "s"],
           ["code", "code"],
-        ] as const
-      ) if (styles[key]) t = `<${tag}>${t}</${tag}>`;
-      return t;
-    }).join("");
+        ] as const)
+          if (styles[key]) t = `<${tag}>${t}</${tag}>`;
+        return t;
+      })
+      .join("");
   }
   function render(items: unknown, depth: number): string {
     if (!Array.isArray(items) || depth > 8) {
@@ -432,32 +464,41 @@ export function renderBlocks(
           const positionPct = b.props?.position_pct;
           const sharePct = b.props?.pair_share_pct;
           if (
-            typeof sharePct === "number" && Number.isFinite(sharePct) &&
-            sharePct >= 20 && sharePct <= 80
-          ) pairSharePct = sharePct;
+            typeof sharePct === "number" &&
+            Number.isFinite(sharePct) &&
+            sharePct >= 20 &&
+            sharePct <= 80
+          )
+            pairSharePct = sharePct;
           if (
-            typeof widthPct === "number" && Number.isFinite(widthPct) &&
-            widthPct >= 20 && widthPct <= 100
-          ) pairWidthWeight = widthPct;
+            typeof widthPct === "number" &&
+            Number.isFinite(widthPct) &&
+            widthPct >= 20 &&
+            widthPct <= 100
+          )
+            pairWidthWeight = widthPct;
           const customLayout =
-            typeof widthPct === "number" && Number.isFinite(widthPct) &&
-            widthPct >= 20 && widthPct <= 100 &&
-            typeof positionPct === "number" && Number.isFinite(positionPct) &&
-            positionPct >= 0 && positionPct <= 100;
+            typeof widthPct === "number" &&
+            Number.isFinite(widthPct) &&
+            widthPct >= 20 &&
+            widthPct <= 100 &&
+            typeof positionPct === "number" &&
+            Number.isFinite(positionPct) &&
+            positionPct >= 0 &&
+            positionPct <= 100;
           const customAttributes = customLayout
             ? (() => {
-              const safeWidth = Math.round(widthPct * 10) / 10;
-              const safePosition = Math.round(positionPct * 10) / 10;
-              const offset = Math.round(
-                (100 - safeWidth) * safePosition,
-              ) / 100;
-              return ` data-image-custom="true" data-image-width-pct="${safeWidth}" data-image-position-pct="${safePosition}" style="--image-width:${safeWidth}%;--image-offset:${offset}%"`;
-            })()
+                const safeWidth = Math.round(widthPct * 10) / 10;
+                const safePosition = Math.round(positionPct * 10) / 10;
+                const offset =
+                  Math.round((100 - safeWidth) * safePosition) / 100;
+                return ` data-image-custom="true" data-image-width-pct="${safeWidth}" data-image-position-pct="${safePosition}" style="--image-width:${safeWidth}%;--image-offset:${offset}%"`;
+              })()
             : "";
           pair = layout === "pair";
-          out = `<figure data-asset-id="${id}" data-image-width="${width}" data-image-align="${align}" data-image-layout="${layout}"${customAttributes}><figcaption>${
-            escapeHtml(String(b.props?.caption ?? ""))
-          }</figcaption></figure>`;
+          out = `<figure data-asset-id="${id}" data-image-width="${width}" data-image-align="${align}" data-image-layout="${layout}"${customAttributes}><figcaption>${escapeHtml(
+            String(b.props?.caption ?? ""),
+          )}</figcaption></figure>`;
           break;
         }
         default:
@@ -466,16 +507,17 @@ export function renderBlocks(
       out += b.children?.length ? render(b.children, depth + 1) : "";
       if (pair) {
         if (pairedImage) {
-          const firstShare = pairedImage.sharePct ??
+          const firstShare =
+            pairedImage.sharePct ??
             (pairSharePct === null
               ? Math.min(
-                80,
-                Math.max(
-                  20,
-                  100 * pairedImage.widthWeight /
-                    (pairedImage.widthWeight + pairWidthWeight),
-                ),
-              )
+                  80,
+                  Math.max(
+                    20,
+                    (100 * pairedImage.widthWeight) /
+                      (pairedImage.widthWeight + pairWidthWeight),
+                  ),
+                )
               : 100 - pairSharePct);
           const safeShare = Math.round(firstShare * 10) / 10;
           html += `<div data-image-pair data-pair-first-pct="${safeShare}" style="--pair-first:${safeShare}%">${pairedImage.html}${out}</div>`;
@@ -508,4 +550,150 @@ export function sniff(bytes: Uint8Array): string {
   if (h.startsWith("RIFF") && h.slice(8, 12) === "WEBP") return "image/webp";
   if (h.startsWith("%PDF-")) return "application/pdf";
   throw new ApiError(422, "unsupported_file");
+}
+
+const errorManagementUuid =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function errorManagementInput(
+  action: string,
+  input: Record<string, unknown>,
+): Record<string, unknown> {
+  const page = action === "admin.errors.page";
+  const summary =
+    action === "admin.errors.summary" || action === "admin.errors.health";
+  const allowed = summary
+    ? [
+        "site_id",
+        "app",
+        "environment",
+        "period",
+        ...(action === "admin.errors.summary" ? ["status", "search"] : []),
+      ]
+    : page
+      ? [
+          "site_id",
+          "limit",
+          "offset",
+          "status",
+          "search",
+          "app",
+          "environment",
+          "period",
+        ]
+      : [
+          "site_id",
+          "id",
+          "expected_count",
+          ...(action === "admin.error.status"
+            ? ["status", "note", "resolved_release"]
+            : []),
+        ];
+  if (
+    Object.keys(input).some((key) => !allowed.includes(key)) ||
+    typeof input.site_id !== "string" ||
+    !errorManagementUuid.test(input.site_id)
+  )
+    throw new ApiError(400, "invalid_input");
+  if (summary) {
+    // Share the strict list validation, including search/status defaults.
+    const parsed = errorManagementInput("admin.errors.page", input);
+    return parsed;
+  }
+  if (page) {
+    const limit = input.limit ?? 20,
+      offset = input.offset ?? 0,
+      status = input.status ?? "all";
+    const search =
+      typeof input.search === "string"
+        ? input.search.trim().toLowerCase()
+        : input.search === undefined
+          ? ""
+          : null;
+    if (
+      !Number.isInteger(limit) ||
+      Number(limit) < 1 ||
+      Number(limit) > 50 ||
+      !Number.isInteger(offset) ||
+      Number(offset) < 0 ||
+      Number(offset) > 2147483600 ||
+      !["all", "open", "resolved", "ignored"].includes(String(status)) ||
+      search === null ||
+      (search !== "" &&
+        !errorManagementUuid.test(search) &&
+        !/^[0-9a-f]{64}$/.test(search))
+    )
+      throw new ApiError(400, "invalid_input");
+    return {
+      p_site_id: input.site_id,
+      ...errorQueryFilters(input),
+      p_limit: limit,
+      p_offset: offset,
+      p_status: status,
+      p_search: search,
+    };
+  }
+  if (
+    typeof input.id !== "string" ||
+    !errorManagementUuid.test(input.id) ||
+    !Number.isSafeInteger(input.expected_count) ||
+    Number(input.expected_count) < 1 ||
+    (action === "admin.error.status" &&
+      !["open", "resolved"].includes(String(input.status)))
+  )
+    throw new ApiError(400, "invalid_input");
+  if (
+    input.note !== undefined &&
+    (typeof input.note !== "string" || input.note.length > 500)
+  )
+    throw new ApiError(400, "invalid_input");
+  if (
+    input.resolved_release !== undefined &&
+    (typeof input.resolved_release !== "string" ||
+      !/^[A-Za-z0-9._-]{1,80}$/.test(input.resolved_release))
+  )
+    throw new ApiError(400, "invalid_input");
+  return {
+    p_site_id: input.site_id,
+    p_issue_id: input.id,
+    p_action: action === "admin.error.status" ? "status" : "delete",
+    p_expected_count: input.expected_count,
+    p_status: input.status ?? null,
+  };
+}
+
+/** Versioned, server-owned grouping; no build chunk hashes or raw user input. */
+export function errorFingerprintParts(report: Record<string, unknown>) {
+  const message =
+    maskedDiagnosticText(report.masked_message, 1024)
+      ?.toLowerCase()
+      .replace(/\b0x[0-9a-f]+\b/g, "#")
+      .replace(/\d+/g, "#")
+      .replace(/\s+/g, " ") ?? null;
+  return [
+    2,
+    report.app,
+    report.environment,
+    report.source,
+    report.route,
+    report.error_name,
+    report.code,
+    report.operation ?? null,
+    report.dependency ?? null,
+    report.http_status ?? null,
+    message,
+  ];
+}
+export function errorQueryFilters(input: Record<string, unknown>) {
+  const app = input.app ?? "all",
+    environment = input.environment ?? "all",
+    period = input.period ?? "all";
+  if (
+    !["all", "web", "admin"].includes(String(app)) ||
+    !["all", "production", "preview", "development"].includes(
+      String(environment),
+    ) ||
+    !["all", "24h", "7d", "14d"].includes(String(period))
+  )
+    throw new ApiError(400, "invalid_input");
+  return { app, environment, period };
 }
