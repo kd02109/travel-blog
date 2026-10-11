@@ -16,6 +16,10 @@ Vercel admin의 Preview·dev 서버 환경변수 `ADMIN_AUTH_ORIGIN`에는 `http
 
 Preview에서 이 설정이 없거나 잘못되면 로그인 시작을 503으로 차단합니다. 로컬에서는 비워 두어 localhost callback을 유지합니다. Production 도메인 전환 시에는 해당 환경에 관리자 HTTPS origin을 설정하고 Supabase에도 그 callback을 별도로 등록합니다. 블로그용 `WEB_ORIGIN`과 구분하며, Supabase Site URL을 admin으로 바꾸거나 전체 Vercel 도메인 와일드카드를 허용할 필요는 없습니다.
 
+## 오류 분석 조회 권한
+
+`admin.errors`와 `admin.error.get`은 해당 사이트의 활성 `owner` 또는 `admin`만 사용할 수 있습니다. `editor`·일반 독자·비회원·다른 사이트 소속·권한 회수 계정은 거절합니다. 실제 membership을 요청마다 확인하며 브라우저의 테이블/RPC 직접 호출은 계속 차단합니다. 오류 분석 시안의 목록·상세 페이지도 같은 역할 조건을 사용합니다. 시안은 현재 Git 제외 대상이므로 정식 페이지·메뉴 배포는 별도 작업입니다.
+
 ## 오류 이메일 알림 (Resend)
 
 `GET /api/internal/error-alerts`는 서버 전용 `CRON_SECRET` Bearer 인증을 통과한 경우에만 실행됩니다. 요청 body/query로 수신자나 메일 내용을 받지 않습니다. web/admin 오류 중 지정한 환경·사이트의 `open` issue가 최근 5분에 10회 이상 발생한 경우 한 건을 처리합니다.
