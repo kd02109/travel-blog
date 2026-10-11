@@ -1,3 +1,5 @@
+import { BROWSER_REPORT_TIMEOUT_MS, COLLECTOR_TIMEOUT_MS } from "./transport";
+
 export type ErrorService = "web" | "admin";
 export type ErrorSource = "browser" | "next_server";
 export type ErrorEnvironment = "development" | "preview" | "production";
@@ -381,7 +383,11 @@ export async function captureException(
       body: JSON.stringify({ action: "error.capture", input }),
       credentials: "omit",
       cache: "no-store",
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(
+        options.source === "browser"
+          ? BROWSER_REPORT_TIMEOUT_MS
+          : COLLECTOR_TIMEOUT_MS,
+      ),
     });
   } catch {
     // Monitoring must never break the page or enter its own reporting loop.

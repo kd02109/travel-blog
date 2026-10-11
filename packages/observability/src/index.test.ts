@@ -329,3 +329,86 @@ it("rejects cross-site posts before forwarding", async () => {
   expect(response.status).toBe(403);
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+it("preserves the collector's rate-limit wait without exposing its body", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response("private upstream details", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const response = await relayErrorReport(
+    new Request("https://blog.example/api/errors", {
+      method: "POST",
+      headers: {
+        Origin: "https://blog.example",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "error.capture", input: {} }),
+    }),
+    "web",
+    "https://project.supabase.co",
+    "server-key",
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("Retry-After")).toBe("60");
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.text()).toBe("");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it.each(["timeout", "unavailable"])(
+  "returns 503 when the collector is %s without retrying recursively",
+  async (failure) => {
+    const fetchMock = vi.fn();
+    if (failure === "timeout") {
+      fetchMock.mockRejectedValue(
+        new DOMException("timed out", "TimeoutError"),
+      );
+    } else {
+      fetchMock.mockResolvedValue(
+        new Response("private details", { status: 500 }),
+      );
+    }
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await relayErrorReport(
+      new Request("https://blog.example/api/errors", {
+        method: "POST",
+        headers: {
+          Origin: "https://blog.example",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "error.capture", input: {} }),
+      }),
+      "web",
+      "https://project.supabase.co",
+      "server-key",
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe("");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each([429, 503, "network"])(
+  "allows the caller to continue after collection failure %s",
+  async (failure) => {
+    const fetchMock = vi.fn();
+    if (typeof failure === "string")
+      fetchMock.mockRejectedValue(new Error("offline"));
+    else fetchMock.mockResolvedValue(new Response(null, { status: failure }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      captureException(new Error("synthetic failure"), {
+        service: "admin",
+        source: "browser",
+        route: "/write/:id",
+        code: "render_boundary",
+        enabled: true,
+        endpoint: "/api/errors",
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
