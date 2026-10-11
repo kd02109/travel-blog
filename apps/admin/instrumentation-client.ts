@@ -16,3 +16,15 @@ window.addEventListener("unhandledrejection", (event) => {
     window.location.pathname,
   );
 });
+
+// Handled mutation/query failures do not reach window.error.
+window.addEventListener("travel-api-unexpected-error", (event) => {
+  const error = (event as CustomEvent<unknown>).detail;
+  void reportAdminError(
+    error,
+    "api_failure",
+    "browser",
+    window.location.pathname,
+    { dependency: "travel_api" },
+  );
+});

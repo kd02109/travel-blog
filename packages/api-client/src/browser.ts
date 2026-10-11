@@ -38,6 +38,12 @@ export function createBrowserTravelApi(
       : createSessionTokenProvider(createBrowserDatabase().auth),
     getVisitorToken: visitors.get,
     onInvalidVisitor: visitors.clear,
+    onUnexpectedError: (error) => {
+      if (!mocking && typeof window !== "undefined")
+        window.dispatchEvent(
+          new CustomEvent("travel-api-unexpected-error", { detail: error }),
+        );
+    },
     ...options,
     baseURL: mocking
       ? "/__mock__/functions/v1/travel-api"

@@ -38,6 +38,7 @@ it("sends a bounded envelope without the raw error or URL", async () => {
     endpoint: "/api/errors",
   });
   const sent = JSON.stringify(JSON.parse(fetchMock.mock.calls[0]![1].body));
+  expect(fetchMock.mock.calls[0]![1].credentials).toBe("same-origin");
   expect(sent).toContain('"route":"/posts/:id"');
   expect(sent).not.toContain("private@example.com");
   expect(sent).not.toContain("token=secret");
@@ -46,6 +47,23 @@ it("sends a bounded envelope without the raw error or URL", async () => {
   expect(input.masked_message).toContain("[email]");
   expect(input.masked_message).toContain("[credential]");
   expect(input.masked_stack).toBe("[url]");
+});
+
+it("never attaches browser credentials to the server collector", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(null, { status: 202 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await captureException(new Error("synthetic"), {
+    service: "admin",
+    source: "next_server",
+    code: "next_route",
+    route: "/posts",
+    enabled: true,
+    endpoint: "https://collector.example.invalid/functions/v1/travel-api",
+    reportKey: "synthetic-report-key",
+  });
+  expect(fetchMock.mock.calls[0]![1].credentials).toBe("omit");
 });
 
 it("redacts common secrets before truncation while retaining useful frames", () => {
@@ -412,3 +430,31 @@ it.each([429, 503, "network"])(
     expect(fetchMock).toHaveBeenCalledTimes(1);
   },
 );
+
+it("deduplicates the same Error across handled and global capture paths", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(new Response(null, { status: 202 }));
+  vi.stubGlobal("fetch", fetcher);
+  const error = new Error("save failed");
+  const options = {
+    service: "admin" as const,
+    source: "browser" as const,
+    route: "/write/secret",
+    code: "api_failure",
+    endpoint: "/api/errors",
+    enabled: true,
+  };
+  await captureException(error, options);
+  await captureException(error, { ...options, code: "uncaught_error" });
+  expect(fetcher).toHaveBeenCalledOnce();
+  const payload = JSON.parse(fetcher.mock.calls[0]![1].body);
+  expect(payload.input.event_id).toMatch(/^[0-9a-f-]{36}$/);
+  await captureException(new Error("save failed"), options);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("masks Korean phone numbers in diagnostic text", () => {
+  expect(maskErrorText("010-1234-5678 +82 10 1234 5678", 100)).toBe(
+    "[phone] [phone]",
+  );
+});

@@ -305,6 +305,10 @@ export function maskErrorText(
       .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[email]")
       .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[ip]")
       .replace(
+        /(?<!\d)(?:\+82[- .]?)?0?1[016789][- .]?\d{3,4}[- .]?\d{4}(?!\d)/g,
+        "[phone]",
+      )
+      .replace(
         /\b(?:sb_(?:secret|publishable|service_role|anon)_[A-Za-z0-9_-]+|eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,})\b/g,
         "[credential]",
       )
@@ -324,6 +328,8 @@ export function maskErrorText(
   }
 }
 
+const reportedErrors = new WeakSet<object>();
+
 /**
  * Best-effort telemetry. Only masked Error.message/stack are serialized; never
  * include request headers, body, cookies, user identifiers or the full URL.
@@ -333,6 +339,10 @@ export async function captureException(
   options: CaptureOptions,
 ): Promise<void> {
   if (!options.enabled || !options.endpoint) return;
+  if (error && typeof error === "object") {
+    if (reportedErrors.has(error)) return;
+    reportedErrors.add(error);
+  }
   const environment: ErrorEnvironment =
     options.environment === "production" || options.environment === "preview"
       ? options.environment
@@ -342,6 +352,7 @@ export async function captureException(
       ? options.release
       : "unknown";
   const input = {
+    event_id: crypto.randomUUID(),
     app: options.service,
     environment,
     source: options.source,
@@ -372,7 +383,7 @@ export async function captureException(
       safeOriginRequestId(options.originRequestId),
   };
   try {
-    await fetch(options.endpoint, {
+    const response = await fetch(options.endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -381,7 +392,9 @@ export async function captureException(
           : {}),
       },
       body: JSON.stringify({ action: "error.capture", input }),
-      credentials: "omit",
+      // Same-origin relays may sit behind deployment authentication. Keep its
+      // cookie on that hop; it is never serialized or forwarded to Supabase.
+      credentials: options.source === "browser" ? "same-origin" : "omit",
       cache: "no-store",
       signal: AbortSignal.timeout(
         options.source === "browser"
@@ -389,7 +402,22 @@ export async function captureException(
           : COLLECTOR_TIMEOUT_MS,
       ),
     });
+    if (!response.ok && options.source === "next_server")
+      console.warn({
+        event: "error_delivery_failed",
+        app: options.service,
+        environment,
+        reason: "upstream_status",
+        status: response.status,
+      });
   } catch {
+    if (options.source === "next_server")
+      console.warn({
+        event: "error_delivery_failed",
+        app: options.service,
+        environment,
+        reason: "network_or_timeout",
+      });
     // Monitoring must never break the page or enter its own reporting loop.
   }
 }

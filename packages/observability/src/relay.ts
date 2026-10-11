@@ -68,6 +68,7 @@ export async function relayErrorReport(
   const data = input as Record<string, unknown>;
   // Drop all unknown client fields before the request reaches Supabase.
   const safeInput = {
+    event_id: safeOriginRequestId(data.event_id) ?? crypto.randomUUID(),
     app: service,
     environment:
       deployEnvironment === "production" || deployEnvironment === "preview"
