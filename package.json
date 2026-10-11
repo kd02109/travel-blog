@@ -9,6 +9,7 @@
     "check-types": "turbo run check-types",
     "format:check": "prettier --check .",
     "test": "vitest run",
+    "test:media:build": "node scripts/test-media-build.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check": "pnpm lint && pnpm check-types && pnpm test && pnpm test:config && pnpm format:check",
