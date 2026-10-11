@@ -1,5 +1,7 @@
 -- Rollback-only check for bounded error context and live admin permissions.
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 create temporary table error_context_ids as
   select gen_random_uuid() site_id, gen_random_uuid() admin_id,
     gen_random_uuid() owner_id;
@@ -109,4 +111,6 @@ begin
   exception when insufficient_privilege then null; end;
 end $$;
 reset role;
+select pass('Bounded error context and live admin authorization assertions passed');
+select * from finish();
 rollback;
