@@ -1,4 +1,6 @@
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 do $$
 declare u uuid:=gen_random_uuid(); other_user uuid:=gen_random_uuid(); s uuid:=gen_random_uuid();
 begin
@@ -18,4 +20,6 @@ begin
  assert not exists(select 1 from app_private.site_memberships where site_id=s and user_id=other_user);
  raise notice 'Environment owner bootstrap assertions passed';
 end $$;
+select pass('Only the configured verified account bootstraps the first owner');
+select * from finish();
 rollback;

@@ -1,4 +1,6 @@
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 do $$
 declare owner_id uuid:=gen_random_uuid(); editor_id uuid:=gen_random_uuid(); s uuid:=gen_random_uuid(); r jsonb;
 begin
@@ -23,4 +25,6 @@ begin
  end;
  raise notice 'Membership revocation read/write assertions passed';
 end $$;
+select pass('Membership revocation denies subsequent reads and writes');
+select * from finish();
 rollback;
