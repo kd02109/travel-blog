@@ -65,6 +65,7 @@ supabase/.branches/
 __pycache__/
 *.tsbuildinfo
 playwright-report/
+/output/playwright/
 test-results/
 .env.*
 !.env.example
