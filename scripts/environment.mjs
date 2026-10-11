@@ -85,9 +85,11 @@ export function createAppEnvironment({
       "SUPABASE_SERVICE_ROLE_KEY",
       "NEXT_PUBLIC_ERROR_MONITORING_ENABLED",
       "TRAVEL_ERROR_REPORT_KEY",
+      "RESEND_API_KEY",
     ])
       env[key] = "";
     env.NEXT_PUBLIC_ANALYTICS_ENABLED = "false";
+    env.TRAVEL_ERROR_EMAIL_ENABLED = "false";
   } else {
     assertSupabaseEnvironment(env, app);
     env.NEXT_PUBLIC_SUPABASE_URL = new URL(env.NEXT_PUBLIC_SUPABASE_URL).origin;

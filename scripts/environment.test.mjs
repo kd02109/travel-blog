@@ -33,6 +33,8 @@ test("mock ignores profile files and clears live credentials and telemetry", () 
       NEXT_PUBLIC_ANALYTICS_ENABLED: "true",
       NEXT_PUBLIC_ERROR_MONITORING_ENABLED: "true",
       TRAVEL_ERROR_REPORT_KEY: "private",
+      RESEND_API_KEY: "re_private",
+      TRAVEL_ERROR_EMAIL_ENABLED: "true",
     },
   });
   assert.equal(env.NEXT_PUBLIC_API_MOCKING, "enabled");
@@ -42,6 +44,8 @@ test("mock ignores profile files and clears live credentials and telemetry", () 
   assert.equal(env.NEXT_PUBLIC_ANALYTICS_ENABLED, "false");
   assert.equal(env.NEXT_PUBLIC_ERROR_MONITORING_ENABLED, "");
   assert.equal(env.TRAVEL_ERROR_REPORT_KEY, "");
+  assert.equal(env.RESEND_API_KEY, "");
+  assert.equal(env.TRAVEL_ERROR_EMAIL_ENABLED, "false");
 });
 test("supabase forces mock off even when shell or profile enables it", () => {
   const root = fixture(valid + "NEXT_PUBLIC_API_MOCKING=enabled\n");
