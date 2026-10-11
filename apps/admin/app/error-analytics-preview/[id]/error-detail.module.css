@@ -1,0 +1,402 @@
+.page {
+  min-height: 100vh;
+  padding: clamp(1.25rem, 2.5vw, 2.5rem);
+  color: #173c42;
+  background: #f4f6f4;
+}
+
+.content {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.backLink {
+  color: #245f4b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-underline-offset: 0.2rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin: 1.8rem 0 1.3rem;
+}
+
+.eyebrow {
+  color: #53736c;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin-top: 0.3rem;
+  color: #173c42;
+  font-family: var(--font-editorial), "Noto Serif KR", serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.055em;
+}
+
+.headerIntro,
+.sectionIntro {
+  margin-top: 0.65rem;
+  color: #536569;
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.status {
+  flex: none;
+  border-radius: 999px;
+  margin-top: 0.3rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.open {
+  color: #8f3d33;
+  background: #f9e9e5;
+}
+
+.resolved {
+  color: #245f4b;
+  background: #deeee4;
+}
+
+.ignored {
+  color: #5c6261;
+  background: #e7eae8;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+
+.summaryCard,
+.panel {
+  min-width: 0;
+  border: 1px solid #dce4df;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.summaryCard {
+  min-height: 114px;
+  padding: 1rem 1.15rem;
+}
+
+.summaryCard:first-child {
+  border-color: #173c42;
+  color: #fff;
+  background: #173c42;
+}
+
+.summaryCard span {
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.summaryCard strong {
+  display: block;
+  margin-top: 0.65rem;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.summaryCard:first-child strong {
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.82fr);
+  gap: 0.8rem;
+}
+
+.mainColumn,
+.sideColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  min-width: 0;
+}
+
+.panel {
+  padding: 1.25rem 1.4rem;
+}
+
+.panel h1,
+.panel h2 {
+  margin-top: 0.2rem;
+  color: #173c42;
+  font-size: 1.18rem;
+  letter-spacing: -0.035em;
+}
+
+.panel h1 + p {
+  margin-top: 0.65rem;
+  color: #536569;
+  line-height: 1.6;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.badge {
+  border: 1px solid #b8cbc1;
+  border-radius: 4px;
+  padding: 0.18rem 0.38rem;
+  color: #3a6554;
+  background: #f1f8f3;
+  font-size: 0.65rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.muted {
+  color: #657a76;
+  font-size: 0.74rem;
+}
+
+.rawField {
+  min-width: 0;
+  margin-top: 1rem;
+}
+
+.rawField h3 {
+  margin-bottom: 0.4rem;
+  color: #345a52;
+  font-size: 0.76rem;
+}
+
+.rawField pre {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid #dce4df;
+  border-radius: 6px;
+  margin: 0;
+  padding: 0.8rem;
+  color: #234840;
+  background: #f6f8f6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contextGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.contextGrid div {
+  min-width: 0;
+  border-top: 1px solid #e9efeb;
+  padding: 0.75rem 0.6rem 0.75rem 0;
+}
+
+.contextGrid dt {
+  color: #657a76;
+  font-size: 0.7rem;
+}
+
+.contextGrid dd {
+  margin: 0.3rem 0 0;
+  color: #345a52;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.framesTitle {
+  margin-top: 1rem;
+  color: #345a52;
+  font-size: 0.78rem;
+}
+
+.frames {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.frames li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid #e9efeb;
+  border-radius: 5px;
+  padding: 0.5rem 0.65rem;
+  color: #345a52;
+  background: #f6f8f6;
+  font-size: 0.74rem;
+}
+
+.frames code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+
+.safetyNote {
+  border-left: 3px solid #6da68e;
+  margin-top: 1rem;
+  padding: 0.48rem 0.7rem;
+  color: #536569;
+  font-size: 0.73rem;
+  line-height: 1.6;
+}
+
+.empty {
+  margin-top: 1rem;
+  color: #657a76;
+  font-size: 0.82rem;
+}
+
+.eventList {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event {
+  border-top: 1px solid #e9efeb;
+  padding: 0.95rem 0;
+}
+
+.eventHeading {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  color: #345a52;
+  font-size: 0.8rem;
+}
+
+.eventHeading span {
+  color: #657a76;
+  font-size: 0.72rem;
+}
+
+.event p {
+  margin-top: 0.35rem;
+  color: #536569;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.event code,
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.eventMeta {
+  font-size: 0.71rem !important;
+}
+
+.eventDetails {
+  margin-top: 0.65rem;
+}
+
+.eventDetails summary {
+  color: #245f4b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.facts {
+  margin: 1rem 0 0;
+}
+
+.facts div {
+  border-top: 1px solid #e9efeb;
+  padding: 0.75rem 0;
+}
+
+.facts dt {
+  color: #657a76;
+  font-size: 0.7rem;
+}
+
+.facts dd {
+  margin: 0.3rem 0 0;
+  color: #345a52;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.workflow {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0.85rem 0 0;
+  padding-left: 1.25rem;
+  color: #345a52;
+  font-size: 0.77rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 1050px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 1.1rem;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .summary {
+    gap: 0.55rem;
+  }
+
+  .summaryCard,
+  .panel {
+    padding: 0.9rem;
+  }
+
+  .summaryCard strong {
+    font-size: 0.9rem;
+  }
+
+  .sectionHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .contextGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .frames li {
+    flex-direction: column;
+  }
+}

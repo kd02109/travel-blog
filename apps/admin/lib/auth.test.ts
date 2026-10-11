@@ -24,7 +24,7 @@ vi.mock("@repo/api-client", () => ({
   },
 }));
 
-import { getAdminAccess, requireEditor } from "./auth";
+import { canViewErrorAnalytics, getAdminAccess, requireEditor } from "./auth";
 
 const userId = "b1181a76-7f7b-4a43-90ab-d8b966ea407b";
 const siteId = "39a41639-6ca5-4f6b-91b0-a522362595d3";
@@ -77,6 +77,22 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("admin access", () => {
+  it.each([
+    ["owner", true],
+    ["admin", true],
+    ["editor", false],
+    [null, false],
+  ] as const)(
+    "shows error navigation for role %s: %s",
+    async (role, visible) => {
+      arrange({ role });
+      expect(await canViewErrorAnalytics()).toBe(visible);
+    },
+  );
+  it("hides error navigation without a session", async () => {
+    arrange({ initialSession: false });
+    expect(await canViewErrorAnalytics()).toBe(false);
+  });
   it("keeps proxy-detected expiry visible after invalid cookies are cleared", async () => {
     arrange({ initialSession: false });
     mocks.headers.mockResolvedValue(
