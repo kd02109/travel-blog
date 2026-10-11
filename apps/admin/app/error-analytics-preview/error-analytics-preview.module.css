@@ -1,0 +1,241 @@
+.page {
+  min-height: 100vh;
+  padding: clamp(1.25rem, 2.5vw, 2.5rem);
+  background: #f4f6f4;
+}
+.content {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.header {
+  margin: 1rem 0 2rem;
+}
+.eyebrow,
+.panelKicker {
+  color: #53736c;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.header h1 {
+  color: #173c42;
+  font-family: var(--font-editorial), serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+.intro {
+  color: #536569;
+  margin-top: 0.6rem;
+}
+.issuesPanel,
+.guide {
+  border: 1px solid #dbe5de;
+  border-radius: 12px;
+  padding: clamp(1rem, 2vw, 1.75rem);
+  background: #fff;
+}
+.panelHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.panelHeading h2,
+.guide h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #173c42;
+}
+.filters {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.filters label {
+  display: grid;
+  gap: 0.4rem;
+  color: #345a52;
+  font-size: 0.9rem;
+}
+.search {
+  flex: 1;
+  min-width: min(100%, 260px);
+}
+.filters input,
+.filters select {
+  min-height: 48px;
+  border: 1px solid #a8bcb4;
+  border-radius: 6px;
+  padding: 0.6rem;
+  background: #fff;
+  color: #173c42;
+}
+.filters button {
+  min-height: 48px;
+  border-radius: 6px;
+  padding: 0.6rem 1.25rem;
+  color: #fff;
+  background: #173c42;
+}
+.filters a,
+.pagination a {
+  padding: 0.7rem;
+  min-height: 48px;
+}
+.content a {
+  color: #245f51;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.content a:focus-visible,
+.content button:focus-visible,
+.content input:focus-visible,
+.content select:focus-visible {
+  outline: 3px solid #387967;
+  outline-offset: 3px;
+}
+.tableScroll {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.table th {
+  padding: 0.8rem;
+  background: #f2f6f3;
+  color: #536569;
+  font-size: 0.85rem;
+}
+.table td {
+  padding: 1rem 0.8rem;
+  border-bottom: 1px solid #e4ebe6;
+  vertical-align: top;
+  font-size: 0.9rem;
+}
+.table tr:hover td {
+  background: #f6f9f6;
+}
+.issueLink {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 245px;
+}
+.issueLink code {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.status {
+  display: inline-block;
+  border-radius: 20px;
+  padding: 0.25rem 0.6rem;
+  white-space: nowrap;
+}
+.statusOpen {
+  color: #8f3d33;
+  background: #f9e9e5;
+}
+.statusInvestigating {
+  color: #345a52;
+  background: #e8f1eb;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 1.5rem;
+}
+.empty {
+  padding: 2rem 0;
+  color: #536569;
+}
+.guide {
+  margin-top: 2rem;
+  line-height: 1.8;
+  color: #345a52;
+}
+.guide dt {
+  font-weight: 700;
+  margin-top: 1rem;
+}
+.guide dd {
+  margin: 0.25rem 0 0;
+}
+.guide p {
+  margin-top: 1rem;
+}
+.guide details {
+  margin-top: 1rem;
+}
+.guide summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.guide pre {
+  overflow: auto;
+  max-height: 480px;
+  border-radius: 6px;
+  background: #f2f6f3;
+  padding: 1rem;
+  font-size: 0.8rem;
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .table th,
+  .table td {
+    padding: 0.7rem;
+  }
+  .filters {
+    align-items: stretch;
+  }
+  .search {
+    width: 100%;
+  }
+}
+.overview {
+  margin-bottom: 2rem;
+}
+.overview .tableScroll {
+  margin-top: 1.25rem;
+}
+.aggregateValue {
+  font-size: 1.6rem;
+  color: #173c42;
+}
+.topTitle {
+  margin-top: 2rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #173c42;
+}
+.lookupSection {
+  border-top: 1px solid #dbe5de;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+}
+.lookupSection h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.lookupTools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.lookupTools code {
+  overflow-wrap: anywhere;
+}

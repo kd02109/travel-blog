@@ -1,4 +1,5 @@
 "use client";
+import { reportAdminError } from "../lib/error-monitor";
 import dynamic from "next/dynamic";
 import {
   useCallback,
@@ -481,6 +482,14 @@ export function Composer({
         setMutationError(null);
         return true;
       } catch (error) {
+        if (!(error instanceof TravelApiError))
+          void reportAdminError(
+            error,
+            "draft_save_failure",
+            "browser",
+            window.location.pathname,
+            { operation: "admin.post.save" },
+          );
         if (error instanceof TravelApiError) setMutationError(error);
         setSaveError(
           error instanceof TravelApiError

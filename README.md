@@ -4,7 +4,7 @@
 
 배포 준비의 공유 절차는 [Supabase README](supabase/README.ko.md)와 [미디어 worker README](packages/media-worker/README.ko.md)를 참고하세요. 날짜별 로드맵·QA·배포 기록은 로컬에서만 관리합니다.
 
-owner·Kakao·로그아웃·권한 회수 및 격리 DB 재생의 상세 검증 기록은 로컬에만 보관합니다.
+owner·Kakao·로그아웃·권한 회수 및 과거 격리 DB 재생의 상세 검증 기록은 로컬에만 보관합니다. `travel-blog-staging`은 과거 검증 기록이며 현재 배포 대상이 아닙니다.
 
 ## 실행 모드
 
@@ -46,13 +46,23 @@ pnpm --filter admin dev:supabase
 
 각 앱 디렉터리(`apps/web`, `apps/admin`)에서는 `pnpm dev:supabase`로 실행할 수 있습니다. `pnpm start`는 이전 운영 빌드를 실행하므로 개발 중에는 `dev:supabase`를 사용하세요. 실제 연결의 운영 결과를 확인하려면 `pnpm build:supabase` 후 `pnpm start:supabase`를 실행하세요.
 
-공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 예제 파일은 프로젝트 URL을 비워 두므로 `supabase/deployment.json`에서 복사하거나 사용할 개발 프로젝트 URL을 입력하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다.
+공통 URL·publishable key는 루트 `.env.supabase.local`에서 읽습니다. 로컬 실제 연결과 Vercel web/admin Preview의 공개 URL·키는 단일 `travel-blog` 프로젝트를 사용합니다. Preview 환경변수 변경은 새 배포에만 적용되며, Production 환경변수와 운영 배포는 출시 게이트에서 별도로 확인합니다. 예제 파일은 프로젝트 URL을 비워 두므로 [운영 배포 식별자](supabase/deployment.json)의 프로젝트 URL과 해당 프로젝트 publishable key를 설정하세요. 서비스별/앱별 값은 `apps/web/.env.supabase.local`, `apps/admin/.env.supabase.local`에서 재정의할 수 있습니다. 실제 연결에서 저장·발행·삭제·업로드하면 운영 데이터가 바뀝니다. 반복·파괴적 테스트는 mock이나 별도 로컬/격리 테스트 backend를 사용하세요.
 
 우선순위는 **셸 환경 변수 > 앱별 profile > 루트 profile**입니다. 값은 `$VARIABLE` 참조 없이 직접 입력하세요. 선택한 실행 명령은 `NEXT_PUBLIC_API_MOCKING` 값을 항상 덮어쓰므로 `.env.local`이나 셸에 남은 플래그 때문에 모드가 뒤바뀌지 않습니다. 기존 `.env.local`의 Supabase 연결 값은 profile 파일로 옮겨 주세요. Next는 그 외 일반 환경 변수를 기존 방식으로 읽습니다.
 
 실제 모드는 필수 값이 없거나 비밀 키를 공개 키 자리에 넣으면 실행 전에 종료합니다. `test:supabase`는 로그인·쓰기·업로드·DB 초기화를 하지 않으며, OAuth 사용자 흐름이나 RLS 전체를 검증하는 테스트는 아닙니다. CI는 실서비스 자격 정보 없이 `pnpm check`, `pnpm build`, 일반 smoke E2E와 mock E2E를 실행합니다. `pnpm build`는 연결 없이 컴파일을 확인하는 기존 명령으로 유지했습니다. 실제 배포 설정으로 빌드하려면 `build:supabase`를 사용하세요.
 
 두 개발 모드는 같은 포트를 사용합니다. 실행 중인 서버를 종료한 뒤 다른 모드로 전환하세요. `/write`는 실제 로그인과 해당 사이트 owner/admin/editor 권한이 필요하며 mock 역할로 서버 인증을 우회하지 않습니다.
+
+## 브랜치와 배포
+
+`main`은 Production 출시 브랜치, `dev`는 web/admin이 함께 검증하는 고정 Vercel Preview 브랜치입니다. 평소에는 `dev`에서 `feature/*` 또는 `fix/*` 브랜치를 만들어 PR과 GitHub `quality` 검사를 거쳐 `dev`에 병합합니다. `dev`의 실제 사이트·관리자 Preview에서 통합 검증을 마친 뒤, 출시 승인 때 `dev`에서 `main`으로 PR을 병합합니다. 긴급 수정은 `main`에서 `hotfix/*`를 분기해 출시한 뒤 `dev`에도 반영합니다. 두 장기 브랜치는 직접 푸시와 강제 푸시를 제한하고 `quality` 통과를 필수로 둡니다.
+
+Vercel 프로젝트의 Root Directory는 각각 `apps/web`, `apps/admin`입니다. 두 앱의 설정은 `main`·`dev` 커밋만 자동 배포하고 다른 브랜치의 자동 배포를 막습니다. 따라서 기능 브랜치는 CI에서 빌드·mock·SSR 테스트를 실행하지만 Preview URL은 만들지 않습니다. 브라우저 Mirage는 운영 빌드와 서버 렌더링 요청을 모킹하지 못하므로 기능 브랜치의 Preview를 mock 사이트처럼 사용하지 않습니다.
+
+`dev` Preview의 두 앱과 이후 Production은 단일 Supabase `travel-blog`를 사용합니다. Vercel Preview의 Supabase URL·publishable key와 관리자 서버 전용 키는 `dev` 브랜치에만 적용하고, Production 변수는 별도로 관리합니다. 변경된 환경변수는 새 배포부터 적용됩니다. `dev`의 고정 web/admin Preview 주소만 필요한 CORS Origin과 Supabase Auth `/auth/callback`에 등록하며, 커밋마다 바뀌는 배포 URL이나 `*.vercel.app` 전체를 허용하지 않습니다. 같은 DB를 쓰므로 `dev`에서 저장·업로드·삭제한 데이터는 실제 데이터입니다.
+
+`main` 병합은 자동 Production 배포를 시작하므로 공개 승인 게이트를 통과한 뒤 진행합니다. 그 전에 OAuth callback·로그아웃, 권한 회수, 미디어 처리, 관측, noindex, 복원 절차와 실제 글 발행을 검증합니다. 구 release 브랜치의 Preview 배포와 Origin 허용 목록은 전환이 끝난 뒤 정리합니다. 배포 절차와 현재 Edge 버전은 [Supabase README](supabase/README.ko.md)와 [배포 식별자](supabase/deployment.json)를 따릅니다.
 
 ## 구조
 
@@ -108,13 +118,13 @@ pnpm db:stop
 
 ### Supabase
 
-루트 또는 앱별 `.env.supabase.local`에 URL과 publishable key를 입력합니다. 서로 다른 개발/운영 프로젝트를 사용하세요. Supabase Auth에 각 앱의 `/auth/callback` URL을 등록하고 Kakao provider를 활성화합니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
+루트 또는 앱별 `.env.supabase.local`에 `travel-blog` URL과 publishable key를 입력합니다. web/admin의 기존 release Preview는 같은 프로젝트에 연결돼 있으며 `dev` Preview도 이 프로젝트에 연결합니다. Production 환경변수와 운영 배포는 출시 게이트에서 확인합니다. Supabase Auth에 localhost와 `dev`의 정확한 web/admin `/auth/callback` URL을 등록하고 Site URL을 운영 web 도메인으로 지정해야 합니다. 배포 도메인의 OAuth는 별도 실사용 검증이 남아 있습니다. Kakao provider는 활성화돼 있습니다. 로그인 UI는 카카오 기반이며 네이버는 Custom OAuth 호환성 검증 후 별도로 추가합니다. `me.memberships`와 사이트 ID로 관리자 권한을 검사하고, 실제 쓰기 권한은 기존 서버 API가 다시 검사해야 합니다.
 
 `GET /api/health`는 앱 상태만 반환합니다. `GET /api/site`는 기존 Edge API의 `site.get`을 호출합니다. 미설정은 503, upstream 실패는 502로 구분합니다. 인증·API 요청은 캐시하지 않습니다. 범용 API 요청 함수의 응답은 `unknown`이므로 각 action을 추가할 때 Zod 응답 검증을 붙이세요. 쓰기 요청은 자동 재시도하지 않습니다.
 
 ### 자체 오류 모니터링
 
-Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전을 staging에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증은 staging과 실제 Preview에서 별도로 수행합니다.
+Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전의 권한·마스킹을 로컬/격리 테스트와 단일 원격 canary에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. 오류 조회·상태 변경·삭제는 활성 `owner` 또는 `admin`만 허용합니다. 관리자 `/error-analytics-preview`는 실제 DB 목록을 20개씩 페이지로 조회하며 상태·이슈 ID·요청 ID·fingerprint 검색을 제공합니다. 예시 차트와 샘플 오류는 표시하지 않습니다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증 기록은 로컬에서 관리합니다.
 
 ### Firebase / GA4
 
@@ -147,3 +157,38 @@ pnpm dev:mock
 [공개 앱 API 체험](http://localhost:3000/mock)과 [관리자 API 체험](http://localhost:3002/mock)에서 계정·DB 없이 예시 데이터를 사용할 수 있습니다. 다섯 카테고리, 글·댓글·좋아요, 버전 충돌, 홈 템플릿과 권한·오류 상태를 `@repo/mock-api`가 처리합니다.
 
 [Mock 패키지 설명](packages/mock-api/README.md)에 fixture 출처, 실제 API 전환, SSR 제한과 지원 action을 정리했습니다. `pnpm test:e2e:mock`으로 검증합니다. 데이터는 브라우저 탭 메모리에만 있으며 새로고침 시 초기화됩니다. 운영 빌드에서는 활성화되지 않습니다.
+
+### 오류 이슈 조회와 처리
+
+`/error-analytics-preview`에서 이메일의 전체 이슈 UUID를 검색하고 목록의 문제 또는 ID를 누릅니다. 상세 주소는 `/error-analytics-preview/<issue-id>`이며 기존 주소 호환을 위해 경로명을 유지합니다.
+
+| 식별자            | 의미와 조회 방법                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 이슈 ID           | 같은 오류를 묶은 항목의 UUID. 이메일, 목록, 상세 화면에서 동일한 ID를 사용합니다.                                         |
+| 수집 요청 ID      | 오류 보고를 수신한 travel-api 요청 ID. 목록 검색 또는 `app_private.web_error_events.request_id`로 해당 발생을 찾습니다.   |
+| 원래 실패 요청 ID | 실제 실패한 API/Next 요청의 ID. 수집된 경우 `origin_request_id`와 원래 서비스 로그를 대조합니다. 수집 요청 ID와 다릅니다. |
+| fingerprint       | 동일 오류의 그룹 키. 사이트·앱·환경과 함께 비교하며 원문으로 복호화할 수 없습니다.                                        |
+| 이벤트 ID         | 개별 발생의 UUID. `app_private.web_error_events.id`로 한 건을 조회합니다.                                                 |
+
+상단 **오류 현황과 발생 빈도**는 `admin.errors.summary`를 통해 목록과 동일한 앱·환경·기간·상태·ID 검색을 집계합니다. 기본은 production/24시간이며, ID만 직접 검색하면 모든 환경/누적 범위에서 찾습니다. 24시간·7일·14일은 보존된 이벤트 수, 전체 누적은 보관 이슈의 `occurrence_count`입니다. 수집 제한·통신 장애로 유실된 실제 발생 전체를 의미하지 않으므로 **저장된 보고 수**로 표시합니다.
+
+**수집·알림 상태**는 새 관측 기능 적용 이후 환경·앱별 저장/중복 제외/제한/실패, 최근 저장, 이메일 실행 상태와 대기/실패/서비스 접수를 보여 줍니다. 이 운영 상태에는 목록의 기간·검색 필터가 적용되지 않으며, DB에 도달하지 못한 실패와 받은편지함 도착 여부를 증명하지 않습니다. 기록이 없으면 미확인으로 표시합니다. 현재 admin 실행 환경의 수집/발송 활성화 여부도 표시하며 web 설정과 외부 가용성 감시는 별도입니다.
+
+처리된 브라우저 API 5xx/네트워크 실패, 작성기 저장 예외와 업로드 처리 실패를 수집합니다. 예상한 4xx·취소는 공통 API 오류 보고에서 제외합니다. 같은 Error 객체의 전역 중복 보고를 억제하고 `event_id`로 동일 보고의 DB 재전송을 원자적으로 중복 제거합니다(중복 키 14일 보존). fingerprint v2는 서버에서 작업·의존성·HTTP 상태·정규화한 메시지를 포함해 만들고 v1 이슈는 보존합니다. 환경별 수집 쿼터가 분리됩니다. 정규식 마스킹은 모든 개인정보 제거를 보장하지 않으므로 입력 내용·원본 요청을 진단 정보에 추가하지 마세요.
+
+이슈별 이벤트는 시간+ID 커서로 20개씩 탐색합니다. 해결 시 처리자·시각·선택한 해결 배포·마스킹된 메모를 보관하며, 재발 시 자동으로 다시 열려도 이전 해결 맥락은 유지됩니다. 해결 메모는 이벤트의 14일 정책과 달리 이슈 삭제까지 보관됩니다.
+
+이메일은 기본 최근 5분 10건 기준에 더해 `admin.post.save`/`admin.post.publish`의 5xx 보고 1건도 후보로 삼습니다. 기존 30분 쿨다운·일일 상한·재시도 멱등성은 유지됩니다. `ERROR_EMAIL_ADMIN_URL`에 canonical admin HTTPS origin을 설정하면 상세 링크가 발송 작업에 고정됩니다. 실제 자동 발송 활성화, 독립 가용성 감시, 실제 배포 산출물과 일치하는 소스맵 보관, 서명 검증된 Resend 전달 webhook은 별도 운영 설정과 검증이 필요합니다.
+
+상세 화면의 **ID로 오류 추적하기**에는 연결된 Supabase SQL Editor·로그 탐색기 링크와 해당 이슈 ID를 넣은 조회 SQL이 있습니다. SQL 옆 복사 아이콘으로 쿼리 전체를 복사할 수 있고, 성공·실패 상태가 표시됩니다. 목록 화면의 SQL은 현재 사이트, 상세 화면의 SQL은 선택한 이슈를 조회하며 UUID 자리표시자를 수정할 필요가 없습니다.
+
+- **SQL Editor (PostgreSQL/Database):** `app_private.web_error_issues`·`web_error_events`에 저장된 이슈 ID, fingerprint, 요청 ID와 마스킹된 내용을 조회합니다. 화면의 복사 SQL은 이곳에서 실행합니다.
+- **Supabase Logs / Explorer (Logs 소스):** 함수 실행 당시 기록을 찾습니다. 시간·Edge Function 유형과 이벤트 메시지의 요청 ID로 비교하며, 위 DB SQL을 붙여 넣지 않습니다. ID가 로그에 출력되지 않았다면 검색되지 않습니다. [공식 로그 SQL 안내](https://supabase.com/docs/guides/observability/advanced-log-filtering).
+- **Vercel Runtime Logs:** Next.js 서버 오류는 해당 web/admin 프로젝트의 발생 시간·경로·원래 요청 ID로 비교합니다.
+
+콘솔은 별도의 Supabase 프로젝트 권한이 필요합니다. 메시지·스택과 개별 이벤트는 14일 보존 후 정리되므로 오래된 요청을 조회하지 못할 수 있습니다. 화면은 이슈 전체를 페이지로 탐색하고, 이슈별 이벤트는 커서로 20건씩 탐색합니다.
+
+- **해결됨 처리 / 다시 열기:** 동일 fingerprint의 오류가 다시 수집되면 해결된 이슈는 자동으로 열립니다.
+- **이슈 삭제:** 확인 후 이슈와 연결된 이벤트를 영구 삭제합니다. 관리 감사 기록·메일 발송 이력/발송 한도 계산은 보존합니다. 삭제 후 같은 오류가 수집되면 새로운 이슈 ID가 생성됩니다.
+- 상세 조회 후 새 발생이 수집됐거나 메일을 발송 중이면 변경/삭제를 409로 거절할 수 있습니다. 새로고침 후 확인합니다.
+- 읽기는 서버의 `travel-api`, 변경은 브라우저의 기존 `travel-api` 클라이언트를 사용합니다. 테이블/RPC를 브라우저에서 직접 호출하지 않습니다. 신규 계약은 `admin.errors.page`, `admin.error.status`, `admin.error.delete`이며 SQL RPC는 service role만 호출할 수 있습니다.

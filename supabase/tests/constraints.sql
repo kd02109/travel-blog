@@ -1,4 +1,6 @@
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 create temporary table constraint_ids as select gen_random_uuid() u,gen_random_uuid() s,gen_random_uuid() s2,gen_random_uuid() a,gen_random_uuid() a2,gen_random_uuid() pdf,gen_random_uuid() preview;
 insert into auth.users(id,aud,role,email,created_at,updated_at) select u,'authenticated','authenticated','constraint-test@example.invalid',now(),now() from constraint_ids;
 insert into app_private.sites(id,slug,name) select s,'t-'||s,'test' from constraint_ids union all select s2,'t-'||s2,'other' from constraint_ids;
@@ -46,4 +48,6 @@ do $$ begin
  begin perform 1 from public.post_publications;raise exception 'direct access exposed';exception when insufficient_privilege then null;end;
 end $$;
 reset role;
+select pass('Publication, comment, asset and worker access assertions passed');
+select * from finish();
 rollback;

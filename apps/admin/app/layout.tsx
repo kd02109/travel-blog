@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Noto_Sans_KR, Noto_Serif_KR } from "next/font/google";
 import { Providers } from "./providers";
 import { AdminFrame } from "./admin-frame";
+import { canViewErrorAnalytics } from "../lib/auth";
 import "./globals.css";
 
 const bodyFont = Noto_Sans_KR({
@@ -19,11 +20,12 @@ export const metadata: Metadata = {
   description: "세상을 여행하고 삶을 기록합니다.",
   robots: { index: false, follow: false },
 };
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const showErrorAnalytics = await canViewErrorAnalytics();
   return (
     <html
       lang="ko"
@@ -31,7 +33,9 @@ export default function RootLayout({
     >
       <body suppressHydrationWarning>
         <Providers>
-          <AdminFrame>{children}</AdminFrame>
+          <AdminFrame showErrorAnalytics={showErrorAnalytics}>
+            {children}
+          </AdminFrame>
         </Providers>
       </body>
     </html>

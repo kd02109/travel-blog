@@ -1,5 +1,5 @@
 import { createServerDatabase } from "@repo/database/server";
-import { handleCallback } from "@repo/database/auth-flow";
+import { handleRememberedCallback } from "@repo/database/auth-flow";
 export function GET(request: Request) {
-  return handleCallback(request, createServerDatabase);
+  return handleRememberedCallback(request, createServerDatabase);
 }

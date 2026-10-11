@@ -21,6 +21,10 @@ export const readActions = [
   "admin.reports",
   "admin.audit",
   "admin.errors",
+  "admin.errors.health",
+  "admin.error.events",
+  "admin.errors.summary",
+  "admin.errors.page",
   "admin.error.get",
 ] as const satisfies readonly ApiAction[];
 export type ReadAction = (typeof readActions)[number];

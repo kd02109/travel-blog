@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createServerDatabase: vi.fn(),
   createTravelApi: vi.fn(),
+  headers: vi.fn(),
   redirect: vi.fn((path: string): never => {
     throw new Error(`redirect:${path}`);
   }),
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect }));
+vi.mock("next/headers", () => ({ headers: mocks.headers }));
 vi.mock("@repo/database/server", () => ({
   createServerDatabase: mocks.createServerDatabase,
 }));
@@ -22,7 +24,7 @@ vi.mock("@repo/api-client", () => ({
   },
 }));
 
-import { getAdminAccess, requireEditor } from "./auth";
+import { canViewErrorAnalytics, getAdminAccess, requireEditor } from "./auth";
 
 const userId = "b1181a76-7f7b-4a43-90ab-d8b966ea407b";
 const siteId = "39a41639-6ca5-4f6b-91b0-a522362595d3";
@@ -68,12 +70,38 @@ function arrange({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.headers.mockResolvedValue(new Headers());
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "test-key");
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe("admin access", () => {
+  it.each([
+    ["owner", true],
+    ["admin", true],
+    ["editor", false],
+    [null, false],
+  ] as const)(
+    "shows error navigation for role %s: %s",
+    async (role, visible) => {
+      arrange({ role });
+      expect(await canViewErrorAnalytics()).toBe(visible);
+    },
+  );
+  it("hides error navigation without a session", async () => {
+    arrange({ initialSession: false });
+    expect(await canViewErrorAnalytics()).toBe(false);
+  });
+  it("keeps proxy-detected expiry visible after invalid cookies are cleared", async () => {
+    arrange({ initialSession: false });
+    mocks.headers.mockResolvedValue(
+      new Headers({ "x-travel-session-expired": "1" }),
+    );
+    await expect(requireEditor()).rejects.toThrow(
+      "redirect:/login?error=expired",
+    );
+  });
   it("distinguishes a missing session from an expired one", async () => {
     const { getUser } = arrange({ initialSession: false });
     expect(await getAdminAccess()).toEqual({

@@ -100,7 +100,7 @@ test("serves post-specific share metadata and a PNG image to crawlers", async ({
 test("handles empty list and missing post on server", async ({ page }) => {
   await page.goto("/posts?page=3");
   await expect(
-    page.getByRole("heading", { name: "아직 여행 기록이 없어요" }),
+    page.getByRole("heading", { name: "이 페이지에는 기록이 없어요" }),
   ).toBeVisible();
   const response = await page.goto("/posts/does-not-exist");
   expect(response?.status()).toBe(404);

@@ -4,7 +4,8 @@
   "site_id": "7b83105e-7198-4391-a6d2-4bf503d1dacf",
   "site_slug": "parents-travel",
   "edge_function": "travel-api",
-  "edge_function_version": 1,
+  "edge_function_version": 3,
+  "edge_function_cors": "Exact localhost:3000/3002 and 127.0.0.1:3000/3002 origins; untrusted browser origins rejected, server requests without Origin allowed",
   "migration_history": "MCP-generated staging versions differ from 32 local filenames; do not run db push until repaired with an approved supported method.",
   "migrations": [
     {

@@ -38,6 +38,7 @@ it("sends a bounded envelope without the raw error or URL", async () => {
     endpoint: "/api/errors",
   });
   const sent = JSON.stringify(JSON.parse(fetchMock.mock.calls[0]![1].body));
+  expect(fetchMock.mock.calls[0]![1].credentials).toBe("same-origin");
   expect(sent).toContain('"route":"/posts/:id"');
   expect(sent).not.toContain("private@example.com");
   expect(sent).not.toContain("token=secret");
@@ -46,6 +47,23 @@ it("sends a bounded envelope without the raw error or URL", async () => {
   expect(input.masked_message).toContain("[email]");
   expect(input.masked_message).toContain("[credential]");
   expect(input.masked_stack).toBe("[url]");
+});
+
+it("never attaches browser credentials to the server collector", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(null, { status: 202 }));
+  vi.stubGlobal("fetch", fetchMock);
+  await captureException(new Error("synthetic"), {
+    service: "admin",
+    source: "next_server",
+    code: "next_route",
+    route: "/posts",
+    enabled: true,
+    endpoint: "https://collector.example.invalid/functions/v1/travel-api",
+    reportKey: "synthetic-report-key",
+  });
+  expect(fetchMock.mock.calls[0]![1].credentials).toBe("omit");
 });
 
 it("redacts common secrets before truncation while retaining useful frames", () => {
@@ -328,4 +346,115 @@ it("rejects cross-site posts before forwarding", async () => {
   );
   expect(response.status).toBe(403);
   expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("preserves the collector's rate-limit wait without exposing its body", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(
+    new Response("private upstream details", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const response = await relayErrorReport(
+    new Request("https://blog.example/api/errors", {
+      method: "POST",
+      headers: {
+        Origin: "https://blog.example",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "error.capture", input: {} }),
+    }),
+    "web",
+    "https://project.supabase.co",
+    "server-key",
+  );
+  expect(response.status).toBe(429);
+  expect(response.headers.get("Retry-After")).toBe("60");
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.text()).toBe("");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it.each(["timeout", "unavailable"])(
+  "returns 503 when the collector is %s without retrying recursively",
+  async (failure) => {
+    const fetchMock = vi.fn();
+    if (failure === "timeout") {
+      fetchMock.mockRejectedValue(
+        new DOMException("timed out", "TimeoutError"),
+      );
+    } else {
+      fetchMock.mockResolvedValue(
+        new Response("private details", { status: 500 }),
+      );
+    }
+    vi.stubGlobal("fetch", fetchMock);
+    const response = await relayErrorReport(
+      new Request("https://blog.example/api/errors", {
+        method: "POST",
+        headers: {
+          Origin: "https://blog.example",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ action: "error.capture", input: {} }),
+      }),
+      "web",
+      "https://project.supabase.co",
+      "server-key",
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe("");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each([429, 503, "network"])(
+  "allows the caller to continue after collection failure %s",
+  async (failure) => {
+    const fetchMock = vi.fn();
+    if (typeof failure === "string")
+      fetchMock.mockRejectedValue(new Error("offline"));
+    else fetchMock.mockResolvedValue(new Response(null, { status: failure }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      captureException(new Error("synthetic failure"), {
+        service: "admin",
+        source: "browser",
+        route: "/write/:id",
+        code: "render_boundary",
+        enabled: true,
+        endpoint: "/api/errors",
+      }),
+    ).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("deduplicates the same Error across handled and global capture paths", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(new Response(null, { status: 202 }));
+  vi.stubGlobal("fetch", fetcher);
+  const error = new Error("save failed");
+  const options = {
+    service: "admin" as const,
+    source: "browser" as const,
+    route: "/write/secret",
+    code: "api_failure",
+    endpoint: "/api/errors",
+    enabled: true,
+  };
+  await captureException(error, options);
+  await captureException(error, { ...options, code: "uncaught_error" });
+  expect(fetcher).toHaveBeenCalledOnce();
+  const payload = JSON.parse(fetcher.mock.calls[0]![1].body);
+  expect(payload.input.event_id).toMatch(/^[0-9a-f-]{36}$/);
+  await captureException(new Error("save failed"), options);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+it("masks Korean phone numbers in diagnostic text", () => {
+  expect(maskErrorText("010-1234-5678 +82 10 1234 5678", 100)).toBe(
+    "[phone] [phone]",
+  );
 });

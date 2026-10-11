@@ -1,4 +1,5 @@
 "use client";
+import { reportAdminError } from "../lib/error-monitor";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { createBrowserTravelApi } from "@repo/api-client/browser";
@@ -157,7 +158,12 @@ export async function uploadEditorImage(
               new Error(`이미지 업로드에 실패했습니다 (${request.status}).`),
             );
       request.onerror = () =>
-        reject(new Error("네트워크 연결을 확인해 주세요."));
+        reject(
+          Object.assign(new Error("네트워크 연결을 확인해 주세요."), {
+            status: 0,
+            operation: "media.upload",
+          }),
+        );
       request.send(file);
     });
     const state = await completeAndPollAsset(
@@ -635,7 +641,15 @@ export function MediaUpload({
             request.status >= 200 && request.status < 300
               ? resolve()
               : reject(
-                  new Error(`파일 업로드에 실패했습니다 (${request.status}).`),
+                  Object.assign(
+                    new Error(
+                      "파일 업로드에 실패했습니다. 다시 시도해 주세요.",
+                    ),
+                    {
+                      status: request.status,
+                      operation: "media.upload",
+                    },
+                  ),
                 );
           request.onerror = () =>
             reject(new Error("네트워크 연결을 확인해 주세요."));
@@ -678,6 +692,29 @@ export function MediaUpload({
       }
       refreshLibrary();
     } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        !(error instanceof TravelApiError) &&
+        !(error instanceof DOMException && error.name === "AbortError") &&
+        !(error instanceof AssetStatusCheckError)
+      ) {
+        const status =
+          error && typeof error === "object" && "status" in error
+            ? Number(error.status)
+            : undefined;
+        if (status === undefined || status === 0 || status >= 500)
+          void reportAdminError(
+            error,
+            "media_processing_failure",
+            "browser",
+            window.location.pathname,
+            {
+              operation: "media.process",
+              dependency: status === undefined ? "other" : "supabase_storage",
+              httpStatus: status,
+            },
+          );
+      }
       if (controller.signal.aborted && controller.signal.reason === "unmount")
         return;
       if (

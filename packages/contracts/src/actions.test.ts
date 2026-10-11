@@ -242,6 +242,22 @@ const samples = {
     },
   ],
   "admin.errors": [errorIssue],
+  "admin.errors.health": {
+    collection: [],
+    email: { pending: 0, failed: 0, accepted: 0 },
+  },
+  "admin.error.events": { items: [], next: null },
+  "admin.errors.summary": {
+    total: 1,
+    occurrences: 2,
+    open: 1,
+    resolved: 0,
+    ignored: 0,
+    top: [errorIssue],
+  },
+  "admin.errors.page": { items: [errorIssue], total: 1 },
+  "admin.error.status": { saved: true },
+  "admin.error.delete": { deleted: true },
   "admin.error.get": {
     issue: {
       ...errorIssue,

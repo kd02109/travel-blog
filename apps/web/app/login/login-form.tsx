@@ -13,7 +13,12 @@ export function LoginForm({ next }: { next?: string }) {
       const db = createBrowserDatabase();
       const callback = new URL("/auth/callback", window.location.origin);
       const returnPath = safeReturnPath(next);
-      if (returnPath !== "/") callback.searchParams.set("next", returnPath);
+      const remembered = await fetch("/auth/return", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ next: returnPath }),
+      });
+      if (!remembered.ok) throw new Error("Cannot remember login destination");
       const result = await db.auth.signInWithOAuth({
         provider: "kakao",
         options: { redirectTo: callback.toString() },

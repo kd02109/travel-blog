@@ -8,6 +8,7 @@ import {
   sanitizeStackFrames,
   type ErrorService,
 } from "./index";
+import { COLLECTOR_TIMEOUT_MS } from "./transport";
 
 async function readSmallJson(request: Request): Promise<unknown> {
   if (!request.headers.get("content-type")?.startsWith("application/json"))
@@ -67,6 +68,7 @@ export async function relayErrorReport(
   const data = input as Record<string, unknown>;
   // Drop all unknown client fields before the request reaches Supabase.
   const safeInput = {
+    event_id: safeOriginRequestId(data.event_id) ?? crypto.randomUUID(),
     app: service,
     environment:
       deployEnvironment === "production" || deployEnvironment === "preview"
@@ -86,6 +88,7 @@ export async function relayErrorReport(
     http_status: safeHttpStatus(data.http_status),
     origin_request_id: safeOriginRequestId(data.origin_request_id),
   };
+  const startedAt = performance.now();
   try {
     const response = await fetch(`${supabaseUrl}/functions/v1/travel-api`, {
       method: "POST",
@@ -95,8 +98,17 @@ export async function relayErrorReport(
       },
       body: JSON.stringify({ action, input: safeInput }),
       cache: "no-store",
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(COLLECTOR_TIMEOUT_MS),
     });
+    if (!response.ok && response.status !== 429) {
+      console.warn({
+        event: "error_relay_failed",
+        app: service,
+        reason: "upstream_status",
+        upstream_status: response.status,
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      });
+    }
     return new Response(null, {
       status: response.ok ? 202 : response.status === 429 ? 429 : 503,
       headers: {
@@ -106,7 +118,18 @@ export async function relayErrorReport(
           : {}),
       },
     });
-  } catch {
+  } catch (error) {
+    // Never send monitoring failures back through captureException: that
+    // would recurse. Do not log the exception, report body, headers or URL.
+    console.warn({
+      event: "error_relay_failed",
+      app: service,
+      reason:
+        error instanceof Error && error.name === "TimeoutError"
+          ? "timeout"
+          : "network",
+      elapsed_ms: Math.round(performance.now() - startedAt),
+    });
     return new Response(null, { status: 503 });
   }
 }

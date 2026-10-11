@@ -138,8 +138,11 @@
       "name": "media_serverless_claim_retry"
     }
   ],
-  "edge_function_version": 19,
-  "import_map_path": "import_map.json",
-  "verified_at": "2026-10-08T05:03:02Z",
-  "edge_source_status": "Deployed v19 predates local error.capture and admin.errors code; deploy and verify on staging before production."
+  "edge_function_version": 21,
+  "edge_bundle_sha256": "85c1804df432a7537980e33cae85ed4ba165bfcfcfb5cb3439cd0e1257ed87c9",
+  "edge_source_commit": "6e024c1",
+  "edge_verify_jwt": false,
+  "import_map_path": "deno.json",
+  "verified_at": "2026-10-08T09:39:52Z",
+  "edge_source_status": "Deployed strict Origin CORS and error API code. Public site.get and allowed/denied Origin responses passed read-only checks; OAuth, media, error collection, and Vercel end-to-end checks remain separate."
 }

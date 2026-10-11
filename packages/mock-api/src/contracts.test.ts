@@ -96,11 +96,11 @@ it("validates public/member/admin reads including nullable profile and audit fie
     ).toBe(true);
   }
 });
-it("restricts error issue reads to the active admin role", () => {
+it("restricts error issue reads to active owner and admin roles", () => {
   const engine = createMockEngine();
   const request = { action: "admin.errors", input: site };
   expect(engine.handle(request).status).toBe(401);
-  expect(engine.handle(request, owner).status).toBe(403);
+  expect(engine.handle(request, owner).status).toBe(200);
   const listed = engine.handle(request, admin);
   expect(listed.status).toBe(200);
   expect(
@@ -111,12 +111,29 @@ it("restricts error issue reads to the active admin role", () => {
     action: "admin.error.get",
     input: { ...site, id: mockId(8, 1) },
   };
+  for (const actionRequest of [request, detailRequest]) {
+    for (const role of ["editor", "reader"]) {
+      expect(
+        engine.handle(actionRequest, { Authorization: `Bearer mock-${role}` })
+          .status,
+      ).toBe(403);
+    }
+    expect(
+      engine.handle(
+        {
+          ...actionRequest,
+          input: { ...actionRequest.input, site_id: mockId(1, 99) },
+        },
+        owner,
+      ).status,
+    ).toBe(403);
+  }
   expect(engine.handle(detailRequest).status).toBe(401);
   expect(
     engine.handle(detailRequest, { Authorization: "Bearer mock-editor" })
       .status,
   ).toBe(403);
-  expect(engine.handle(detailRequest, owner).status).toBe(403);
+  expect(engine.handle(detailRequest, owner).status).toBe(200);
   const detail = engine.handle(detailRequest, admin);
   expect(detail.status).toBe(200);
   expect(
@@ -450,4 +467,128 @@ it("maps invalid PostgreSQL date input to the same safe API validation code", ()
     status: 500,
     message: "internal_error",
   });
+});
+
+it("pages and finds error issues by mail ID, fingerprint and request IDs, then resolves and deletes", () => {
+  const engine = createMockEngine();
+  const list = (input = {}) =>
+    engine.handle(
+      { action: "admin.errors.page", input: { ...site, ...input } },
+      owner,
+    );
+  const summary = () =>
+    engine.handle({ action: "admin.errors.summary", input: site }, owner);
+  expect(summary().body).toMatchObject({
+    total: 1,
+    occurrences: 2,
+    open: 1,
+    resolved: 0,
+    ignored: 0,
+  });
+  expect(
+    actionContracts["admin.errors.summary"].output.safeParse(summary().body)
+      .success,
+  ).toBe(true);
+  const initial = list();
+  expect(initial.status).toBe(200);
+  expect(
+    actionContracts["admin.errors.page"].output.safeParse(initial.body).success,
+  ).toBe(true);
+  const body = initial.body as {
+    items: { id: string; fingerprint: string; request_id: string }[];
+    total: number;
+  };
+  const issue = body.items[0]!;
+  for (const search of [
+    issue.id,
+    issue.fingerprint,
+    issue.request_id,
+    mockId(8, 4),
+  ])
+    expect(list({ search }).body).toMatchObject({ total: 1 });
+  expect(list({ offset: 1 }).body).toEqual({ items: [], total: 1 });
+  expect(list({ search: mockId(9, 999) }).body).toEqual({
+    items: [],
+    total: 0,
+  });
+  expect(list({ search: "invalid" }).status).toBe(400);
+  const input = { ...site, id: issue.id, expected_count: 2 };
+  expect(
+    engine.handle(
+      {
+        action: "admin.error.status",
+        input: { ...input, expected_count: 1, status: "resolved" },
+      },
+      owner,
+    ).status,
+  ).toBe(409);
+  expect(
+    engine.handle(
+      { action: "admin.error.status", input: { ...input, status: "resolved" } },
+      owner,
+    ).status,
+  ).toBe(200);
+  expect(list({ status: "open" }).body).toEqual({ items: [], total: 0 });
+  expect(list({ status: "resolved" }).body).toMatchObject({ total: 1 });
+  expect(summary().body).toMatchObject({
+    total: 1,
+    occurrences: 2,
+    open: 0,
+    resolved: 1,
+  });
+  expect(
+    engine.handle(
+      { action: "admin.error.get", input: { ...site, id: issue.id } },
+      owner,
+    ).body,
+  ).toMatchObject({ issue: { status: "resolved" } });
+  expect(
+    engine.handle({ action: "admin.error.delete", input }, owner).body,
+  ).toEqual({ deleted: true });
+  expect(
+    engine.handle(
+      { action: "admin.error.get", input: { ...site, id: issue.id } },
+      owner,
+    ).status,
+  ).toBe(404);
+  expect(list().body).toEqual({ items: [], total: 0 });
+  expect(summary().body).toEqual({
+    total: 0,
+    occurrences: 0,
+    open: 0,
+    resolved: 0,
+    ignored: 0,
+    top: [],
+  });
+  engine.reset();
+  expect(list().body).toMatchObject({ total: 1 });
+});
+it("denies reader/editor and cross-site error management", () => {
+  const engine = createMockEngine();
+  for (const action of [
+    "admin.errors.summary",
+    "admin.errors.page",
+    "admin.error.status",
+    "admin.error.delete",
+  ]) {
+    const input = ["admin.errors.page", "admin.errors.summary"].includes(action)
+      ? site
+      : {
+          ...site,
+          id: mockId(8, 1),
+          expected_count: 2,
+          ...(action === "admin.error.status" ? { status: "resolved" } : {}),
+        };
+    for (const token of ["mock-reader", "mock-editor"])
+      expect(
+        engine.handle({ action, input }, { Authorization: `Bearer ${token}` })
+          .status,
+      ).toBe(403);
+    expect(
+      engine.handle(
+        { action, input: { ...input, site_id: mockId(9, 888) } },
+        owner,
+      ).status,
+    ).toBe(403);
+  }
 });

@@ -22,6 +22,7 @@ export function createTravelApi(options: {
   getAccessToken?: () => Promise<string | undefined>;
   getVisitorToken?: () => Promise<string | undefined>;
   onInvalidVisitor?: () => void;
+  onUnexpectedError?: (error: TravelApiError) => void;
 }) {
   const client = axios.create({ baseURL: options.baseURL, timeout: 10000 });
   let retryAt = 0;
@@ -74,13 +75,24 @@ export function createTravelApi(options: {
           ["invalid_visitor", "visitor_required"].includes(parsed.data.error)
         )
           options.onInvalidVisitor?.();
-        throw new TravelApiError(
+        const failure = new TravelApiError(
           error.response?.status ?? 0,
           parsed.success ? parsed.data.error : "network_error",
           parsed.success ? parsed.data.request_id : undefined,
           retryAfter,
           action,
         );
+        if (
+          !axios.isCancel(error) &&
+          (failure.status === 0 || failure.status >= 500)
+        ) {
+          try {
+            options.onUnexpectedError?.(failure);
+          } catch {
+            /* Telemetry cannot change the API result. */
+          }
+        }
+        throw failure;
       }
       throw error;
     }
@@ -108,6 +120,14 @@ export function createTravelApi(options: {
     getMe: () => call("me", {}),
     listAdminErrors: (input: ActionInput<"admin.errors">) =>
       call("admin.errors", input),
+    getAdminErrorHealth: (input: ActionInput<"admin.errors.health">) =>
+      call("admin.errors.health", input),
+    getAdminErrorEvents: (input: ActionInput<"admin.error.events">) =>
+      call("admin.error.events", input),
+    getAdminErrorSummary: (input: ActionInput<"admin.errors.summary">) =>
+      call("admin.errors.summary", input),
+    listAdminErrorPage: (input: ActionInput<"admin.errors.page">) =>
+      call("admin.errors.page", input),
     getAdminError: (input: ActionInput<"admin.error.get">) =>
       call("admin.error.get", input),
     createVisitor: () => call("visitor.create", {}),

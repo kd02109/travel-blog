@@ -20,6 +20,10 @@ export const metadata: Metadata = {
   ),
   title: "오늘도 함께 걷다",
   description: "세상을 여행하고 삶을 기록합니다.",
+  robots:
+    process.env.VERCEL_ENV === "preview"
+      ? { index: false, follow: false }
+      : undefined,
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",

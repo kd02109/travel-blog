@@ -4,6 +4,7 @@ import { createServerTravelApi } from "@repo/api-client/server";
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  if (process.env.VERCEL_ENV === "preview") return [];
   const origin = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
   const fixed = ["/", "/posts", "/about", "/notice"].map((path) => ({
     url: new URL(path, origin).toString(),

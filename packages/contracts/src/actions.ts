@@ -166,6 +166,13 @@ const audit = z.object({
   changes: json,
   created_at: timestamp,
 });
+const errorFilters = {
+  app: z.enum(["all", "web", "admin"]).default("all"),
+  environment: z
+    .enum(["all", "production", "preview", "development"])
+    .default("all"),
+  period: z.enum(["all", "24h", "7d", "14d"]).default("all"),
+};
 const webErrorIssue = z.object({
   id: uuid,
   site_id: uuid,
@@ -235,6 +242,11 @@ const errorContext = {
 };
 const webErrorDetail = z.object({
   issue: webErrorIssue.extend({
+    fingerprint_version: z.number().int().optional(),
+    resolved_at: timestamp.nullable().optional(),
+    resolved_by: uuid.nullable().optional(),
+    resolved_release: z.string().nullable().optional(),
+    resolution_note: z.string().nullable().optional(),
     masked_message: maskedErrorMessage,
     masked_stack: maskedErrorStack,
     ...errorContext,
@@ -297,6 +309,7 @@ export const actionContracts = {
   ),
   "error.capture": contract(
     z.strictObject({
+      event_id: uuid.optional(),
       app: z.enum(["web", "admin"]),
       environment: z.enum(["development", "preview", "production"]),
       source: z.enum(["browser", "next_server"]),
@@ -508,6 +521,110 @@ export const actionContracts = {
   "admin.errors": contract(
     z.strictObject({ ...scoped, ...page }),
     z.array(webErrorIssue),
+  ),
+  "admin.errors.summary": contract(
+    z.strictObject({
+      ...scoped,
+      ...errorFilters,
+      status: z.enum(["all", "open", "resolved", "ignored"]).default("all"),
+      search: z
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(
+          /^(?:|[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+        )
+        .default(""),
+    }),
+    z.object({
+      total: z.number().int().nonnegative(),
+      occurrences: z.number().int().nonnegative(),
+      open: z.number().int().nonnegative(),
+      resolved: z.number().int().nonnegative(),
+      ignored: z.number().int().nonnegative(),
+      top: z.array(webErrorIssue).max(5),
+    }),
+  ),
+  "admin.errors.page": contract(
+    z.strictObject({
+      ...scoped,
+      ...errorFilters,
+      limit: page.limit,
+      offset: z.number().int().min(0).max(2147483600).default(0),
+      status: z.enum(["all", "open", "resolved", "ignored"]).default("all"),
+      search: z
+        .string()
+        .trim()
+        .toLowerCase()
+        .regex(
+          /^(?:|[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/,
+        )
+        .default(""),
+    }),
+    z.object({
+      items: z.array(webErrorIssue),
+      total: z.number().int().nonnegative(),
+    }),
+  ),
+  "admin.errors.health": contract(
+    z.strictObject({ ...scoped, ...errorFilters }),
+    z.object({
+      collection: z.array(
+        z.object({
+          app: z.enum(["web", "admin"]),
+          environment: z.enum(["production", "preview", "development"]),
+          accepted: z.number().int().nonnegative(),
+          duplicates: z.number().int().nonnegative(),
+          limited: z.number().int().nonnegative(),
+          failed: z.number().int().nonnegative(),
+          last_received_at: timestamp.nullable(),
+          last_accepted_at: timestamp.nullable(),
+          last_email_run_at: timestamp.nullable(),
+          last_email_result: z.string().nullable(),
+        }),
+      ),
+      email: z.object({
+        pending: z.number().int().nonnegative(),
+        failed: z.number().int().nonnegative(),
+        accepted: z.number().int().nonnegative(),
+      }),
+    }),
+  ),
+  "admin.error.events": contract(
+    z
+      .strictObject({
+        ...scoped,
+        id: uuid,
+        before: timestamp.optional(),
+        before_id: uuid.optional(),
+      })
+      .refine((value) => Boolean(value.before) === Boolean(value.before_id)),
+    z.object({
+      items: webErrorDetail.shape.events,
+      next: z.object({ before: timestamp, before_id: uuid }).nullable(),
+    }),
+  ),
+  "admin.error.status": contract(
+    z.strictObject({
+      ...scoped,
+      id: uuid,
+      expected_count: z.number().int().positive(),
+      status: z.enum(["open", "resolved"]),
+      note: z.string().trim().max(500).optional(),
+      resolved_release: z
+        .string()
+        .regex(/^[A-Za-z0-9._-]{1,80}$/)
+        .optional(),
+    }),
+    saved,
+  ),
+  "admin.error.delete": contract(
+    z.strictObject({
+      ...scoped,
+      id: uuid,
+      expected_count: z.number().int().positive(),
+    }),
+    z.object({ deleted: z.literal(true) }),
   ),
   "admin.error.get": contract(
     z.strictObject({ ...scoped, id: uuid }),

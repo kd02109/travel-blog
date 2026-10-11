@@ -1,5 +1,7 @@
--- Rollback-only check for bounded error context and live admin permissions.
+-- Rollback-only check for bounded error context and live owner/admin permissions.
 begin;
+create extension if not exists pgtap with schema extensions;
+select plan(1);
 create temporary table error_context_ids as
   select gen_random_uuid() site_id, gen_random_uuid() admin_id,
     gen_random_uuid() owner_id;
@@ -87,10 +89,11 @@ begin
     perform public.travel_error_capture(report || '{"http_status":99}'::jsonb);
     raise exception 'invalid HTTP status accepted';
   exception when sqlstate 'PT422' then null; end;
-  begin
-    perform public.travel_admin_error_issue(t.owner_id, t.site_id, issue_id);
-    raise exception 'owner read admin-only diagnostics';
-  exception when sqlstate 'PT403' then null; end;
+  detail := public.travel_admin_error_issue(t.owner_id, t.site_id, issue_id);
+  assert detail->'issue'->>'id' = issue_id::text;
+  summary := public.travel_admin_error_issues(t.owner_id, t.site_id);
+  assert jsonb_array_length(summary) = 1;
+
   update app_private.site_memberships set active = false
     where site_id = t.site_id and user_id = t.admin_id;
   begin
@@ -109,4 +112,6 @@ begin
   exception when insufficient_privilege then null; end;
 end $$;
 reset role;
+select pass('Bounded error context and live owner/admin authorization assertions passed');
+select * from finish();
 rollback;

@@ -3,6 +3,7 @@ const { post } = vi.hoisted(() => ({ post: vi.fn() }));
 vi.mock("axios", () => ({
   default: {
     create: () => ({ post }),
+    isCancel: (error: { code?: string }) => error.code === "ERR_CANCELED",
     isAxiosError: (error: unknown) =>
       Boolean(error && typeof error === "object" && "isAxiosError" in error),
   },
@@ -152,4 +153,66 @@ it("invalidates a rejected visitor without replaying a write", async () => {
   ).rejects.toMatchObject({ status: 401 });
   expect(clear).toHaveBeenCalledTimes(1);
   expect(post).toHaveBeenCalledTimes(1);
+});
+
+it.each([0, 500, 502, 503])(
+  "reports handled unexpected API failure %s without changing rejection",
+  async (status) => {
+    const observe = vi.fn();
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: status
+        ? { status, data: { error: "internal_error", request_id: "r1" } }
+        : undefined,
+    });
+    const api = createTravelApi({
+      baseURL: "https://example.invalid",
+      onUnexpectedError: observe,
+    });
+    await expect(api.request("admin.post.save")).rejects.toMatchObject({
+      status,
+    });
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe.mock.calls[0]![0]).toMatchObject({
+      operation: "admin.post.save",
+      status,
+    });
+  },
+);
+it.each([400, 401, 403, 409, 422, 429])(
+  "does not report expected API failure %s",
+  async (status) => {
+    const observe = vi.fn();
+    post.mockRejectedValue({
+      isAxiosError: true,
+      response: { status, data: { error: "expected" }, headers: {} },
+    });
+    await expect(
+      createTravelApi({
+        baseURL: "https://example.invalid",
+        onUnexpectedError: observe,
+      }).request("admin.post.save"),
+    ).rejects.toMatchObject({ status });
+    expect(observe).not.toHaveBeenCalled();
+  },
+);
+it("ignores cancellation and observer failures", async () => {
+  const observe = vi.fn(() => {
+    throw new Error("observer failed");
+  });
+  post
+    .mockRejectedValueOnce({ isAxiosError: true, code: "ERR_CANCELED" })
+    .mockRejectedValueOnce({ isAxiosError: true });
+  const api = createTravelApi({
+    baseURL: "https://example.invalid",
+    onUnexpectedError: observe,
+  });
+  await expect(api.request("admin.post.save")).rejects.toMatchObject({
+    status: 0,
+  });
+  expect(observe).not.toHaveBeenCalled();
+  await expect(api.request("admin.post.save")).rejects.toMatchObject({
+    status: 0,
+  });
+  expect(observe).toHaveBeenCalledOnce();
 });

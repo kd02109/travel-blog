@@ -92,6 +92,7 @@ const paginate = <T>(items: T[], input: Record<string, unknown>) => {
 export function createMockEngine(options: MockOptions = {}) {
   let scenario: Scenario = options.scenario ?? "default";
   let state = createFixtures(scenario === "empty");
+  let errorIssues = scenario === "empty" ? [] : [{ ...mockErrorIssue }];
   let sequence = 100;
   const now = options.now ?? (() => MOCK_NOW);
   const visitors = new Map<string, number>();
@@ -1230,18 +1231,132 @@ export function createMockEngine(options: MockOptions = {}) {
         return paginate(state.audit, input);
       }
       if (action === "admin.errors") {
-        staff(actor, ["admin"]);
-        return paginate(scenario === "empty" ? [] : [mockErrorIssue], input);
+        staff(actor, ["owner", "admin"]);
+        return paginate(errorIssues, input);
+      }
+      if (action === "admin.errors.health") {
+        staff(actor, ["owner", "admin"]);
+        if (!actionContracts[action].input.safeParse(input).success)
+          throw new ApiError(400, "invalid_input");
+        return {
+          collection: [],
+          email: { pending: 0, failed: 0, accepted: 0 },
+        };
+      }
+      if (action === "admin.errors.summary" || action === "admin.errors.page") {
+        staff(actor, ["owner", "admin"]);
+        const parsed = actionContracts[action].input.safeParse(input);
+        if (!parsed.success) throw new ApiError(400, "invalid_input");
+        const { app, environment, period, status, search } = parsed.data;
+        const since =
+          period === "all"
+            ? 0
+            : Date.now() - { "24h": 1, "7d": 7, "14d": 14 }[period] * 86400000;
+        const items = errorIssues
+          .filter(
+            (issue) =>
+              (app === "all" || issue.app === app) &&
+              (environment === "all" || issue.environment === environment) &&
+              Date.parse(issue.last_seen_at) >= since &&
+              (status === "all" || issue.status === status) &&
+              (!search ||
+                [
+                  issue.id,
+                  issue.fingerprint,
+                  issue.request_id,
+                  mockErrorContext.origin_request_id,
+                ].includes(search)),
+          )
+          .map((issue) => ({
+            ...issue,
+            occurrence_count: period === "all" ? issue.occurrence_count : 1,
+          }));
+        if (action === "admin.errors.page") {
+          const { limit, offset } = actionContracts[action].input.parse(input);
+          return {
+            items: items.slice(offset, offset + limit),
+            total: items.length,
+          };
+        }
+        return {
+          total: items.length,
+          occurrences: items.reduce((n, i) => n + i.occurrence_count, 0),
+          open: items.filter((i) => i.status === "open").length,
+          resolved: items.filter((i) => i.status === "resolved").length,
+          ignored: items.filter((i) => i.status === "ignored").length,
+          top: [...items]
+            .sort(
+              (a, b) =>
+                b.occurrence_count - a.occurrence_count ||
+                b.last_seen_at.localeCompare(a.last_seen_at) ||
+                a.id.localeCompare(b.id),
+            )
+            .slice(0, 5),
+        };
+      }
+      if (action === "admin.error.events") {
+        staff(actor, ["owner", "admin"]);
+        if (!actionContracts[action].input.safeParse(input).success)
+          throw new ApiError(400, "invalid_input");
+        const issue = errorIssues.find((i) => i.id === input.id);
+        if (!issue) throw new ApiError(404, "not_found");
+        const event = {
+          id: mockId(8, 3),
+          received_at: MOCK_NOW,
+          source: issue.source,
+          error_name: issue.error_name,
+          message: issue.message,
+          route: issue.route,
+          release: issue.release,
+          request_id: issue.request_id,
+          masked_message: mockMaskedMessage,
+          masked_stack: mockMaskedStack,
+          ...mockErrorContext,
+        };
+        return {
+          items:
+            !input.before ||
+            Date.parse(MOCK_NOW) < Date.parse(String(input.before)) ||
+            (Date.parse(MOCK_NOW) === Date.parse(String(input.before)) &&
+              event.id > String(input.before_id))
+              ? [event]
+              : [],
+          next: null,
+        };
+      }
+      if (action === "admin.error.status" || action === "admin.error.delete") {
+        staff(actor, ["owner", "admin"]);
+        if (!actionContracts[action].input.safeParse(input).success)
+          throw new ApiError(400, "invalid_input");
+        const issue = errorIssues.find((item) => item.id === input.id);
+        if (!issue) throw new ApiError(404, "error_issue_not_found");
+        if (issue.occurrence_count !== input.expected_count)
+          throw new ApiError(409, "version_conflict");
+        if (action === "admin.error.status") {
+          issue.status = String(input.status);
+          if (input.status === "resolved")
+            Object.assign(issue, {
+              resolved_at: now(),
+              resolved_by: actor.user_id,
+              resolved_release: input.resolved_release ?? null,
+              resolution_note: input.note ?? null,
+            });
+          audit(actor, action, issue.id);
+          return { saved: true };
+        }
+        errorIssues = errorIssues.filter((item) => item.id !== issue.id);
+        audit(actor, action, issue.id);
+        return { deleted: true };
       }
       if (action === "admin.error.get") {
-        staff(actor, ["admin"]);
+        staff(actor, ["owner", "admin"]);
         if (!actionContracts["admin.error.get"].input.safeParse(input).success)
           throw new ApiError(400, "invalid_input");
-        if (scenario === "empty" || input.id !== mockErrorIssue.id)
-          throw new ApiError(404, "not_found");
+        const errorIssue = errorIssues.find((item) => item.id === input.id);
+        if (!errorIssue) throw new ApiError(404, "not_found");
         return {
           issue: {
-            ...mockErrorIssue,
+            ...errorIssue,
             masked_message: mockMaskedMessage,
             masked_stack: mockMaskedStack,
             ...mockErrorContext,
@@ -1306,6 +1421,7 @@ export function createMockEngine(options: MockOptions = {}) {
     reset(next: Scenario = "default") {
       scenario = next;
       state = createFixtures(next === "empty");
+      errorIssues = next === "empty" ? [] : [{ ...mockErrorIssue }];
       visitors.clear();
       failures.clear();
       sequence = 100;

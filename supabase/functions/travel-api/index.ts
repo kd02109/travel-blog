@@ -1,9 +1,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { argon2id, argon2Verify } from "npm:hash-wasm@4.12.0";
+import { corsHeaders, corsOriginAllowed, parseAllowedOrigins } from "./cors.ts";
 import {
   ApiError,
   databaseError,
   errorCaptureSqlInput,
+  errorManagementInput,
+  errorFingerprintParts,
   maskedDiagnosticText,
   cleanInput,
   guestActions,
@@ -41,13 +44,9 @@ const hmac = async (s: string) =>
   );
 const sha = async (s: string) =>
   hex(await crypto.subtle.digest("SHA-256", encoder.encode(s)));
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, apikey, content-type, x-client-info, x-visitor-token",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Expose-Headers": "Retry-After, X-Request-Id",
-};
+const allowedCorsOrigins = parseAllowedOrigins(
+  Deno.env.get("TRAVEL_API_ALLOWED_ORIGINS") ?? "",
+);
 async function rpc(
   action: string,
   actor: string | null,
@@ -57,38 +56,42 @@ async function rpc(
     action === "admin.posts"
       ? "travel_admin_posts"
       : action === "admin.comments"
-      ? "travel_admin_comment_inbox"
-      : action === "account.delete.request"
-      ? "travel_account_delete_request"
-      : action === "admin.account.deletions"
-      ? "travel_admin_account_deletions"
-      : action === "admin.account.deletion.anonymize"
-      ? "travel_admin_account_deletion_anonymize"
-      : action === "admin.account.deletion.complete"
-      ? "travel_admin_account_deletion_complete"
-      : "travel_api",
+        ? "travel_admin_comment_inbox"
+        : action === "account.delete.request"
+          ? "travel_account_delete_request"
+          : action === "admin.account.deletions"
+            ? "travel_admin_account_deletions"
+            : action === "admin.account.deletion.anonymize"
+              ? "travel_admin_account_deletion_anonymize"
+              : action === "admin.account.deletion.complete"
+                ? "travel_admin_account_deletion_complete"
+                : "travel_api",
     action === "admin.posts"
       ? { p_actor: actor, p_input: input }
       : action === "admin.comments"
-      ? {
-        p_actor: actor,
-        p_site_id: input.site_id,
-        p_filter: input.filter,
-        p_limit: input.limit,
-        p_offset: input.offset,
-      }
-      : action === "account.delete.request"
-      ? { p_actor: actor }
-      : action === "admin.account.deletions"
-      ? { p_actor: actor, p_site_id: input.site_id }
-      : action === "admin.account.deletion.anonymize" ||
-          action === "admin.account.deletion.complete"
-      ? { p_actor: actor, p_site_id: input.site_id, p_request_id: input.id }
-      : {
-    p_action: action,
-    p_actor: actor,
-    p_input: input,
-        },
+        ? {
+            p_actor: actor,
+            p_site_id: input.site_id,
+            p_filter: input.filter,
+            p_limit: input.limit,
+            p_offset: input.offset,
+          }
+        : action === "account.delete.request"
+          ? { p_actor: actor }
+          : action === "admin.account.deletions"
+            ? { p_actor: actor, p_site_id: input.site_id }
+            : action === "admin.account.deletion.anonymize" ||
+                action === "admin.account.deletion.complete"
+              ? {
+                  p_actor: actor,
+                  p_site_id: input.site_id,
+                  p_request_id: input.id,
+                }
+              : {
+                  p_action: action,
+                  p_actor: actor,
+                  p_input: input,
+                },
   );
   if (error) {
     throw databaseError(error);
@@ -115,6 +118,7 @@ function reportField(
 
 function errorReportInput(input: Record<string, unknown>) {
   const allowed = new Set([
+    "event_id",
     "app",
     "environment",
     "source",
@@ -141,29 +145,39 @@ function errorReportInput(input: Record<string, unknown>) {
     "",
   );
   const source = reportField(input.source, /^(browser|next_server)$/, "");
-  const route = reportField(
-    input.route,
-    /^\/$|^\/[a-z-]{1,32}(?:\/:id)?$/,
-    "",
-  );
+  const route = reportField(input.route, /^\/$|^\/[a-z-]{1,32}(?:\/:id)?$/, "");
   const errorName = reportField(
     input.error_name,
     /^[A-Za-z][A-Za-z0-9_.]{0,63}$/,
     "Error",
   );
   const code = reportField(input.code, /^[a-z][a-z0-9_]{0,63}$/, "");
-  const digest = input.digest === null || input.digest === undefined
-    ? null
-    : reportField(input.digest, /^[A-Za-z0-9_-]{1,64}$/, "");
+  const digest =
+    input.digest === null || input.digest === undefined
+      ? null
+      : reportField(input.digest, /^[A-Za-z0-9_-]{1,64}$/, "");
   const release = reportField(
     input.release,
     /^[A-Za-z0-9._-]{1,80}$/,
     "unknown",
   );
+  if (
+    input.event_id !== undefined &&
+    (typeof input.event_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        input.event_id,
+      ))
+  )
+    throw new ApiError(400, "invalid_event_id");
   if (!app || !environment || !source || !route || !code || digest === "") {
     throw new ApiError(400, "invalid_error_report");
   }
   return {
+    event_id: reportField(
+      input.event_id,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      crypto.randomUUID(),
+    ),
     app,
     environment,
     source,
@@ -180,7 +194,8 @@ function errorReportInput(input: Record<string, unknown>) {
 
 function validReportKey(provided: string | null): boolean {
   const expected = Deno.env.get("TRAVEL_ERROR_REPORT_KEY");
-  if (!expected || !provided || expected.length !== provided.length) return false;
+  if (!expected || !provided || expected.length !== provided.length)
+    return false;
   let mismatch = 0;
   for (let i = 0; i < expected.length; i++) {
     mismatch |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
@@ -193,11 +208,13 @@ async function removeAssetPrefix(bucket: string, prefix: string) {
   async function collect(directory: string): Promise<void> {
     let offset = 0;
     for (;;) {
-      const { data, error } = await client.storage.from(bucket).list(directory, {
-        limit: 1000,
-        offset,
-        sortBy: { column: "name", order: "asc" },
-      });
+      const { data, error } = await client.storage
+        .from(bucket)
+        .list(directory, {
+          limit: 1000,
+          offset,
+          sortBy: { column: "name", order: "asc" },
+        });
       if (error || !data) throw new ApiError(502, "asset_delete_failed");
       if (!data.length) break;
       for (const item of data) {
@@ -211,22 +228,27 @@ async function removeAssetPrefix(bucket: string, prefix: string) {
   }
   await collect(prefix);
   for (let offset = 0; offset < paths.length; offset += 1000) {
-    const { error } = await client.storage.from(bucket).remove(
-      paths.slice(offset, offset + 1000),
-    );
+    const { error } = await client.storage
+      .from(bucket)
+      .remove(paths.slice(offset, offset + 1000));
     if (error) throw new ApiError(502, "asset_delete_failed");
   }
 }
 async function visitor(req: Request): Promise<string> {
-  const token = req.headers.get("x-visitor-token") ??
+  const token =
+    req.headers.get("x-visitor-token") ??
     req.headers.get("cookie")?.match(/(?:^|;\s*)travel_visitor=([^;]+)/)?.[1];
   if (!token) throw new ApiError(401, "visitor_required");
   const [id, expires, signature, ...rest] = token.split(".");
   if (
-    rest.length || !/^[0-9a-f-]{36}$/.test(id ?? "") ||
-    !/^\d{10}$/.test(expires ?? "") || !signature || signature.length !== 64 ||
+    rest.length ||
+    !/^[0-9a-f-]{36}$/.test(id ?? "") ||
+    !/^\d{10}$/.test(expires ?? "") ||
+    !signature ||
+    signature.length !== 64 ||
     Number(expires) < Date.now() / 1000
-  ) throw new ApiError(401, "invalid_visitor");
+  )
+    throw new ApiError(401, "invalid_visitor");
   const actual = await hmac("visitor:" + id + "." + expires);
   let mismatch = 0;
   for (let i = 0; i < actual.length; i++) {
@@ -270,6 +292,8 @@ async function readJson(req: Request, maxBytes = 1100000): Promise<any> {
 }
 Deno.serve(async (req: Request) => {
   const requestId = crypto.randomUUID();
+  const origin = req.headers.get("origin");
+  const cors = corsHeaders(origin, allowedCorsOrigins);
   const respond = (
     data: unknown,
     status = 200,
@@ -285,6 +309,9 @@ Deno.serve(async (req: Request) => {
         ...extra,
       },
     });
+  if (!corsOriginAllowed(origin, allowedCorsOrigins)) {
+    return respond({ error: "origin_not_allowed" }, 403);
+  }
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: cors });
   }
@@ -309,25 +336,56 @@ Deno.serve(async (req: Request) => {
       if (!validReportKey(req.headers.get("x-error-report-key"))) {
         throw new ApiError(403, "forbidden");
       }
-      await rate("error-monitor", "capture", 120);
-      // Bound database growth even when the public relay is abused.
-      await rate("error-monitor", "capture-daily", 2000, 86400);
       const report = errorReportInput(input);
       const site = await rpc("site.get", null, { slug: "parents-travel" });
-      const fingerprint = await sha(JSON.stringify([
-        report.app,
-        report.environment,
-        report.source,
-        report.route,
-        report.error_name,
-        report.code,
-        report.digest,
-      ]));
-      await rate(`error-monitor:${fingerprint}`, "capture-issue", 10);
-      const { error } = await client.rpc("travel_error_capture", {
-        p_input: errorCaptureSqlInput(site.id, report, fingerprint, requestId),
-      });
-      if (error) throw databaseError(error);
+      const fingerprint = await sha(
+        JSON.stringify(errorFingerprintParts(report)),
+      );
+      try {
+        await rate(`error-monitor:${report.environment}`, "capture", 120);
+        await rate(
+          `error-monitor:${report.environment}`,
+          "capture-daily",
+          2000,
+          86400,
+        );
+        await rate(`error-monitor:${fingerprint}`, "capture-issue", 10);
+        const { error } = await client.rpc("travel_error_ingest", {
+          p_input: errorCaptureSqlInput(
+            site.id,
+            report,
+            fingerprint,
+            requestId,
+          ),
+          p_event_id: report.event_id,
+        });
+        if (error) throw databaseError(error);
+      } catch (error) {
+        // Bounded counters only; do not recursively capture collector failures.
+        const result =
+          error instanceof ApiError && error.status === 429
+            ? "limited"
+            : "failed";
+        await client
+          .rpc("travel_error_observe", {
+            p_site_id: site.id,
+            p_app: report.app,
+            p_environment: report.environment,
+            p_result: result,
+          })
+          .then(({ error: diagnosticError }) => {
+            if (diagnosticError)
+              console.warn(
+                JSON.stringify({
+                  event: "error_collector_state_unavailable",
+                  app: report.app,
+                  environment: report.environment,
+                }),
+              );
+          })
+          .catch(() => undefined);
+        throw error;
+      }
       return respond({ accepted: true }, 202);
     }
     let actor: string | null = null;
@@ -350,11 +408,10 @@ Deno.serve(async (req: Request) => {
       await rate("gateway", "visitor", 120);
       const id = crypto.randomUUID(),
         exp = String(Math.floor(Date.now() / 1000) + 2592000);
-      const token = id + "." + exp + "." +
-        await hmac("visitor:" + id + "." + exp);
+      const token =
+        id + "." + exp + "." + (await hmac("visitor:" + id + "." + exp));
       return respond({ visitor_token: token, expires_at: Number(exp) }, 200, {
-        "Set-Cookie":
-          `travel_visitor=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`,
+        "Set-Cookie": `travel_visitor=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000`,
       });
     }
     let actorHash = actor ? "user:" + actor : null;
@@ -366,8 +423,8 @@ Deno.serve(async (req: Request) => {
       const group = action.startsWith("comment.")
         ? "comment"
         : action === "like.set" || action === "like.get"
-        ? "like"
-        : "admin";
+          ? "like"
+          : "admin";
       await rate(
         actorHash,
         group,
@@ -418,8 +475,9 @@ Deno.serve(async (req: Request) => {
         const password = text(input.password, 8, 128);
         if (
           !credential?.password_hash ||
-          !await argon2Verify({ password, hash: credential.password_hash })
-        ) throw new ApiError(403, "invalid_password");
+          !(await argon2Verify({ password, hash: credential.password_hash }))
+        )
+          throw new ApiError(403, "invalid_password");
         input.guest_verified = true;
       }
     }
@@ -432,15 +490,17 @@ Deno.serve(async (req: Request) => {
       if (draft.lock_version !== input.version) {
         throw new ApiError(409, "version_conflict");
       }
-      const rendered = draft.kind === "article"
-        ? renderBlocks(draft.draft_content.blocks)
-        : { html: null, assetIds: [] };
+      const rendered =
+        draft.kind === "article"
+          ? renderBlocks(draft.draft_content.blocks)
+          : { html: null, assetIds: [] };
       input.rendered_html = rendered.html;
       input.asset_ids = rendered.assetIds;
     }
     if (action === "asset.create") {
       const asset = await rpc(action, actor, input);
-      const { data, error } = await client.storage.from(asset.bucket)
+      const { data, error } = await client.storage
+        .from(asset.bucket)
         .createSignedUploadUrl(asset.object_path, { upsert: false });
       if (error) throw new ApiError(502, "upload_url_failed");
       return respond({
@@ -450,6 +510,81 @@ Deno.serve(async (req: Request) => {
         token: data.token,
         path: data.path,
       });
+    }
+    if (
+      [
+        "admin.errors.summary",
+        "admin.errors.page",
+        "admin.errors.health",
+      ].includes(action)
+    ) {
+      const args = errorManagementInput(action, input);
+      const { data, error } = await client.rpc("travel_admin_error_query", {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_mode: action.split(".")[2],
+        p_filters: {
+          app: args.app,
+          environment: args.environment,
+          period: args.period,
+          limit: args.p_limit,
+          offset: args.p_offset,
+          status: args.p_status,
+          search: args.p_search,
+        },
+      });
+      if (error) throw databaseError(error);
+      return respond(data);
+    }
+    if (action === "admin.error.events") {
+      const validUuid = (value: unknown) =>
+        typeof value === "string" &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          value,
+        );
+      if (
+        !validUuid(input.site_id) ||
+        !validUuid(input.id) ||
+        Object.keys(input).some(
+          (k) => !["site_id", "id", "before", "before_id"].includes(k),
+        ) ||
+        (input.before == null) !== (input.before_id == null) ||
+        (input.before != null &&
+          (typeof input.before !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}T/.test(input.before) ||
+            !Number.isFinite(Date.parse(input.before)) ||
+            !validUuid(input.before_id)))
+      )
+        throw new ApiError(400, "invalid_input");
+      const { data, error } = await client.rpc("travel_admin_error_events", {
+        p_actor: actor,
+        p_site_id: input.site_id,
+        p_issue_id: input.id,
+        p_before: input.before ?? null,
+        p_before_id: input.before_id ?? null,
+      });
+      if (error) throw databaseError(error);
+      return respond(data);
+    }
+    if (["admin.error.status", "admin.error.delete"].includes(action)) {
+      const args = errorManagementInput(action, input);
+      const { data, error } =
+        action === "admin.error.status"
+          ? await client.rpc("travel_admin_error_resolve", {
+              p_actor: actor,
+              p_site_id: input.site_id,
+              p_issue_id: input.id,
+              p_expected_count: input.expected_count,
+              p_status: input.status,
+              p_note: maskedDiagnosticText(input.note, 500),
+              p_release: input.resolved_release ?? null,
+            })
+          : await client.rpc("travel_admin_error_manage", {
+              p_actor: actor,
+              ...args,
+            });
+      if (error) throw databaseError(error);
+      return respond(data);
     }
     if (action === "admin.errors") {
       const limit = Math.min(
@@ -471,9 +606,11 @@ Deno.serve(async (req: Request) => {
     }
     if (action === "admin.error.get") {
       if (
-        typeof input.site_id !== "string" || typeof input.id !== "string" ||
+        typeof input.site_id !== "string" ||
+        typeof input.id !== "string" ||
         Object.keys(input).some((key) => key !== "site_id" && key !== "id")
-      ) throw new ApiError(400, "invalid_error_issue_request");
+      )
+        throw new ApiError(400, "invalid_error_issue_request");
       const { data, error } = await client.rpc("travel_admin_error_issue", {
         p_actor: actor,
         p_site_id: input.site_id,
@@ -499,9 +636,9 @@ Deno.serve(async (req: Request) => {
       if (asset.state !== "uploading" && asset.state !== "failed") {
         return respond({ id: asset.id, state: asset.state });
       }
-      const { data, error } = await client.storage.from(asset.bucket).download(
-        asset.object_path,
-      );
+      const { data, error } = await client.storage
+        .from(asset.bucket)
+        .download(asset.object_path);
       if (error || !data) throw new ApiError(422, "uploaded_file_missing");
       if (data.size === 0 || data.size > 20971520) {
         throw new ApiError(422, "invalid_file_size");
@@ -547,18 +684,23 @@ Deno.serve(async (req: Request) => {
       if (claimError) throw databaseError(claimError);
       if (claim?.deleted === true) return respond({ deleted: true });
       if (
-        !claim || typeof claim.lease_until !== "string" ||
-        !Array.isArray(claim.targets) || claim.targets.length === 0
-      ) throw new ApiError(502, "asset_delete_failed");
+        !claim ||
+        typeof claim.lease_until !== "string" ||
+        !Array.isArray(claim.targets) ||
+        claim.targets.length === 0
+      )
+        throw new ApiError(502, "asset_delete_failed");
       try {
         const visited = new Set<string>();
         for (const target of claim.targets) {
           const bucket = target?.bucket;
           const prefix = target?.prefix;
           if (
-            typeof bucket !== "string" || typeof prefix !== "string" ||
+            typeof bucket !== "string" ||
+            typeof prefix !== "string" ||
             !/^[0-9a-f-]{36}\/[0-9a-f-]{36}$/.test(prefix)
-          ) throw new ApiError(502, "asset_delete_failed");
+          )
+            throw new ApiError(502, "asset_delete_failed");
           const key = `${bucket}:${prefix}`;
           if (visited.has(key)) continue;
           visited.add(key);
@@ -602,14 +744,15 @@ Deno.serve(async (req: Request) => {
         100000,
         Math.max(0, Number.isInteger(input.offset) ? Number(input.offset) : 0),
       );
-      const { data, error } = await client.rpc(kind === "pdf"
-        ? "travel_pdf_asset_list"
-        : "travel_asset_list", {
-        p_actor: actor,
-        p_site_id: input.site_id,
-        p_limit: limit,
-        p_offset: offset,
-      });
+      const { data, error } = await client.rpc(
+        kind === "pdf" ? "travel_pdf_asset_list" : "travel_asset_list",
+        {
+          p_actor: actor,
+          p_site_id: input.site_id,
+          p_limit: limit,
+          p_offset: offset,
+        },
+      );
       if (error) throw databaseError(error);
       const rows = Array.isArray(data) ? data : [];
       const items = await Promise.all(
@@ -641,12 +784,12 @@ Deno.serve(async (req: Request) => {
             throw new ApiError(502, "download_url_failed");
           }
           if (kind === "pdf") {
-            const previewBucket = typeof row.preview_bucket === "string"
-              ? row.preview_bucket
-              : "";
-            const previewPath = typeof row.preview_object_path === "string"
-              ? row.preview_object_path
-              : "";
+            const previewBucket =
+              typeof row.preview_bucket === "string" ? row.preview_bucket : "";
+            const previewPath =
+              typeof row.preview_object_path === "string"
+                ? row.preview_object_path
+                : "";
             if (!previewBucket || !previewPath) {
               throw new ApiError(502, "download_url_failed");
             }
@@ -681,9 +824,10 @@ Deno.serve(async (req: Request) => {
             usage: Array.isArray(row.usage) ? row.usage : [],
             can_delete: row.can_delete === true,
             deletion_pending: false,
-            delete_available_at: typeof row.delete_available_at === "string"
-              ? row.delete_available_at
-              : null,
+            delete_available_at:
+              typeof row.delete_available_at === "string"
+                ? row.delete_available_at
+                : null,
           };
         }),
       );
@@ -694,19 +838,21 @@ Deno.serve(async (req: Request) => {
       });
     }
     if (action === "asset.access") {
-      const { data: publishedHomeAsset, error: homeAssetError } = await client.rpc(
-        "travel_home_asset",
-        { p_site_id: input.site_id ?? null, p_asset_id: input.id },
-      );
+      const { data: publishedHomeAsset, error: homeAssetError } =
+        await client.rpc("travel_home_asset", {
+          p_site_id: input.site_id ?? null,
+          p_asset_id: input.id,
+        });
       // Preserve access to existing single-photo covers while the migration is
       // rolling out; secondary photos become public once the RPC is installed.
       if (homeAssetError && homeAssetError.code !== "PGRST202")
         throw databaseError(homeAssetError);
-      const asset = publishedHomeAsset ?? await rpc(action, actor, input);
+      const asset = publishedHomeAsset ?? (await rpc(action, actor, input));
       if (asset.cleanup_state !== "active") {
         throw new ApiError(404, "asset_not_found");
       }
-      const { data, error } = await client.storage.from(asset.bucket)
+      const { data, error } = await client.storage
+        .from(asset.bucket)
         .createSignedUrl(asset.object_path, 300);
       if (error) throw new ApiError(502, "download_url_failed");
       return respond({
