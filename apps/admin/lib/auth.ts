@@ -86,6 +86,15 @@ export const getAdminAccess = cache(async () => {
   }
 });
 
+// Menu visibility is only a hint; pages and the API still enforce live access.
+export async function canViewErrorAnalytics() {
+  const access = await getAdminAccess();
+  return (
+    access.status === "authorized" &&
+    ["owner", "admin"].includes(access.membership.role)
+  );
+}
+
 export async function requireEditor() {
   const access = await getAdminAccess();
   if (access.status === "authorized") return access;

@@ -1230,11 +1230,11 @@ export function createMockEngine(options: MockOptions = {}) {
         return paginate(state.audit, input);
       }
       if (action === "admin.errors") {
-        staff(actor, ["admin"]);
+        staff(actor, ["owner", "admin"]);
         return paginate(scenario === "empty" ? [] : [mockErrorIssue], input);
       }
       if (action === "admin.error.get") {
-        staff(actor, ["admin"]);
+        staff(actor, ["owner", "admin"]);
         if (!actionContracts["admin.error.get"].input.safeParse(input).success)
           throw new ApiError(400, "invalid_input");
         if (scenario === "empty" || input.id !== mockErrorIssue.id)

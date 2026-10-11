@@ -96,11 +96,11 @@ it("validates public/member/admin reads including nullable profile and audit fie
     ).toBe(true);
   }
 });
-it("restricts error issue reads to the active admin role", () => {
+it("restricts error issue reads to active owner and admin roles", () => {
   const engine = createMockEngine();
   const request = { action: "admin.errors", input: site };
   expect(engine.handle(request).status).toBe(401);
-  expect(engine.handle(request, owner).status).toBe(403);
+  expect(engine.handle(request, owner).status).toBe(200);
   const listed = engine.handle(request, admin);
   expect(listed.status).toBe(200);
   expect(
@@ -111,12 +111,29 @@ it("restricts error issue reads to the active admin role", () => {
     action: "admin.error.get",
     input: { ...site, id: mockId(8, 1) },
   };
+  for (const actionRequest of [request, detailRequest]) {
+    for (const role of ["editor", "reader"]) {
+      expect(
+        engine.handle(actionRequest, { Authorization: `Bearer mock-${role}` })
+          .status,
+      ).toBe(403);
+    }
+    expect(
+      engine.handle(
+        {
+          ...actionRequest,
+          input: { ...actionRequest.input, site_id: mockId(1, 99) },
+        },
+        owner,
+      ).status,
+    ).toBe(403);
+  }
   expect(engine.handle(detailRequest).status).toBe(401);
   expect(
     engine.handle(detailRequest, { Authorization: "Bearer mock-editor" })
       .status,
   ).toBe(403);
-  expect(engine.handle(detailRequest, owner).status).toBe(403);
+  expect(engine.handle(detailRequest, owner).status).toBe(200);
   const detail = engine.handle(detailRequest, admin);
   expect(detail.status).toBe(200);
   expect(

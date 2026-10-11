@@ -122,11 +122,21 @@ function AdminAccount({ onMissingSession }: { onMissingSession: () => void }) {
   );
 }
 
-export function AdminFrame({ children }: { children: React.ReactNode }) {
+export function AdminFrame({
+  children,
+  showErrorAnalytics = false,
+}: {
+  children: React.ReactNode;
+  showErrorAnalytics?: boolean;
+}) {
   const pathname = usePathname();
   if (pathname === "/login" || pathname === "/forbidden") return children;
   return (
-    <AdminShell key={pathname} pathname={pathname}>
+    <AdminShell
+      key={pathname}
+      pathname={pathname}
+      showErrorAnalytics={showErrorAnalytics}
+    >
       {children}
     </AdminShell>
   );
@@ -135,9 +145,11 @@ export function AdminFrame({ children }: { children: React.ReactNode }) {
 function AdminShell({
   children,
   pathname,
+  showErrorAnalytics,
 }: {
   children: React.ReactNode;
   pathname: string;
+  showErrorAnalytics: boolean;
 }) {
   const router = useRouter();
   const [checkingAccess, setCheckingAccess] = useState(false);
@@ -149,6 +161,9 @@ function AdminShell({
     router.refresh();
   }, [router]);
   const isMockDemo = pathname === "/mock";
+  const navigation = showErrorAnalytics
+    ? [...items, { href: "/error-analytics-preview", label: "웹 오류 분석" }]
+    : items;
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[var(--admin-sidebar)_minmax(0,1fr)]">
       <a
@@ -171,17 +186,19 @@ function AdminShell({
           className="px-3 pb-3 lg:flex-1 lg:px-4 lg:py-4"
         >
           <ul className="flex gap-2 overflow-x-auto lg:flex-col">
-            {items.map(({ href, label }) => {
+            {navigation.map(({ href, label }) => {
               const active =
-                label === "새 글 작성"
-                  ? pathname === href
-                  : label === "홈 디자인"
+                label === "웹 오류 분석"
+                  ? pathname.startsWith("/error-analytics-preview")
+                  : label === "새 글 작성"
                     ? pathname === href
-                    : label === "댓글 관리"
-                      ? pathname.startsWith("/comments")
-                      : label === "계정 삭제 요청"
-                        ? pathname.startsWith("/account-deletions")
-                        : pathname === "/" || pathname.startsWith("/posts");
+                    : label === "홈 디자인"
+                      ? pathname === href
+                      : label === "댓글 관리"
+                        ? pathname.startsWith("/comments")
+                        : label === "계정 삭제 요청"
+                          ? pathname.startsWith("/account-deletions")
+                          : pathname === "/" || pathname.startsWith("/posts");
               return (
                 <li key={label} className="shrink-0">
                   <Link
