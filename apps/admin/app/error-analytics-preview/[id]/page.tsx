@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { TravelApiError } from "@repo/api-client";
 import { requireEditor } from "../../../lib/auth";
+import { IssueActions } from "../issue-actions";
+import { ErrorLookupGuide } from "../lookup-guide";
 import styles from "./error-detail.module.css";
 
 export const metadata: Metadata = {
@@ -128,19 +130,35 @@ function unavailable() {
 
 export default async function ErrorDetailPage({
   params,
+  searchParams,
 }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
   params: Promise<{ id: string }>;
 }) {
-  const { membership, site, api } = await requireEditor();
+  const { membership, site, api, user } = await requireEditor();
   if (membership.role !== "owner" && membership.role !== "admin")
     redirect("/forbidden");
 
   const { id } = await params;
   if (!uuidPattern.test(id)) notFound();
 
+  const query = await searchParams;
+  const before = typeof query.before === "string" ? query.before : undefined;
+  const before_id =
+    typeof query.before_id === "string" ? query.before_id : undefined;
+  if (
+    Boolean(before) !== Boolean(before_id) ||
+    (before_id && !uuidPattern.test(before_id)) ||
+    (before && !Number.isFinite(Date.parse(before)))
+  )
+    notFound();
+  let eventPage;
   let detail;
   try {
-    detail = await api.getAdminError({ site_id: site.id, id });
+    [detail, eventPage] = await Promise.all([
+      api.getAdminError({ site_id: site.id, id }),
+      api.getAdminErrorEvents({ site_id: site.id, id, before, before_id }),
+    ]);
   } catch (error) {
     if (error instanceof TravelApiError) {
       if (error.status === 404) notFound();
@@ -150,8 +168,9 @@ export default async function ErrorDetailPage({
     return unavailable();
   }
 
-  const { issue, events } = detail;
-  const latest = events[0];
+  const { issue } = detail;
+  const events = eventPage.items;
+  const latest = detail.events[0];
   const currentMessage = latest?.masked_message ?? issue.masked_message;
   const currentStack = latest?.masked_stack ?? issue.masked_stack;
   const currentContext = latest ?? issue;
@@ -179,9 +198,17 @@ export default async function ErrorDetailPage({
           </span>
         </header>
 
+        <IssueActions
+          siteId={site.id}
+          actorId={user.id}
+          id={issue.id}
+          count={issue.occurrence_count}
+          status={issue.status}
+        />
+
         <section className={styles.summary} aria-label="오류 요약">
           <article className={styles.summaryCard}>
-            <span>누적 발생</span>
+            <span>누적 저장 보고</span>
             <strong>{issue.occurrence_count.toLocaleString("ko-KR")}건</strong>
           </article>
           <article className={styles.summaryCard}>
@@ -268,7 +295,11 @@ export default async function ErrorDetailPage({
               ) : (
                 <ol className={styles.eventList}>
                   {events.map((event) => (
-                    <li className={styles.event} key={event.id}>
+                    <li
+                      className={styles.event}
+                      key={event.id}
+                      id={`event-${event.id}`}
+                    >
                       <div className={styles.eventHeading}>
                         <strong>{formatDate(event.received_at)}</strong>
                         <span>{sourceLabels[event.source]}</span>
@@ -277,7 +308,8 @@ export default async function ErrorDetailPage({
                         {event.error_name} · <code>{event.route}</code>
                       </p>
                       <p className={styles.eventMeta}>
-                        릴리스 {event.release ?? "기록 없음"} · 수집 요청 ID{" "}
+                        이벤트 ID {event.id} · 릴리스{" "}
+                        {event.release ?? "기록 없음"} · 수집 요청 ID{" "}
                         {event.request_id ?? "기록 없음"}
                       </p>
                       {(event.masked_message ||
@@ -304,10 +336,46 @@ export default async function ErrorDetailPage({
                   ))}
                 </ol>
               )}
+              <nav
+                aria-label="오류 발생 기록 페이지"
+                className="flex gap-4 py-4"
+              >
+                {before && (
+                  <Link href={`/error-analytics-preview/${id}`}>
+                    최근 기록으로
+                  </Link>
+                )}
+                {eventPage.next && (
+                  <Link
+                    href={`/error-analytics-preview/${id}?${new URLSearchParams(eventPage.next)}`}
+                  >
+                    이전 발생 기록 20개
+                  </Link>
+                )}
+                {!eventPage.next && (
+                  <span>보존 중인 기록의 마지막 페이지입니다.</span>
+                )}
+              </nav>
             </section>
           </div>
 
           <aside className={styles.sideColumn} aria-label="오류 식별 정보">
+            <section className={styles.panel}>
+              <h2>해결 기록</h2>
+              <p>
+                최근 해결 표시:{" "}
+                {issue.resolved_at
+                  ? formatDate(issue.resolved_at)
+                  : "기록 없음"}
+              </p>
+              <p>처리자 ID: {issue.resolved_by ?? "기록 없음"}</p>
+              <p>해결 릴리스: {issue.resolved_release ?? "기록 없음"}</p>
+              <p>해결 메모: {issue.resolution_note ?? "기록 없음"}</p>
+              <p>
+                그룹 규칙: v{issue.fingerprint_version ?? 1}. v2 적용 이전
+                이슈는 별도로 유지합니다.
+              </p>
+            </section>
             <section className={styles.panel}>
               <p className={styles.eyebrow}>오류 식별</p>
               <h2>수집된 단서</h2>
@@ -346,14 +414,25 @@ export default async function ErrorDetailPage({
                 <li>
                   새 릴리스에서 같은 fingerprint의 재발 여부를 관찰합니다.
                 </li>
-                <li>검증 결과와 해결 릴리스를 기록한 뒤 상태를 변경합니다.</li>
+                <li>
+                  수정 배포를 확인한 뒤 해결됨으로 처리합니다. 재발하면 자동으로
+                  다시 열립니다.
+                </li>
               </ol>
               <p className={styles.sectionIntro}>
-                상태 변경과 해결 이력 입력은 아직 제공하지 않습니다.
+                상태 변경·삭제는 관리 감사 기록에 남습니다. 해결됨 처리는 오류
+                발생 원인 자체를 수정하지 않습니다.
               </p>
             </section>
           </aside>
         </div>
+        <ErrorLookupGuide
+          siteId={site.id}
+          issueId={issue.id}
+          requestId={issue.request_id}
+          fingerprint={issue.fingerprint}
+          originRequestId={issue.origin_request_id}
+        />
       </div>
     </main>
   );

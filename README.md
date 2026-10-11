@@ -124,7 +124,7 @@ pnpm db:stop
 
 ### 자체 오류 모니터링
 
-Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전의 권한·마스킹을 로컬/격리 테스트와 단일 원격 canary에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. `admin.errors`와 `admin.error.get`은 활성 `admin` 역할만 허용합니다. 관리자 `/error-analytics-preview`의 목록·상세 조회는 API 연결 경로가 있으며 차트와 HTML 수치는 예시다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증 기록은 로컬에서 관리합니다.
+Sentry SDK 대신 `@repo/observability`가 web/admin의 브라우저 오류 화면·전역 예외와 Next 서버 오류를 작은 오류 봉투로 전송합니다. 메시지·스택은 마스킹하며, 사용자 정보·쿠키·헤더·요청 본문·URL query/slug는 수집하지 않습니다. 문제를 더 자세히 조사할 수 있도록 허용된 상대 파일·줄·열, 고정 작업 코드·의존 서비스·HTTP 상태, 실패한 원래 요청 ID를 수집 요청 ID와 구분해 기록합니다. 브라우저는 같은 출처의 `/api/errors`를 거치고, 서버만 `TRAVEL_ERROR_REPORT_KEY`를 사용해 Supabase `travel-api`로 전달합니다. Supabase Edge에도 같은 키를 secret으로 넣어야 합니다. `NEXT_PUBLIC_ERROR_MONITORING_ENABLED=true`는 오류 테이블 migration과 새 Edge 버전의 권한·마스킹을 로컬/격리 테스트와 단일 원격 canary에서 검증한 뒤 켜세요. `NEXT_PUBLIC_DEPLOY_ENV`(`production`/`preview`/`development`)과 `NEXT_PUBLIC_APP_RELEASE`는 환경/릴리스 구분에 사용합니다. 오류 조회·상태 변경·삭제는 활성 `owner` 또는 `admin`만 허용합니다. 관리자 `/error-analytics-preview`는 실제 DB 목록을 20개씩 페이지로 조회하며 상태·이슈 ID·요청 ID·fingerprint 검색을 제공합니다. 예시 차트와 샘플 오류는 표시하지 않습니다. 기본 빌드는 공개 브라우저 source map을 만들지 않고, `build:private-maps`와 `pnpm error:source-map:lookup`은 동일한 격리 빌드의 비공개 로컬 조사에만 사용합니다. 운영 배포의 자동 원본 코드 위치 복원은 아직 구현되지 않았습니다. 세부 rollout·보유·알림 검증 기록은 로컬에서 관리합니다.
 
 ### Firebase / GA4
 
@@ -157,3 +157,38 @@ pnpm dev:mock
 [공개 앱 API 체험](http://localhost:3000/mock)과 [관리자 API 체험](http://localhost:3002/mock)에서 계정·DB 없이 예시 데이터를 사용할 수 있습니다. 다섯 카테고리, 글·댓글·좋아요, 버전 충돌, 홈 템플릿과 권한·오류 상태를 `@repo/mock-api`가 처리합니다.
 
 [Mock 패키지 설명](packages/mock-api/README.md)에 fixture 출처, 실제 API 전환, SSR 제한과 지원 action을 정리했습니다. `pnpm test:e2e:mock`으로 검증합니다. 데이터는 브라우저 탭 메모리에만 있으며 새로고침 시 초기화됩니다. 운영 빌드에서는 활성화되지 않습니다.
+
+### 오류 이슈 조회와 처리
+
+`/error-analytics-preview`에서 이메일의 전체 이슈 UUID를 검색하고 목록의 문제 또는 ID를 누릅니다. 상세 주소는 `/error-analytics-preview/<issue-id>`이며 기존 주소 호환을 위해 경로명을 유지합니다.
+
+| 식별자            | 의미와 조회 방법                                                                                                          |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| 이슈 ID           | 같은 오류를 묶은 항목의 UUID. 이메일, 목록, 상세 화면에서 동일한 ID를 사용합니다.                                         |
+| 수집 요청 ID      | 오류 보고를 수신한 travel-api 요청 ID. 목록 검색 또는 `app_private.web_error_events.request_id`로 해당 발생을 찾습니다.   |
+| 원래 실패 요청 ID | 실제 실패한 API/Next 요청의 ID. 수집된 경우 `origin_request_id`와 원래 서비스 로그를 대조합니다. 수집 요청 ID와 다릅니다. |
+| fingerprint       | 동일 오류의 그룹 키. 사이트·앱·환경과 함께 비교하며 원문으로 복호화할 수 없습니다.                                        |
+| 이벤트 ID         | 개별 발생의 UUID. `app_private.web_error_events.id`로 한 건을 조회합니다.                                                 |
+
+상단 **오류 현황과 발생 빈도**는 `admin.errors.summary`를 통해 목록과 동일한 앱·환경·기간·상태·ID 검색을 집계합니다. 기본은 production/24시간이며, ID만 직접 검색하면 모든 환경/누적 범위에서 찾습니다. 24시간·7일·14일은 보존된 이벤트 수, 전체 누적은 보관 이슈의 `occurrence_count`입니다. 수집 제한·통신 장애로 유실된 실제 발생 전체를 의미하지 않으므로 **저장된 보고 수**로 표시합니다.
+
+**수집·알림 상태**는 새 관측 기능 적용 이후 환경·앱별 저장/중복 제외/제한/실패, 최근 저장, 이메일 실행 상태와 대기/실패/서비스 접수를 보여 줍니다. 이 운영 상태에는 목록의 기간·검색 필터가 적용되지 않으며, DB에 도달하지 못한 실패와 받은편지함 도착 여부를 증명하지 않습니다. 기록이 없으면 미확인으로 표시합니다. 현재 admin 실행 환경의 수집/발송 활성화 여부도 표시하며 web 설정과 외부 가용성 감시는 별도입니다.
+
+처리된 브라우저 API 5xx/네트워크 실패, 작성기 저장 예외와 업로드 처리 실패를 수집합니다. 예상한 4xx·취소는 공통 API 오류 보고에서 제외합니다. 같은 Error 객체의 전역 중복 보고를 억제하고 `event_id`로 동일 보고의 DB 재전송을 원자적으로 중복 제거합니다(중복 키 14일 보존). fingerprint v2는 서버에서 작업·의존성·HTTP 상태·정규화한 메시지를 포함해 만들고 v1 이슈는 보존합니다. 환경별 수집 쿼터가 분리됩니다. 정규식 마스킹은 모든 개인정보 제거를 보장하지 않으므로 입력 내용·원본 요청을 진단 정보에 추가하지 마세요.
+
+이슈별 이벤트는 시간+ID 커서로 20개씩 탐색합니다. 해결 시 처리자·시각·선택한 해결 배포·마스킹된 메모를 보관하며, 재발 시 자동으로 다시 열려도 이전 해결 맥락은 유지됩니다. 해결 메모는 이벤트의 14일 정책과 달리 이슈 삭제까지 보관됩니다.
+
+이메일은 기본 최근 5분 10건 기준에 더해 `admin.post.save`/`admin.post.publish`의 5xx 보고 1건도 후보로 삼습니다. 기존 30분 쿨다운·일일 상한·재시도 멱등성은 유지됩니다. `ERROR_EMAIL_ADMIN_URL`에 canonical admin HTTPS origin을 설정하면 상세 링크가 발송 작업에 고정됩니다. 실제 자동 발송 활성화, 독립 가용성 감시, 실제 배포 산출물과 일치하는 소스맵 보관, 서명 검증된 Resend 전달 webhook은 별도 운영 설정과 검증이 필요합니다.
+
+상세 화면의 **ID로 오류 추적하기**에는 연결된 Supabase SQL Editor·로그 탐색기 링크와 해당 이슈 ID를 넣은 조회 SQL이 있습니다. SQL 옆 복사 아이콘으로 쿼리 전체를 복사할 수 있고, 성공·실패 상태가 표시됩니다. 목록 화면의 SQL은 현재 사이트, 상세 화면의 SQL은 선택한 이슈를 조회하며 UUID 자리표시자를 수정할 필요가 없습니다.
+
+- **SQL Editor (PostgreSQL/Database):** `app_private.web_error_issues`·`web_error_events`에 저장된 이슈 ID, fingerprint, 요청 ID와 마스킹된 내용을 조회합니다. 화면의 복사 SQL은 이곳에서 실행합니다.
+- **Supabase Logs / Explorer (Logs 소스):** 함수 실행 당시 기록을 찾습니다. 시간·Edge Function 유형과 이벤트 메시지의 요청 ID로 비교하며, 위 DB SQL을 붙여 넣지 않습니다. ID가 로그에 출력되지 않았다면 검색되지 않습니다. [공식 로그 SQL 안내](https://supabase.com/docs/guides/observability/advanced-log-filtering).
+- **Vercel Runtime Logs:** Next.js 서버 오류는 해당 web/admin 프로젝트의 발생 시간·경로·원래 요청 ID로 비교합니다.
+
+콘솔은 별도의 Supabase 프로젝트 권한이 필요합니다. 메시지·스택과 개별 이벤트는 14일 보존 후 정리되므로 오래된 요청을 조회하지 못할 수 있습니다. 화면은 이슈 전체를 페이지로 탐색하고, 이슈별 이벤트는 커서로 20건씩 탐색합니다.
+
+- **해결됨 처리 / 다시 열기:** 동일 fingerprint의 오류가 다시 수집되면 해결된 이슈는 자동으로 열립니다.
+- **이슈 삭제:** 확인 후 이슈와 연결된 이벤트를 영구 삭제합니다. 관리 감사 기록·메일 발송 이력/발송 한도 계산은 보존합니다. 삭제 후 같은 오류가 수집되면 새로운 이슈 ID가 생성됩니다.
+- 상세 조회 후 새 발생이 수집됐거나 메일을 발송 중이면 변경/삭제를 409로 거절할 수 있습니다. 새로고침 후 확인합니다.
+- 읽기는 서버의 `travel-api`, 변경은 브라우저의 기존 `travel-api` 클라이언트를 사용합니다. 테이블/RPC를 브라우저에서 직접 호출하지 않습니다. 신규 계약은 `admin.errors.page`, `admin.error.status`, `admin.error.delete`이며 SQL RPC는 service role만 호출할 수 있습니다.

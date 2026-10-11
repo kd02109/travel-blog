@@ -16,6 +16,7 @@ type Alert = {
     environment: string;
     count: number;
     issue_id: string;
+    admin_url?: string | null;
   };
 };
 
@@ -101,6 +102,7 @@ export async function handleErrorEmails(request: Request, env: Env) {
       site_slug: env.ERROR_EMAIL_SITE_SLUG || "parents-travel",
       from,
       to,
+      admin_url: env.ERROR_EMAIL_ADMIN_URL,
     })) as Alert | null;
     if (!job) return Response.json({ status: "idle" }, { headers });
     const p = job.payload;
@@ -126,6 +128,11 @@ export async function handleErrorEmails(request: Request, env: Env) {
           `최근 5분 발생: ${p.count}회`,
           "메시지와 스택은 개인정보 보호를 위해 이메일에 포함하지 않습니다.",
           "관리자 권한으로 오류 기록을 확인해 주세요.",
+          ...(p.admin_url &&
+          /^https:\/\/[A-Za-z0-9.-]+(?::[0-9]+)?$/.test(p.admin_url) &&
+          /^[0-9a-f-]{36}$/i.test(p.issue_id)
+            ? [`${p.admin_url}/error-analytics-preview/${p.issue_id}`]
+            : []),
         ].join("\n"),
       }),
     });
@@ -160,6 +167,7 @@ export async function handleErrorEmails(request: Request, env: Env) {
     // Accepted by Resend is not proof of inbox delivery.
     return Response.json({ status: "accepted" }, { headers });
   } catch {
+    console.warn({ event: "error_email_dispatch_failed", environment });
     // A lost response leaves the lease to expire. Reuse the same provider key.
     // Never feed mail failures back into error.capture or log provider payloads.
     return unavailable();

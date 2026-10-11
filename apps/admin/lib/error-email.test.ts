@@ -146,3 +146,30 @@ describe("error email dispatcher", () => {
     });
   });
 });
+
+it("uses only the frozen admin origin for a safe issue permalink", async () => {
+  let mailText = "";
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (url === "https://api.resend.com/emails") {
+      mailText = body.text;
+      return Response.json({ id: "provider-id" });
+    }
+    return Response.json(
+      body.p_action === "claim"
+        ? {
+            ...job,
+            payload: {
+              ...job.payload,
+              admin_url: "https://admin.example.invalid",
+            },
+          }
+        : true,
+    );
+  });
+  await handleErrorEmails(request(), env);
+  expect(mailText).toContain(
+    "https://admin.example.invalid/error-analytics-preview/" +
+      job.payload.issue_id,
+  );
+});
